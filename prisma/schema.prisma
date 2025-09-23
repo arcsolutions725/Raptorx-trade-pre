@@ -1,0 +1,97 @@
+// prisma/schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  username      String   @unique
+  email         String?  @unique
+  privyId       String   @unique
+  points        Int      @default(0)
+
+  // TEMP: make it optional and remove @unique for first push
+  referralCode  String?  @unique
+  referredBy    String?  // FK to User.id
+
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  lastLoginDate DateTime?
+
+  lastReportDate DateTime?
+  reportsToday   Int      @default(0)
+  lastQueryDate  DateTime?
+  queriesToday   Int      @default(0)
+
+  reports   Report[]
+  referrer  User?  @relation("UserReferrals", fields: [referredBy], references: [id])
+  referrals User[] @relation("UserReferrals")
+
+  @@map("users")
+}
+model Report {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  contractAddress String
+  ticker          String
+  projectName     String?
+  content         String
+  dexData         Json? // store Dexscreener payload
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  // 1:1 conversation (unique reportId on Conversation)
+  conversation Conversation?
+
+  @@index([userId])
+  @@map("reports")
+}
+
+model Conversation {
+  id        String    @id @default(cuid())
+  reportId  String    @unique
+  report    Report    @relation(fields: [reportId], references: [id], onDelete: Cascade)
+  messages  Message[]
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@map("conversations")
+}
+
+enum MessageRole {
+  user
+  assistant
+}
+
+model Message {
+  id             String       @id @default(cuid())
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  role           MessageRole
+  content        String
+  timestamp      DateTime     @default(now())
+
+  @@index([conversationId])
+  @@map("messages")
+}
+
+model SystemReport {
+  id              String   @id @default(cuid())
+  contractAddress String
+  ticker          String
+  projectName     String?
+  content         String
+  dexData         Json?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@unique([contractAddress, ticker])
+  @@map("systemreports")
+}

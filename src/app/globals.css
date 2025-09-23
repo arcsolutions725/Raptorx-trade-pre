@@ -1,0 +1,255 @@
+@import "tailwindcss";
+
+/* Define the Goudy Old Style font family with all variants */
+@font-face {
+  font-family: "GeorgiaCustom";
+  src: url("/fonts/georgia.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "GeorgiaCustom";
+  src: url("/fonts/georgiab.ttf") format("truetype");
+  font-weight: 700;
+  font-style: normal;
+}
+
+@font-face {
+  font-family: "GeorgiaCustom";
+  src: url("/fonts/georgiai.ttf") format("truetype");
+  font-weight: 400;
+  font-style: italic;
+}
+
+@font-face {
+  font-family: "GeorgiaCustom";
+  src: url("/fonts/georgiaz.ttf") format("truetype");
+  font-weight: 700;
+  font-style: italic;
+}
+
+:root {
+  /* --background: linear-gradient(to bottom left, #b70002, #ce7e1b, #749c67); */
+  --background: #000;
+  --foreground: #171717;
+  --font-georgia: "GeorgiaCustom", "Georgia", "serif";
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-goudy: var(--font-georgia);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    /* --background: linear-gradient(to bottom left, #b70002, #ce7e1b, #749c67); */
+    --background: #000;
+    --foreground: #ededed;
+  }
+}
+
+/* Hide scrollbar for Chrome, Safari and Edge */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for Firefox */
+.scrollbar-none {
+  scrollbar-width: none;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: aptos, sans-serif;
+}
+
+* {
+  font-family: aptos, sans-serif !important;
+}
+
+a {
+  text-decoration: none;
+}
+
+input {
+  outline: none;
+}
+
+textarea {
+  outline: none;
+}
+
+/* Ensure Goudy Old Style is used throughout with proper weights and styles */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-georgia);
+  font-weight: 700; /* Will use the bold variant */
+}
+
+p,
+span,
+button {
+  font-family: var(--font-georgia);
+  font-weight: 400;
+}
+
+input,
+textarea {
+  font-family: var(--font-georgia);
+  font-weight: 400;
+}
+
+/* Utility classes for different font weights and styles */
+.font-goudy-regular {
+  font-family: var(--font-georgia);
+  font-weight: 400;
+  font-style: normal;
+}
+
+.font-goudy-bold {
+  font-family: var(--font-georgia);
+  font-weight: 700;
+  font-style: normal;
+}
+
+.font-goudy-italic {
+  font-family: var(--font-georgia);
+  font-weight: 400;
+  font-style: italic;
+}
+
+/* Bold and italic can be used together with CSS */
+strong,
+b {
+  font-weight: 700;
+}
+
+em,
+i {
+  font-style: italic;
+}
+
+h2 {
+  font-size: 28px;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 26px;
+  font-weight: 600;
+}
+
+h4 {
+  font-size: 22px;
+  font-weight: 600;
+}
+
+h6 {
+  font-size: 20px;
+  font-weight: 500;
+}
+
+a.chakra-link.custom-fcnbia {
+  display: none !important;
+}
+
+.custom-select-scrollbar::-webkit-scrollbar {
+  width: 8px; /* scrollbar width */
+}
+
+.custom-select-scrollbar::-webkit-scrollbar-track {
+  background: transparent; /* track background */
+}
+
+.custom-select-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #555; /* thumb color */
+  border-radius: 6px; /* rounded corners */
+  border: 2px solid transparent; /* space around thumb */
+}
+
+.custom-select-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #888; /* hover color */
+}
+
+/* For Firefox */
+.custom-select-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #555 transparent;
+}
+
+.custom-hscroll-top {
+  overflow-x: scroll;
+  overflow-y: hidden;
+  scrollbar-gutter: stable both-edges;
+}
+
+.custom-hscroll-top::-webkit-scrollbar {
+  height: 14px; /* "a bit fat" */
+}
+.custom-hscroll-top::-webkit-scrollbar-thumb {
+  background-color: #ffc000;
+  border-radius: 9999px;
+  border: 4px solid transparent;
+  background-clip: content-box;
+}
+.custom-hscroll-top::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-hscroll-top {
+  /* scrollbar-width: thin;  */
+  scrollbar-color: #ffc000 transparent;
+}
+
+.hide-vert-scroll {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.hide-vert-scroll::-webkit-scrollbar {
+  width: 0 !important;
+  height: auto;
+}
+
+.hide-bottom-hscroll::-webkit-scrollbar:horizontal {
+  height: 0 !important;
+}
+
+.custom-hscroll-top {
+  touch-action: pan-x;
+}
+
+.custom-sidebar-scrollbar::-webkit-scrollbar {
+  width: 8px; /* scrollbar width */
+}
+
+.custom-sidebar-scrollbar::-webkit-scrollbar-track {
+  background: transparent; /* track background */
+}
+
+.custom-sidebar-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #555; /* thumb color */
+  border-radius: 6px; /* rounded corners */
+  border: 2px solid transparent; /* space around thumb */
+}
+
+.custom-sidebar-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #888; /* hover color */
+}
+
+/* For Firefox */
+.custom-sidebar-scrollbar {
+  scrollbar-color: #ffc000 transparent;
+}
