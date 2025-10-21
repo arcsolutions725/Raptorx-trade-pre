@@ -9,7 +9,7 @@ import { useGenerateRexReport } from "@/hooks/useGenerateRexReport";
 import { usePrivy } from "@privy-io/react-auth";
 import copy from "copy-to-clipboard";
 import { Copy, Check } from "lucide-react";
-import { toast } from "react-toastify"; // ✅ NEW
+import { useReportGenStatus } from "@/lib/storage/reportGenStore";
 
 function fromEpochSeconds(sec?: number): Date | null {
   return typeof sec === "number" ? new Date(sec * 1000) : null;
@@ -31,11 +31,9 @@ function timeSince(date: Date | null): string {
   if (m >= 1) return `${m}m`;
   return `${s}s`;
 }
-
 function pickVolume24h(v?: TrendingToken["totalVolume"]): number | undefined {
   return v?.["24h"] ?? v?.["12h"] ?? v?.["4h"] ?? v?.["1h"];
 }
-/** YYYY-MM-DD HH:mm:ss (local) */
 function formatGeneratedAt(date = new Date()): string {
   const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
   const Y = date.getFullYear();
@@ -47,55 +45,10 @@ function formatGeneratedAt(date = new Date()): string {
   return `${Y}-${M}-${D} ${h}:${m}:${s}`;
 }
 
-/** Toast-based confirm dialog — resolves true on Overwrite, false on Cancel */
-function confirmOverwriteToast(message: string): Promise<boolean> {
-  return new Promise((resolve) => {
-    toast(
-      ({ closeToast }) => {
-        const finish = (val: boolean) => {
-          resolve(val);
-          closeToast?.();
-        };
-
-        return (
-          <div className="flex flex-col gap-3">
-            <div className="text-sm text-white">{message}</div>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                onClick={() => finish(true)}
-                className="px-2 py-0.5 rounded bg-[#ffc000] text-black font-semibold hover:opacity-90 transition"
-              >
-                Overwrite
-              </button>
-              <button
-                type="button"
-                onClick={() => finish(false)}
-                className="px-2 py-0.5 rounded border border-white/25 text-white hover:bg-white/10 transition"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        );
-      },
-      {
-        autoClose: false,
-        closeButton: false,
-        closeOnClick: false,
-        hideProgressBar: true,
-        draggable: false,
-        position: "top-center",
-        pauseOnHover: false,
-      }
-    );
-  });
-}
-
 type Props = {
   token?: TrendingToken;
   lastGeneratedOn?: string | null;
-  rank: number;
+  rank: number | string;
   onReportGenerated?: (report: any) => void;
   onOpenChart?: (token: TrendingToken) => void;
   currentUserId: string;
@@ -111,6 +64,7 @@ export function TableRow({
   currentUserId,
   isAdmin,
 }: Props) {
+  // ✅ Hooks must always run (no early return above)
   const [localLastGeneratedOn, setLocalLastGeneratedOn] = useState<
     string | null
   >(lastGeneratedOn ?? null);
@@ -118,7 +72,7 @@ export function TableRow({
     if (lastGeneratedOn) setLocalLastGeneratedOn(lastGeneratedOn);
   }, [lastGeneratedOn]);
 
-  const { isGenerating, generateFromToken, adminGenerateAndStoreFromToken } =
+  const { generateFromToken, adminGenerateAndStoreFromToken } =
     useGenerateRexReport({
       onReportGenerated: (r) => {
         setLocalLastGeneratedOn(formatGeneratedAt());
@@ -127,18 +81,23 @@ export function TableRow({
       userId: currentUserId,
     });
 
+  // 🔁 Shared generation state (persists across views)
+  const { isGenerating, startedAt } = useReportGenStatus(token?.tokenAddress);
+
+  // Countdown UX (resumes if we mount mid-flight)
   const [hasGenerated, setHasGenerated] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const { authenticated, ready, login } = usePrivy();
-
-  // copy state
-  const [copied, setCopied] = useState(false);
-  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (isGenerating && countdown === null) {
-      setCountdown(100);
+      if (startedAt) {
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        const remaining = 100 - (elapsed % 100);
+        setCountdown(Math.max(1, remaining));
+      } else {
+        setCountdown(100);
+      }
     } else if (!isGenerating && countdown !== null) {
       setCountdown(null);
       setHasGenerated(true);
@@ -147,7 +106,7 @@ export function TableRow({
         intervalRef.current = null;
       }
     }
-  }, [isGenerating, countdown]);
+  }, [isGenerating, startedAt, countdown]);
 
   useEffect(() => {
     if (countdown !== null && countdown > 0) {
@@ -167,25 +126,36 @@ export function TableRow({
     }
   }, [countdown, isGenerating]);
 
-  useEffect(() => {
-    return () => {
+  const { authenticated, ready, login } = usePrivy();
+
+  // Copy
+  const [copied, setCopied] = useState(false);
+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
       if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-    };
-  }, []);
+    },
+    []
+  );
 
-  if (!token) return null;
-
-  const displayName = token.name ?? token.symbol ?? "Unknown";
-  const displaySymbol = token.symbol ? `${token.symbol}` : "";
-  const price = token.usdPrice;
-  const mcap = token.marketCap;
-  const vol = pickVolume24h(token.totalVolume);
-  const liq = token.liquidityUsd; // NEW
-  const age = timeSince(fromEpochSeconds(token.createdAt));
-  const logoImage = token.logo;
+  // Safe token-derived values
+  const displayName = token?.name ?? token?.symbol ?? "Unknown";
+  const displaySymbol = token?.symbol ? `${token.symbol}` : "";
+  const price = token?.usdPrice;
+  const mcap = token?.marketCap;
+  const vol = pickVolume24h(token?.totalVolume);
+  const liq = token?.liquidityUsd;
+  const age = timeSince(fromEpochSeconds(token?.createdAt));
+  const logoImage = token?.logo;
+  
+  // Determine base currency based on chain
+  const isBnbChain = token?.chainId?.toLowerCase() === "bsc" || token?.chainId === "56";
+  const baseCurrency = isBnbChain ? "WBNB" : "SOL";
 
   const openChart = () => {
-    if (token?.tokenAddress && onOpenChart) onOpenChart(token);
+    // OPTIONAL: block navigation while generating this token
+    // if (isGenerating) return;
+    if (token?.tokenAddress && onOpenChart && token) onOpenChart(token);
   };
   const keyOpenChart: React.KeyboardEventHandler<HTMLElement> = (e) => {
     if (e.key === "Enter" || e.key === " ") {
@@ -195,12 +165,12 @@ export function TableRow({
   };
 
   const onGenerateClick = async () => {
+    if (!token) return;
     try {
-      setCountdown(100);
-      const report = await generateFromToken(token!);
+      setCountdown(100); // visual kickstart (effect keeps it in sync)
+      await generateFromToken(token);
       setLocalLastGeneratedOn((existing) => existing ?? formatGeneratedAt());
       setHasGenerated(true);
-      onReportGenerated?.(report);
     } catch {
       setCountdown(null);
       setHasGenerated(false);
@@ -212,15 +182,14 @@ export function TableRow({
   };
 
   const onAdminGenerateAndStoreClick = async () => {
+    if (!token) return;
     try {
       setCountdown(100);
-      // ✅ Use toast-based confirm for overwrite when server returns 409
-      const report = await adminGenerateAndStoreFromToken(token!, {
-        confirmOverwrite: (msg) => confirmOverwriteToast(msg),
+      await adminGenerateAndStoreFromToken(token, {
+        confirmOverwrite: async (msg) => window.confirm(msg),
       });
       setLocalLastGeneratedOn((existing) => existing ?? formatGeneratedAt());
       setHasGenerated(true);
-      onReportGenerated?.(report);
     } catch {
       setCountdown(null);
       setHasGenerated(false);
@@ -244,11 +213,12 @@ export function TableRow({
     copyTimeoutRef.current = setTimeout(() => setCopied(false), 500);
   };
 
-  // Columns:
-  // Token | Mcap(sticky) | AI Report(sticky) | Vol | Price | Liquidity | Age | Last Generated On
+  // 🧹 If there is no token, render nothing — but AFTER all hooks ran.
+  if (!token) return null;
+
   return (
     <div className="grid [grid-template-columns:260px_120px_120px_120px_120px_120px_100px_200px] sm:[grid-template-columns:360px_120px_120px_120px_120px_120px_100px_200px] items-center bg-black px-0 py-0 text-sm text-white/90 border-b border-white/10">
-      {/* Token — sticky only on sm+ */}
+      {/* Token */}
       <div
         className="sm:sticky sm:left-0 sm:z-10 flex items-center px-3 py-2 whitespace-nowrap truncate border-r border-white/10 bg-black"
         title={displayName}
@@ -285,7 +255,6 @@ export function TableRow({
           </button>
         )}
 
-        {/* Clickable name/symbol opens chart */}
         <div
           role="button"
           tabIndex={0}
@@ -297,7 +266,7 @@ export function TableRow({
         >
           <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 min-w-0">
             <span className="!font-bold leading-tight truncate">
-              {displaySymbol ? `${displaySymbol}/SOL` : "SOL"}
+              {displaySymbol ? `${displaySymbol}/${baseCurrency}` : baseCurrency}
             </span>
             <span className="text-[#ffc000] !font-bold leading-tight truncate">
               {displayName}
@@ -305,7 +274,6 @@ export function TableRow({
           </div>
         </div>
 
-        {/* Copy Address button (separate from the chart click area) */}
         <button
           type="button"
           onClick={handleCopyAddress}
@@ -319,19 +287,19 @@ export function TableRow({
           title={token?.tokenAddress ? "Copy contract address" : "No address"}
         >
           {copied ? (
-            <Check className="w-4 h-4" aria-hidden="true" />
+            <Check className="w-4 h-4" />
           ) : (
-            <Copy className="w-4 h-4" aria-hidden="true" />
+            <Copy className="w-4 h-4" />
           )}
         </button>
       </div>
 
-      {/* Mcap — sticky only on sm+ */}
+      {/* Mcap */}
       <div className="sm:sticky sm:left-[360px] h-[51px] items-center sm:z-10 flex justify-center px-3 py-2 whitespace-nowrap truncate border-r border-white/10 bg-black">
         <span className="!font-bold">{formatUsd(mcap)}</span>
       </div>
 
-      {/* AI Report — sticky only on sm+ */}
+      {/* AI Report */}
       <div className="sm:sticky sm:left-[480px] h-[51px] sm:z-10 flex items-center justify-center px-3 py-2 whitespace-nowrap border-r border-white/10 bg-black">
         {isGenerating && countdown !== null ? (
           <div className="flex flex-col items-center">
@@ -357,7 +325,7 @@ export function TableRow({
                 onClick={
                   !authenticated ? handleSignIn : onAdminGenerateAndStoreClick
                 }
-                disabled={isGenerating}
+                disabled={isGenerating || !ready}
                 className={`px-0.5 py-1.5 rounded text-black !font-semibold bg-[#00b050] text-sm hover:bg-[#00b050] transition ${
                   isGenerating || !ready
                     ? "opacity-60 cursor-wait"
@@ -371,7 +339,7 @@ export function TableRow({
               <button
                 type="button"
                 onClick={!authenticated ? handleSignIn : onGenerateClick}
-                disabled={isGenerating}
+                disabled={isGenerating || !ready}
                 className={`px-3 transition ${
                   isGenerating || !ready
                     ? "opacity-60 cursor-wait"
@@ -402,7 +370,7 @@ export function TableRow({
         <span className="!font-bold">{formatUsd(price)}</span>
       </div>
 
-      {/* Liquidity — NEW (scrolls; not sticky) */}
+      {/* Liquidity */}
       <div className="flex justify-center px-3 py-2 whitespace-nowrap truncate border-r border-white/10 h-[51px] items-center">
         <span className="!font-bold">{formatUsd(liq)}</span>
       </div>

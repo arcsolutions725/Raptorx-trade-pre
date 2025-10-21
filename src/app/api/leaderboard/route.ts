@@ -13,24 +13,25 @@ export type LeaderboardEntry = {
   };
 };
 
-function getBadgeForRank(rank: number) {
-  if (rank <= 10) {
+// NEW: points-based badge rules
+function getBadgeForPoints(points: number) {
+  if (points >= 500) {
     return {
       name: "King of the Jungle",
       color: "red",
-      description: "Top 10 - Red raptor with golden crown",
+      description: "500+ points - Red raptor with golden crown",
     };
-  } else if (rank <= 30) {
+  } else if (points >= 300) {
     return {
-      name: "Alpha Raptors",
+      name: "Alpha Raptor",
       color: "blue",
-      description: "Rank 11-30 - Alpha raptor logo",
+      description: "300-499 points - Alpha raptor logo",
     };
-  } else if (rank <= 50) {
+  } else if (points >= 100) {
     return {
-      name: "Hatchlings",
+      name: "Hatchling",
       color: "green",
-      description: "Rank 31-50 - Hatchling raptor logo",
+      description: "100-299 points - Hatchling raptor logo",
     };
   }
 
@@ -44,54 +45,45 @@ function getBadgeForRank(rank: number) {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const page = parseInt(searchParams.get("page") || "1");
+    const page = Math.max(1, parseInt(searchParams.get("page") || "1", 10));
     const pageSize = Math.min(
-      parseInt(searchParams.get("pageSize") || "25"),
+      Math.max(1, parseInt(searchParams.get("pageSize") || "25", 10)),
       50
-    ); // Cap pageSize at 50
+    );
     const offset = (page - 1) * pageSize;
 
-    // Get total count for pagination
+    // Total users with points > 0
     const totalUsers = await prisma.user.count({
-      where: {
-        points: {
-          gt: 0, // Only users with points
-        },
-      },
+      where: { points: { gt: 0 } },
     });
 
-    // Get paginated users ordered by points
+    // Paginated users ordered by points desc (stable tie-breakers optional)
     const users = await prisma.user.findMany({
-      select: {
-        id: true,
-        username: true,
-        points: true,
-      },
-      where: {
-        points: {
-          gt: 0, // Only users with points
-        },
-      },
-      orderBy: {
-        points: "desc",
-      },
+      select: { id: true, username: true, points: true },
+      where: { points: { gt: 0 } },
+      orderBy: [
+        { points: "desc" },
+        // Optional: add stable secondary sort so pagination doesn't jump on equal points
+        { username: "asc" },
+        { id: "asc" },
+      ],
       skip: offset,
       take: pageSize,
     });
 
-    // Create leaderboard with rankings and badges
+    // Build leaderboard: keep existing rank calc, but badge comes from POINTS
     const leaderboard: LeaderboardEntry[] = users.map((user, index) => {
-      const rank = offset + index + 1; // Global rank
+      const rank = offset + index + 1;
       return {
         id: user.id,
         username: user.username,
         points: user.points,
         rank,
-        badge: getBadgeForRank(rank),
+        badge: getBadgeForPoints(user.points), // ← CHANGED
       };
     });
 
-    const totalPages = Math.ceil(totalUsers / pageSize);
+    const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
     const hasNext = page < totalPages;
     const hasPrev = page > 1;
 

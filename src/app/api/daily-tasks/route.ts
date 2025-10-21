@@ -73,7 +73,7 @@ export async function GET(request: NextRequest) {
     const isCompleted =
       reportsToday >= reportsRequired && queriesToday >= queriesRequired;
     const pointsEarned = reportsToday * 100 + queriesToday * 100;
-    const pointsAvailable = 200; // 100 for report + 100 for query
+    const pointsAvailable = 600; // 300 for report + 300 for query
 
     const taskStatus: DailyTasksStatus = {
       reportsCompleted: Math.min(reportsToday, reportsRequired),

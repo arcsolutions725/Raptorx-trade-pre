@@ -21,6 +21,9 @@ export async function GET(req: NextRequest) {
         ticker: true,
         projectName: true,
         content: true,
+        tweetsData: true,
+        securityData: true,
+        holdersData: true,
         createdAt: true,
         updatedAt: true,
       },
@@ -37,14 +40,25 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const userId = requireUserId(req);
-    const { contractAddress, ticker, projectName, content, dexData } =
-      (await req.json()) as {
-        contractAddress: string;
-        ticker: string;
-        projectName?: string;
-        content: string;
-        dexData?: unknown;
-      };
+    const {
+      contractAddress,
+      ticker,
+      projectName,
+      content,
+      dexData,
+      tweetsData,
+      securityData,
+      holdersData,
+    } = (await req.json()) as {
+      contractAddress: string;
+      ticker: string;
+      projectName?: string;
+      content: string;
+      dexData?: unknown;
+      tweetsData?: unknown;
+      securityData?: unknown;
+      holdersData?: unknown;
+    };
 
     if (!contractAddress || !ticker || !content) {
       return NextResponse.json(
@@ -61,6 +75,9 @@ export async function POST(req: NextRequest) {
         projectName: projectName || undefined,
         content,
         dexData: dexData ?? undefined,
+        tweetsData: tweetsData ?? undefined,
+        securityData: securityData ?? undefined,
+        holdersData: holdersData ?? undefined,
         conversation: { create: {} },
       },
       include: { conversation: { select: { id: true } } },

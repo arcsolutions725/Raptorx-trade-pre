@@ -3,12 +3,14 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PrivyProviderWrapper } from "@/components/providers/PrivyProvider";
+import { WalletProviderWrapper } from "@/components/providers/WagamiProvider";
 import Providers from "@/components/providers/QueryProvider";
 
 import { ToastContainer } from "react-toastify";
 import "react-toastify/dist/ReactToastify.css";
 
 import { SpeedInsights } from "@vercel/speed-insights/next";
+import { Analytics } from "@vercel/analytics/next";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -24,9 +26,8 @@ export const metadata: Metadata = {
   icons: {
     icon: "/favicon.png",
   },
-  title: "Raptor Reports",
-  description:
-    "AI Assistant raptor reports for your business with solana ecosystem",
+  title: "RaptorXchange",
+  description: "AI Bloomberg Terminal for everything Crypto",
 };
 
 export default function RootLayout({
@@ -40,10 +41,13 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
         <PrivyProviderWrapper>
-          <Providers>
-            {children}
-            <SpeedInsights />
-          </Providers>
+          <WalletProviderWrapper>
+            <Providers>
+              {children}
+              <SpeedInsights />
+              <Analytics />
+            </Providers>
+          </WalletProviderWrapper>
           <ToastContainer position="top-center" theme="dark" />
         </PrivyProviderWrapper>
       </body>

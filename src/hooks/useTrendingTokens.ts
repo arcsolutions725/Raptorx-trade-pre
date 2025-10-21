@@ -18,6 +18,7 @@ export type TrendingToken = {
   marketCap?: number;
   liquidityUsd?: number;
   holders?: number;
+  verified?: boolean;
   pricePercentChange?: {
     "1h"?: number;
     "4h"?: number;
@@ -96,26 +97,37 @@ function sortTokens(
   });
 }
 
+export type Chain = "solana" | "bsc" | "all";
+
 export function useTrendingTokens(
   customBody?: Partial<{
-    chain: string;
+    chain: Chain;
     sort_by: string;
     sort_type: "asc" | "desc";
     min_liquidity: number;
     ui_amount_mode: "raw" | "scaled";
     verified_only: boolean;
-    force_full_scan: boolean; // <- allow external control if desired
+    force_full_scan: boolean;
+    search_query?: string;
+    search_type?: "ticker" | "address";
   }>
 ) {
   const [pageSize, setPageSize] = useState(25);
-  const [pageIndex, setPageIndex] = useState(1); // 1-based
+  const [pageIndex, setPageIndex] = useState(1);
   const [sortField, setSortField] = useState<SortField | null>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
 
-  // Local toggle for requesting an exact verified total (forces full upstream scan)
-  const [forceFullScan, setForceFullScan] = useState<boolean>(
-    customBody?.force_full_scan ?? false
-  );
+  const isVerified = useMemo(() => {
+    // If there's a search query, don't apply verified filtering
+    if (Boolean(customBody?.search_query)) {
+      return false;
+    }
+    // For chain selection: true only for solana, false for bsc/all
+    const chain = customBody?.chain || "solana";
+    return chain === "solana";
+  }, [customBody?.search_query, customBody?.chain]);
+
+  const forceFullScan = customBody?.force_full_scan ?? false;
 
   const offset = (pageIndex - 1) * pageSize;
 
@@ -127,7 +139,8 @@ export function useTrendingTokens(
       pageIndex,
       sortField,
       sortDirection,
-      forceFullScan, // re-fetch when toggled
+      forceFullScan,
+      isVerified,
     ],
     queryFn: async () => {
       const res = await fetch("/api/trending", {
@@ -142,7 +155,7 @@ export function useTrendingTokens(
           sort_type: "desc",
           min_liquidity: 100,
           ui_amount_mode: "scaled",
-          verified_only: true,
+          verified_only: isVerified, // <-- driven by search presence
           force_full_scan: forceFullScan,
           ...(customBody ?? {}),
         }),
@@ -172,7 +185,6 @@ export function useTrendingTokens(
     | undefined;
   const exhausted = Boolean((query.data as any)?.exhausted);
 
-  // v5: show overlay while fetching with previous data still on screen
   const isPageLoading = query.isFetching && query.isPlaceholderData;
 
   const sortedData = useMemo(
@@ -189,13 +201,19 @@ export function useTrendingTokens(
     [sortedData, pageIndex, pageSize]
   );
 
-  // Prefer exact verified total if available; else fallback to filteredTotal when provided.
-  const total =
-    typeof verifiedTotalExact === "number"
-      ? verifiedTotalExact
-      : typeof filteredTotal === "number"
-      ? filteredTotal
-      : undefined;
+  const total = useMemo(() => {
+    if (isVerified) {
+      // When verified_only is true, use verifiedTotal (exact when available, otherwise lower bound)
+      return typeof verifiedTotalExact === "number"
+        ? verifiedTotalExact
+        : typeof filteredTotal === "number"
+        ? filteredTotal
+        : undefined;
+    } else {
+      // When verified_only is false, use upstreamTotal (all tokens)
+      return typeof upstreamTotal === "number" ? upstreamTotal : undefined;
+    }
+  }, [isVerified, verifiedTotalExact, filteredTotal, upstreamTotal]);
 
   const totalPages =
     typeof total === "number" && pageSize > 0
@@ -203,12 +221,10 @@ export function useTrendingTokens(
       : undefined;
 
   const hasPrev = pageIndex > 1;
-  let hasNext: boolean;
-  if (typeof total === "number") {
-    hasNext = pageIndex * pageSize < total;
-  } else {
-    hasNext = itemsWithRank.length >= pageSize && !exhausted;
-  }
+  const hasNext =
+    typeof total === "number"
+      ? pageIndex * pageSize < total
+      : itemsWithRank.length >= pageSize && !exhausted;
 
   const nextPage = useCallback(() => {
     if (hasNext) setPageIndex((p) => p + 1);
@@ -247,11 +263,11 @@ export function useTrendingTokens(
     data: itemsWithRank,
 
     // totals
-    total, // preferred total for pagination
-    upstreamTotal, // Birdeye unfiltered
+    total,
+    upstreamTotal,
     verifiedTotal: verifiedTotalExact ?? undefined,
     verifiedTotalLowerBound: verifiedTotalLowerBound ?? undefined,
-    jupVerifiedTotal, // global Jupiter verified count
+    jupVerifiedTotal,
     totalPages,
 
     // query state
@@ -278,9 +294,5 @@ export function useTrendingTokens(
     sortField,
     sortDirection,
     onSort: handleSort,
-
-    // full-scan toggle
-    forceFullScan,
-    setForceFullScan,
   };
 }

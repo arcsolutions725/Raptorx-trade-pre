@@ -45,12 +45,15 @@ export function useReports(userId?: string) {
 /**
  * Single report with conversation
  * - Reads initialData from localStorage if available
- * - No refetch on focus/reconnect
- * - Writes to localStorage on success
+ * - Validates cached data integrity (especially tweets)
+ * - Forces refetch if critical data is missing
  */
 export function useReportWithConversation(userId?: string, id?: string | null) {
   const enabled = !!userId && !!id;
   const cacheItem = userId && id ? ReportCache.getReport(userId, id) : null;
+
+  // Validate cache integrity - check if tweets data might be incomplete
+  const shouldBypassCache = cacheItem && isCacheDataIncomplete(cacheItem);
 
   return useQuery({
     queryKey: ["report", userId, id],
@@ -63,13 +66,56 @@ export function useReportWithConversation(userId?: string, id?: string | null) {
       ReportCache.setReport(userId!, id!, report); // write cache
       return report;
     },
-    initialData: cacheItem ?? undefined,
-    staleTime: 5 * 60 * 1000,
+    initialData: shouldBypassCache ? undefined : cacheItem ?? undefined,
+    staleTime: shouldBypassCache ? 0 : 5 * 60 * 1000, // Force fresh data if cache is incomplete
     gcTime: 30 * 60 * 1000,
-    refetchOnWindowFocus: false, // <-- stop refetch on tab focus
+    refetchOnWindowFocus: false,
     refetchOnReconnect: false,
     refetchInterval: false,
   });
+}
+
+/**
+ * Checks if cached report data is incomplete and needs fresh fetch
+ * Specifically looks for missing tweets data and BNB analytics data in reports that should have them
+ */
+function isCacheDataIncomplete(reportData: any): boolean {
+  if (!reportData) return true;
+
+  const content = reportData.content || "";
+
+  // Check if tweets data is incomplete
+  const hasTweetSection =
+    content.includes("Individual Tweets") || content.includes("## 3.");
+  const tweetsData = reportData.tweetsData;
+
+  // If report should have tweets but doesn't, or has empty tweets array
+  if (
+    hasTweetSection &&
+    (!tweetsData || (Array.isArray(tweetsData) && tweetsData.length === 0))
+  ) {
+    return true;
+  }
+
+  // Check if BNB token security data is incomplete (for BNB tokens only)
+  const hasSecuritySection =
+    content.includes("Safety Analytics") || content.includes("## 3.");
+  const securityData = reportData.securityData;
+
+  if (hasSecuritySection && !securityData && reportData.chain === "bsc") {
+    return true;
+  }
+
+  // Check if BNB token holder data is incomplete (for BNB tokens only)
+  const hasHolderSection =
+    content.includes("Holder Analytics") || content.includes("## 2.");
+  const holdersData = reportData.holdersData;
+
+  if (hasHolderSection && !holdersData && reportData.chain === "bsc") {
+    return true;
+  }
+
+  return false;
 }
 
 /**

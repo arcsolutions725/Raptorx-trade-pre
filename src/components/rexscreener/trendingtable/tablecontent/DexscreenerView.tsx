@@ -1,12 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useState, useEffect, useRef, useMemo } from "react";
 import copy from "copy-to-clipboard";
 import { Copy, Check, ChevronDown } from "lucide-react";
 import { useGenerateRexReport } from "@/hooks/useGenerateRexReport";
 import { usePrivy } from "@privy-io/react-auth";
 import type { TrendingToken } from "@/hooks/useTrendingTokens";
+import { useReportGenStatus } from "@/lib/storage/reportGenStore";
 
 type DexscreenerViewProps = {
   token: TrendingToken;
@@ -65,7 +66,6 @@ const GROUPS: { title: string; items: IntervalItem[] }[] = [
 ];
 
 const QUICK: string[] = ["1m", "5m", "15m", "1h", "4h", "D"];
-
 function findInterval(key: string): IntervalItem | undefined {
   for (const g of GROUPS) {
     const it = g.items.find((x) => x.key === key);
@@ -82,10 +82,15 @@ export default function DexscreenerView({
   currentUserId,
   onReportGenerated,
 }: DexscreenerViewProps) {
-  // ---- copy address
+  // Copy address
   const [copied, setCopied] = useState(false);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
+  useEffect(
+    () => () => {
+      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
+    },
+    []
+  );
   const handleCopy = () => {
     if (!tokenAddress) return;
     copy(tokenAddress);
@@ -93,13 +98,8 @@ export default function DexscreenerView({
     if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
     copyTimeoutRef.current = setTimeout(() => setCopied(false), 1500);
   };
-  useEffect(() => {
-    return () => {
-      if (copyTimeoutRef.current) clearTimeout(copyTimeoutRef.current);
-    };
-  }, []);
 
-  // ---- chart interval
+  // Chart interval
   const [intervalKey, setIntervalKey] = useState<string>("15m");
   const selected = useMemo(
     () => findInterval(intervalKey) ?? findInterval("15m")!,
@@ -118,18 +118,18 @@ export default function DexscreenerView({
     });
     return p;
   }, [selected.value]);
+  
+  const chain = token?.chainId?.toLowerCase() === "bsc" || token?.chainId === "56" ? "bsc" : "solana";
+  const src = `https://dexscreener.com/${chain}/${tokenAddress}?${params.toString()}`;
 
-  const src = `https://dexscreener.com/solana/${tokenAddress}?${params.toString()}`;
-
-  // ---- dropdown
+  // Dropdown
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
     const onDocClick = (e: MouseEvent) => {
       if (!open) return;
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node))
         setOpen(false);
-      }
     };
     const onEsc = (e: KeyboardEvent) => {
       if (e.key === "Escape") setOpen(false);
@@ -142,22 +142,28 @@ export default function DexscreenerView({
     };
   }, [open]);
 
-  // ---- Generate button state (same as TableRow)
+  // Auth + generate
   const { authenticated, ready, login } = usePrivy();
+  const { generateFromToken } = useGenerateRexReport({
+    onReportGenerated: (r) => onReportGenerated?.(r),
+    userId: currentUserId,
+  });
+
+  // 🔁 Shared generation status (persists if we came from Table mid-flight)
+  const { isGenerating, startedAt } = useReportGenStatus(tokenAddress);
   const [hasGenerated, setHasGenerated] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const { isGenerating, generateFromToken } = useGenerateRexReport({
-    onReportGenerated: (r) => {
-      onReportGenerated?.(r);
-    },
-    userId: currentUserId,
-  });
-
   useEffect(() => {
     if (isGenerating && countdown === null) {
-      setCountdown(100);
+      if (startedAt) {
+        const elapsed = Math.floor((Date.now() - startedAt) / 1000);
+        const remaining = 100 - (elapsed % 100);
+        setCountdown(Math.max(1, remaining));
+      } else {
+        setCountdown(100);
+      }
     } else if (!isGenerating && countdown !== null) {
       setCountdown(null);
       if (countdownRef.current) {
@@ -166,7 +172,7 @@ export default function DexscreenerView({
       }
       setHasGenerated(true);
     }
-  }, [isGenerating, countdown]);
+  }, [isGenerating, startedAt, countdown]);
 
   useEffect(() => {
     if (countdown !== null && countdown > 0) {
@@ -194,9 +200,9 @@ export default function DexscreenerView({
   const onGenerateClick = async () => {
     try {
       setCountdown(100);
-      const report = await generateFromToken(token);
+      await generateFromToken(token);
       setHasGenerated(true);
-      onReportGenerated?.(report);
+      onReportGenerated?.(null);
     } catch {
       setCountdown(null);
       setHasGenerated(false);
@@ -211,11 +217,11 @@ export default function DexscreenerView({
     <div className="flex flex-col w-full h-[calc(100vh-195px)] overflow-hidden">
       {/* Header */}
       <div className="flex flex-col min-[1340px]:flex-row items-center gap-5 min-[1340px]:gap-0 justify-between p-3 bg-black/50 border-b border-white/10">
-        <div className="flex items-center w-full min-[1340px]:w-auto justify-between min-[1340px]:justify-center gap-3">
+        <div className="flex items-center w/full min-[1340px]:w-auto justify-between min-[1340px]:justify-center gap-3">
           <button
             type="button"
             onClick={onBack}
-            className="px-3 py-1 rounded border border-white/20 hover:bg-white/10"
+            className="px-3 py-1 text-white rounded border border-white/20 hover:bg-white/10"
           >
             ← Back
           </button>
@@ -225,7 +231,6 @@ export default function DexscreenerView({
               {title ?? "Dexscreener Chart"}
             </div>
 
-            {/* Copy contract address */}
             <button
               type="button"
               onClick={handleCopy}
@@ -234,9 +239,9 @@ export default function DexscreenerView({
               title="Copy contract address"
             >
               {copied ? (
-                <Check className="w-4 h-4" aria-hidden="true" />
+                <Check className="w-4 h-4" />
               ) : (
-                <Copy className="w-4 h-4" aria-hidden="true" />
+                <Copy className="w-4 h-4" />
               )}
             </button>
 
@@ -364,7 +369,7 @@ export default function DexscreenerView({
         </div>
       </div>
 
-      {/* Full, uncropped iframe */}
+      {/* Full iframe */}
       <div className="relative flex-1 overflow-hidden">
         <iframe
           key={src}

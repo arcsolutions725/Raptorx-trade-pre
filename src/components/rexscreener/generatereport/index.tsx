@@ -1,8 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import ChatSidebar from "../rexchat/ChatSidebar";
 import { RexChat } from "../rexchat";
@@ -123,6 +124,8 @@ export function GenerateRexscreenerReport({
   const [cupOpen, setCupOpen] = useState(true);
   const [allOpen, setAllOpen] = useState(true);
 
+  const router = useRouter();
+
   const sanitizeAnalysis = (text?: string) => (text ?? "").replace(/[#*]/g, "");
 
   // Hook is now the **only** place that fetches & stores analysis
@@ -223,33 +226,41 @@ export function GenerateRexscreenerReport({
     }
   }, [generatedReport?.id]);
 
-  useEffect(() => {
-    const fetchUser = async () => {
-      if (!authenticated || !privyUser?.id) {
+  const fetchUser = useCallback(async () => {
+    if (!authenticated || !privyUser?.id) {
+      setCurrentUser(null);
+      return;
+    }
+    setIsLoadingUser(true);
+    try {
+      const res = await fetch("/api/user", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ privyId: privyUser.id }),
+        cache: "no-store", // ensure we don't serve a cached response
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setCurrentUser(data.user as User);
+      } else {
         setCurrentUser(null);
-        return;
       }
-      setIsLoadingUser(true);
-      try {
-        const res = await fetch("/api/user", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ privyId: privyUser.id }),
-        });
-        if (res.ok) {
-          const data = await res.json();
-          setCurrentUser(data.user as User);
-        } else {
-          setCurrentUser(null);
-        }
-      } catch {
-        setCurrentUser(null);
-      } finally {
-        setIsLoadingUser(false);
-      }
-    };
-    fetchUser();
+    } catch {
+      setCurrentUser(null);
+    } finally {
+      setIsLoadingUser(false);
+    }
   }, [authenticated, privyUser?.id]);
+
+  useEffect(() => {
+    fetchUser();
+  }, [fetchUser]);
+
+  useEffect(() => {
+    if (showAccountModal) {
+      fetchUser();
+    }
+  }, [showAccountModal, fetchUser]);
 
   const { data: serverReports = [] } = useReports(userId || undefined);
 
@@ -302,8 +313,8 @@ export function GenerateRexscreenerReport({
   return (
     <div className="relative flex flex-col h-[100vh] w-full overflow-hidden">
       {/* Header */}
-      <div className="w-full flex justify-between px-5 pt-9 z-20">
-        <div className="flex flex-row gap-4 items-baseline justify-center">
+      <div className="w-full flex justify-between items-center px-3 sm:px-5 pt-8 lg:pt-5 sm:pt-9 z-20">
+        <div className="flex flex-row gap-2 sm:gap-4 items-baseline justify-center">
           <button
             className="cursor-pointer transition"
             onClick={
@@ -313,25 +324,88 @@ export function GenerateRexscreenerReport({
             <Image
               src={"/images/history.png"}
               alt="report history"
-              width={140}
-              height={60}
-              className="hover:scale-[1.05]"
+              width={120}
+              height={50}
+              className="hover:scale-[1.05] w-[70px] h-[30px] sm:w-[80px] sm:h-[34px] md:w-[100px] md:h-[40px]"
             />
           </button>
           <button
-            className="cursor-pointer transition"
-            onClick={() => {
-              console.log("exchange button");
-            }}
+            className="cursor-pointer transition flex flex-row items-end 
+             disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:scale-100"
+            disabled={true}
+            onClick={() => router.push("/coming-soon")}
           >
             <Image
               src={"/images/exchange.png"}
               alt="report history"
               width={140}
               height={80}
-              className="hover:scale-[1.05]"
+              className="hover:scale-[1.05] w-[70px] h-[30px] sm:w-[80px] sm:h-[34px] md:w-[100px] md:h-[40px]"
+            />
+            <Image
+              src={"/images/comingsoon.png"}
+              alt="coming soon"
+              width={28}
+              height={17}
+              className="w-[24px] h-[15px] sm:w-[28px] sm:h-[17px]"
             />
           </button>
+        </div>
+
+        <div className="flex items-center gap-1 sm:gap-4 md:gap-5">
+          {/* X (Twitter) Icon */}
+          <a
+            href="https://x.com/huntonraptor"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-transform hover:scale-110 p-1 sm:p-0"
+            aria-label="Follow us on X (Twitter)"
+          >
+            <svg
+              className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 text-white hover:text-[#fce000] transition-colors"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z" />
+            </svg>
+          </a>
+
+          {/* Telegram Icon */}
+          <a
+            href="https://t.me/huntonraptor"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-transform hover:scale-110 p-1 sm:p-0"
+            aria-label="Join us on Telegram"
+          >
+            <svg
+              className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 text-white hover:text-[#fce000] transition-colors"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm5.568 8.16l-1.61 7.59c-.12.54-.44.67-.89.42l-2.46-1.81-1.19 1.14c-.13.13-.24.24-.49.24l.17-2.43 4.47-4.03c.19-.17-.04-.27-.31-.1L9.39 12.9l-2.4-.75c-.52-.16-.53-.52.11-.77l9.39-3.61c.43-.16.81.1.67.73z" />
+            </svg>
+          </a>
+
+          {/* Instagram Icon */}
+          <a
+            href="https://www.instagram.com/huntonraptor"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="transition-transform hover:scale-110 p-1 sm:p-0"
+            aria-label="Follow us on Instagram"
+          >
+            <svg
+              className="w-5 h-5 sm:w-6 sm:h-6 md:w-7 md:h-7 text-white hover:text-[#fce000] transition-colors"
+              fill="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z" />
+            </svg>
+          </a>
         </div>
 
         {!authenticated ? (
@@ -343,8 +417,14 @@ export function GenerateRexscreenerReport({
           </button>
         ) : (
           <button
-            onClick={() => setShowAccountModal((v) => !v)}
-            className="flex items-center gap-3 px-4 py-2 text-white font-bold text-lg rounded-lg cursor-pointer transition"
+            onClick={() => {
+              setShowAccountModal((prev) => {
+                const next = !prev;
+                if (!prev && next) fetchUser();
+                return next;
+              });
+            }}
+            className="flex items-center gap-3 px-2 py-2 text-white font-bold text-lg rounded-lg cursor-pointer transition"
           >
             Account
           </button>
@@ -432,9 +512,9 @@ export function GenerateRexscreenerReport({
                           <h3 className="font-bold text-white text-2xl">
                             {currentUser.username}
                           </h3>
-                          <p className="text-gray-400 text-sm mt-1">
+                          {/* <p className="text-gray-400 text-sm mt-1">
                             {currentUser.email || "No email provided"}
-                          </p>
+                          </p> */}
                           <p className="text-white text-lg mt-2">
                             <span className="text-[#00B050] text-xl font-bold">
                               {currentUser.points.toLocaleString()}
@@ -581,18 +661,27 @@ export function GenerateRexscreenerReport({
             /* CASE 2: not viewing chart -> landing hero */
             <div className="flex flex-col items-center justify-center h-full gap-10 px-10">
               <header className="flex flex-col items-center justify-center">
-                <Image
-                  src="/images/home-logo.png"
-                  alt="Raptor Reports Logo"
-                  width={200}
-                  height={200}
-                  priority
-                />
+                <div className="flex items-end">
+                  <Image
+                    src="/images/home-logo.png"
+                    alt="RaptorX Logo"
+                    width={200}
+                    height={200}
+                    priority
+                  />
+                  <Image
+                    src={"/images/beta.png"}
+                    alt="Beta version"
+                    width={28}
+                    height={28}
+                    className="pb-5 ml-[-32px]"
+                  />
+                </div>
                 <div className="flex flex-col gap-20 items-center justify-center">
-                  <h1 className="max-w-[600px] w-full font-light text-xl text-center">
-                    Rex Pilot. Your AI Pilot for memecoins.
+                  <h1 className="max-w-[600px] w-full font-light text-xl text-center text-white">
+                    Rex Pilot. Your AI Pilot for everying crypto.
                   </h1>
-                  <h4 className="max-w-[600px] w-full font-light !text-[18px] text-center">
+                  <h4 className="max-w-[600px] w-full font-light !text-[18px] text-center text-white">
                     Click <span className="text-[#00b050]">Generate</span> to
                     generate Alpha reports for any coin on Solana!
                   </h4>
@@ -793,18 +882,27 @@ export function GenerateRexscreenerReport({
           /* Unauthenticated landing */
           <div className="flex flex-col items-center justify-center h-full gap-10 px-10">
             <header className="flex flex-col items-center justify-center">
-              <Image
-                src="/images/home-logo.png"
-                alt="Raptor Reports Logo"
-                width={200}
-                height={200}
-                priority
-              />
+              <div className="flex items-end">
+                <Image
+                  src="/images/home-logo.png"
+                  alt="RaptorX Logo"
+                  width={200}
+                  height={200}
+                  priority
+                />
+                <Image
+                  src={"/images/beta.png"}
+                  alt="Beta version"
+                  width={28}
+                  height={28}
+                  className="pb-5 ml-[-32px]"
+                />
+              </div>
               <div className="flex flex-col gap-20 items-center justify-center">
-                <h1 className="max-w-[600px] w-full font-light text-xl text-center">
-                  Rex Pilot. Your AI Pilot for memecoins.
+                <h1 className="max-w-[600px] w-full font-light text-xl text-center text-white">
+                  Rex Pilot. Your AI Pilot for everying crypto.
                 </h1>
-                <h4 className="max-w-[600px] w-full font-light !text-[18px] text-center">
+                <h4 className="max-w-[600px] w-full font-light !text-[18px] text-center text-white">
                   Click <span className="text-[#00b050]">Generate</span> to
                   generate Alpha reports for any coin on Solana!
                 </h4>

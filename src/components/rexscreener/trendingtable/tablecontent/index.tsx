@@ -12,12 +12,15 @@ import {
 import {
   useTrendingTokens,
   type TrendingToken,
+  type Chain,
 } from "@/hooks/useTrendingTokens";
 import { TableHeader } from "./TableHeader";
 import { TableRow } from "./TableRow";
 import DexscreenerView from "./DexscreenerView";
 import PageLoaderOverlay from "@/components/PageLoaderOverlay";
+import { TokenSearchBar } from "@/components/rexscreener/TokenSearchBar";
 import { ChevronDown, Check } from "lucide-react";
+import { ChainButtons } from "./ChainButtons";
 
 /* ============================ Styled, Up-Opening Select ============================ */
 
@@ -111,7 +114,7 @@ function RowsPerPageSelect({
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onKeyDownButton}
-        className="flex items-center justify-between gap-2 w-[112px] px-3 py-1.5 rounded-md border border-white/20 bg-black/30 hover:bg-white/10 transition text-white"
+        className="flex items-center justify-between gap-2 w-[80px] sm:w-[112px] px-3 py-1.5 rounded-md border border-white/20 bg-black/30 hover:bg-white/10 transition text-white"
       >
         <span className="text-sm">{value}</span>
         <ChevronDown
@@ -167,14 +170,6 @@ interface TrendingTableContentProps {
   onReportGenerated?: (report: any) => void;
   currentUserId: string;
   isAdmin: boolean;
-  /**
-   * Callback fired when a user enters or exits the DexScreener
-   * chart view.
-   *
-   * token       – full TrendingToken object, or `null` when exiting
-   * address     – contract address of the token, or `null` when exiting
-   * isViewing   – `true` when chart view is opened, `false` when closed
-   */
   onTokenSelect?: (
     token: TrendingToken | null,
     address: string | null,
@@ -188,6 +183,14 @@ export function TrendingTableContent({
   isAdmin,
   onTokenSelect,
 }: TrendingTableContentProps) {
+  // Search state
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchType, setSearchType] = useState<"ticker" | "address" | null>(
+    null
+  );
+  const [isSearchMode, setIsSearchMode] = useState(false);
+  const [selectedChain, setSelectedChain] = useState<Chain>("solana");
+
   const {
     data,
     isLoading,
@@ -213,7 +216,17 @@ export function TrendingTableContent({
 
     jupVerifiedTotal,
     upstreamTotal,
-  } = useTrendingTokens();
+  } = useTrendingTokens(
+    isSearchMode && searchQuery && searchType
+      ? {
+          search_query: searchQuery,
+          search_type: searchType,
+          chain: selectedChain,
+        }
+      : {
+          chain: selectedChain,
+        }
+  );
 
   const rows = Array.isArray(data) ? data : [];
 
@@ -223,19 +236,85 @@ export function TrendingTableContent({
     title: string;
   } | null>(null);
 
+  const lastListStateRef = useRef<{
+    pageIndex: number;
+    scrollTop: number;
+    scrollLeft: number;
+  }>({
+    pageIndex: 1,
+    scrollTop: 0,
+    scrollLeft: 0,
+  });
+
+  // helper to capture list state before leaving
+  const captureListState = () => {
+    lastListStateRef.current = {
+      pageIndex,
+      scrollTop: mainScrollRef.current?.scrollTop ?? 0,
+      scrollLeft: mainScrollRef.current?.scrollLeft ?? 0,
+    };
+  };
+
+  // helper to restore after coming back
+  const restoreListState = () => {
+    const { pageIndex: p, scrollTop, scrollLeft } = lastListStateRef.current;
+
+    // 1) restore page first (this may re-render/fetch)
+    if (p && p !== pageIndex) setPageIndex(p);
+
+    // 2) after layout is measured, restore scroll positions
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (mainScrollRef.current) {
+          mainScrollRef.current.scrollTop = scrollTop;
+          mainScrollRef.current.scrollLeft = scrollLeft;
+        }
+        if (topScrollRef.current) {
+          topScrollRef.current.scrollLeft = scrollLeft;
+        }
+      });
+    });
+  };
+
   const handleOpenChart = (t: TrendingToken) => {
     const addr = t?.tokenAddress || "";
     if (!addr) return;
-    const title = `${t?.name ?? t?.symbol ?? "Token"} / SOL`;
+
+    // ⬇️ capture list state before switching UI (see step 2)
+    captureListState();
+
+    const isBnbChain =
+      t?.chainId?.toLowerCase() === "bsc" || t?.chainId === "56";
+    const baseCurrency = isBnbChain ? "WBNB" : "SOL";
+    const title = `${t?.name ?? t?.symbol ?? "Token"} / ${baseCurrency}`;
     setSelectedForChart({ token: t, address: addr, title });
-    // inform parent that chart view is now active for this token
+
+    // ⬇️ if you still want to clear search results visually, do it without resetting page
+    handleClearSearch({ keepPage: true });
+
     onTokenSelect?.(t, addr, true);
   };
 
   const handleBackFromChart = () => {
-    // notify parent we are leaving chart view
     onTokenSelect?.(null, null, false);
     setSelectedForChart(null);
+
+    // ⬇️ restore the page/scroll
+    restoreListState();
+  };
+
+  const handleSearch = (query: string, type: "ticker" | "address") => {
+    setSearchQuery(query);
+    setSearchType(type);
+    setIsSearchMode(true);
+    setPageIndex(1); // Reset to first page when searching
+  };
+
+  const handleClearSearch = (opts?: { keepPage?: boolean }) => {
+    setSearchQuery("");
+    setSearchType(null);
+    setIsSearchMode(false);
+    if (!opts?.keepPage) setPageIndex(1); // <-- only reset when not told to keep
   };
 
   // --- Refs
@@ -367,10 +446,33 @@ export function TrendingTableContent({
 
   return (
     <div className="w-full flex flex-col gap-3">
-      <div className="relative h-[calc(100vh-250px)] lg:h-[calc(100vh-250px)] border border-white/10">
+      <div className="px-4 py-3 bg-black/20 border-b border-white/10 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-10">
+        {/* Chain Buttons */}
+        <div className="flex-shrink-0">
+          <ChainButtons
+            selectedChain={selectedChain}
+            onChainChange={(chain) => {
+              setSelectedChain(chain);
+              setPageIndex(1);
+            }}
+          />
+        </div>
+
+        {/* Token Search */}
+        <div className="w-full sm:flex-1 flex justify-center sm:justify-end">
+          <div className="w-full max-w-2xl">
+            <TokenSearchBar
+              onSearch={handleSearch}
+              onClear={handleClearSearch}
+              className="w-full"
+            />
+          </div>
+        </div>
+      </div>
+
+      <div className="relative h-[calc(100vh-335px)] sm:h-[calc(100vh-320px)] md:h-[calc(100vh-350px)] border border-white/10">
         {isPageLoading && <PageLoaderOverlay />}
 
-        {/* Centered overlay that stays put while scrolling */}
         {showCenteredOverlay && (
           <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
             <div className="pointer-events-auto rounded-lg shadow-2xl text-[#FFC000]">
@@ -451,74 +553,89 @@ export function TrendingTableContent({
         </div>
       </div>
 
-      {/* Footer / Pagination + Totals */}
-      <div className="flex flex-col gap-2 text-sm text-white/80 px-2">
-        <div className="flex items-center gap-3">
-          <button
-            className={`px-3 py-1 rounded border border-white/20 ${
-              hasPrev ? "hover:bg-white/10" : "opacity-40 cursor-not-allowed"
-            }`}
-            onClick={prevPage}
-            disabled={!hasPrev}
-          >
-            Prev
-          </button>
+      <div className="flex flex-col gap-3 text-sm text-white/80 px-2 pb-2">
+        <div className="flex flex-col sm:justify-between sm:flex-row lg:items-center gap-3">
+          <div className="flex flex-row justify-between sm:items-center gap-2 sm:gap-3">
+            <div className="flex items-center gap-2">
+              <button
+                className={`px-3 py-1 rounded border border-white/20 text-sm ${
+                  hasPrev
+                    ? "hover:bg-white/10"
+                    : "opacity-40 cursor-not-allowed"
+                }`}
+                onClick={prevPage}
+                disabled={!hasPrev}
+              >
+                Prev
+              </button>
 
-          <div className="flex items-center gap-2">
-            <span>Page</span>
+              <div className="flex items-center gap-1 sm:gap-2">
+                <span className="text-xs sm:text-sm">Page</span>
 
-            {/* KEEP INPUT — styled like your select (glassy, gold focus). Also hides spinners cross-browser */}
-            <input
-              type="number"
-              min={1}
-              value={pageIndex}
-              onChange={(e) => setPageIndex(Number(e.target.value))}
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder="1"
-              className="w-20 px-3 py-1.5 text-sm rounded-md bg-black/30 border border-white/20 text-white placeholder-white/40 outline-none
-                         focus:border-[#FFD700]/60 focus:ring-2 focus:ring-[#FFD700]/50 transition
-                         [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            />
+                <input
+                  type="number"
+                  min={1}
+                  value={pageIndex}
+                  onChange={(e) => setPageIndex(Number(e.target.value))}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="1"
+                  className="w-16 sm:w-20 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md bg-black/30 border border-white/20 text-white placeholder-white/40 outline-none
+                             focus:border-[#FFD700]/60 focus:ring-2 focus:ring-[#FFD700]/50 transition
+                             [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                />
 
-            {totalPages ? (
-              <span className="text-white/60">of {totalPages}</span>
-            ) : null}
+                {totalPages ? (
+                  <span className="text-white/60 text-xs sm:text-sm">
+                    of {totalPages}
+                  </span>
+                ) : null}
+              </div>
+
+              <button
+                className={`px-3 py-1 rounded border border-white/20 text-sm ${
+                  hasNext
+                    ? "hover:bg-white/10"
+                    : "opacity-40 cursor-not-allowed"
+                }`}
+                onClick={nextPage}
+                disabled={!hasNext}
+              >
+                Next
+              </button>
+            </div>
+
+            <label className="flex items-center gap-1 sm:gap-2">
+              {/* <span className="text-xs hidden sm:block sm:text-sm whitespace-nowrap">
+                Rows per page
+              </span> */}
+              <RowsPerPageSelect
+                value={pageSize}
+                onChange={(n) => setPageSize(Number(n))}
+                options={[25, 50]}
+                direction="up"
+                className="sm:ml-1"
+              />
+            </label>
           </div>
 
-          <button
-            className={`px-3 py-1 rounded border border-white/20 ${
-              hasNext ? "hover:bg-white/10" : "opacity-40 cursor-not-allowed"
-            }`}
-            onClick={nextPage}
-            disabled={!hasNext}
-          >
-            Next
-          </button>
-
-          <label className="flex items-center gap-2">
-            <span>Rows per page</span>
-            {/* Styled, up-opening select */}
-            <RowsPerPageSelect
-              value={pageSize}
-              onChange={(n) => setPageSize(Number(n))}
-              options={[25, 50]}
-              direction="up"
-              className="ml-1"
-            />
-          </label>
-
-          <div className="ml-auto flex items-center gap-3">
+          <div className="w-full sm:w-auto flex justify-center items-center lg:ml-auto">
             {typeof upstreamTotal === "number" && (
-              <span className="text-white/40">
-                Total: {upstreamTotal.toLocaleString()} (
-                {typeof jupVerifiedTotal === "number" && (
-                  <span className="text-white/60">
-                    Jupiter Verified Tokens: {jupVerifiedTotal.toLocaleString()}
-                  </span>
-                )}
-                )
-              </span>
+              <div className="text-white/40 text-xs sm:text-sm">
+                <div
+                  className="
+                    flex flex-row sm:items-center gap-1 sm:gap-2
+                    [@media(min-width:1024px)_and_(max-width:1170px)]:flex-col
+                  "
+                >
+                  <span>Total: {upstreamTotal.toLocaleString()}</span>
+                  {typeof jupVerifiedTotal === "number" && (
+                    <span className="text-white/60">
+                      (Jupiter Verified: {jupVerifiedTotal.toLocaleString()})
+                    </span>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>

@@ -1,21 +1,13 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import OpenAI from "openai";
+import { prisma } from "@/lib/prisma";
+import { isAdminEmail } from "@/lib/auth/isAdmin";
 import { getTokenData } from "@/lib/api/tokenData";
 import { getTweetsSearch } from "@/lib/api/tweet";
-
-export const runtime = "nodejs";
-export const dynamic = "force-dynamic";
-export const maxDuration = 300;
-export const preferredRegion = ["iad1"];
-
-const MAX_REPORTS = 200;
-const PAGE_SIZE = 50;
-const PAGE_DELAY_MS = 500;
-const PAGE_MAX_RETRIES = 6;
-const PAGE_BACKOFF_BASE_MS = 900;
-const PAGE_BACKOFF_JITTER_MS = 300;
+import { detectChain } from "@/lib/utils/detectChain";
+import { getBNBHolderAnalytics } from "@/lib/api/bnbAnalytics";
+import { getBirdeyeSecurityAnalyticsWithMetadata } from "@/lib/api/birdeyeSecurtiy";
 
 const systemPrompt = `You are a professional crypto research analyst and technical writer. Your task is to generate a well-structured, comprehensive, and visually appealing technical report about a cryptocurrency project.
 
@@ -32,7 +24,53 @@ const systemPrompt = `You are a professional crypto research analyst and technic
 ## 1. What It Is
 A concise summary of the project mentioning the ticker, project name, and contract address. Include basic project description and key characteristics from the data.
 
-## 2. Community Chatter
+## 2. Holder Analytics (BNB Tokens Only)
+**Only include this section for BNB Smart Chain tokens. Skip for Solana tokens.**
+**IMPORTANT: Provide only accurate, factual holder analysis. Do NOT fabricate distribution data or make speculative claims about holder behavior. Base analysis strictly on the provided holderAnalytics data.**
+
+If holderAnalytics data is provided, analyze with factual accuracy:
+- **Total Holders:** Report exact holder count from the data - cite the precise number
+- **Distribution Analysis:** Report actual concentration percentages as provided in the data
+- **Top Holder Concentration:** Report exact percentages for top holders (if available in data)
+- **Whale Analysis:** List only whale addresses and percentages found in the actual data
+- **Distribution Insights:** Analyze decentralization based solely on provided metrics
+- **Holder Behavior Patterns:** Report only observable patterns from the actual data
+- **Token Concentration Metrics:** Use exact percentages and counts from the data source
+
+**Critical Guidelines for Accurate Holder Reporting:**
+- Report exact holder counts - do not estimate or round significantly
+- Use precise percentages for token concentration as provided in data
+- If whale addresses are provided, list them with exact holding percentages
+- Do not speculate about holder intentions or future behavior
+- Distinguish between verified data points and missing information
+- When data points are missing, state clearly "Data not available" rather than guessing
+- Focus on mathematical distribution facts rather than subjective interpretations
+- If distribution appears centralized/decentralized, cite specific percentages that support this conclusion
+
+## 3. Safety Analytics (BNB Tokens Only)
+**Only include this section for BNB Smart Chain tokens. Skip for Solana tokens.**
+**IMPORTANT: Provide only accurate, factual security assessment. Do NOT fabricate or exaggerate security threats. Base analysis strictly on the provided securityAnalytics data.**
+
+If securityAnalytics data is provided, analyze with factual accuracy:
+- **Risk Score:** Overall security risk assessment (0-100) - cite the exact score from data
+- **Risk Level:** Low, Medium, High, or Critical classification - use only the level from data
+- **Security Warnings:** List only the actual warnings found in the data - do not add fictional warnings
+- **Safety Indicators:** List only the positive security features detected in the data
+- **Token Security Features:** Contract analysis, taxes, restrictions - report exact values from tokenSecurity data
+- **Honeypot Detection:** Report exact honeypot status (0 = not honeypot, 1 = honeypot detected)
+- **Trading Restrictions:** Report only actual trading limitations found (cannotBuy, cannotSellAll)
+- **LP Analysis:** Report liquidity pool lock percentages and holder distribution as provided
+- **Tax Analysis:** Report exact buy/sell/transfer tax percentages - do not estimate or inflate
+
+**Critical Guidelines for Accurate Reporting:**
+- If isHoneypot = "0", state clearly "Not identified as honeypot"
+- If no security warnings exist in the data, state "No security warnings identified"
+- Do not label legitimate projects as scams without clear evidence in the data
+- Distinguish between high taxes and actual scams - high taxes are not necessarily scams
+- Focus on factual contract behavior rather than speculative risk assessment
+- When in doubt, err on the side of neutral, factual reporting
+
+## 4. Community Chatter
 Analyze sentiment from Twitter, community channels, and user chatter based on the provided tweets data. Structure this section as:
 - Overall sentiment analysis (bullish/bearish/neutral)
 - Key community discussions and trending topics
@@ -42,14 +80,15 @@ Analyze sentiment from Twitter, community channels, and user chatter based on th
 
 Example style: "The community on X are bullishly rallying around $AURA. 24-hour timeline shows activity that has picked up where engagement has 5X'd with people calling for all sorts of high valuations. While the majority of emotions are bullishly high, some request to exercise caution due to bundling, etc."
 
-## 3. Individual Tweets
+## 5. Individual Tweets
 Show the **5 most relevant tweets** based on engagement from the provided tweets data. For each tweet, format as:
-**Username:** Tweet content
+**@Username:** Tweet content
+- Extract individual tweets from the tweetsData array provided
+- Include usernames, tweet content, and media when available
 - Prioritize tweets containing the ticker, contract address, or project name
-- Include engagement context where available
 - If no tweets provided, state "No tweet data available for analysis"
 
-## 4. Coin-O-Metry
+## 6. Coin-O-Metry
 Present key statistics in a structured format:
 - **Token Price:** Current USD price
 - **Market Cap:** Current market capitalization  
@@ -62,7 +101,7 @@ Present key statistics in a structured format:
 - **Launchpad:** Platform used for launch (if available)
 - **Contract Address:** With clear formatting for copying
 
-## 5. Technical Analysis
+## 7. Technical Analysis
 Split into focused categories:
 ### Price & Market Overview
 - Current metrics, ATH/ATL analysis, liquidity assessment
@@ -90,248 +129,339 @@ Split into focused categories:
 - Include specific numbers and metrics wherever possible
 - If data is missing for any section, clearly state "Data not available" rather than guessing`;
 
-const DS_API_KEY = process.env.DEEPSEEK_API_KEY || "";
-const CRON_SECRET = process.env.CRON_SECRET || "";
-const BIRDEYE_API_KEY = process.env.BIRDEYE_API_KEY || "";
+const client = new OpenAI({
+  baseURL: "https://api.deepseek.com",
+  apiKey: process.env.DEEPSEEK_API_KEY,
+});
 
-const BIRDEYE_TOKENLIST = "https://public-api.birdeye.so/defi/tokenlist";
-const JUP_VERIFIED_URL = "https://lite-api.jup.ag/tokens/v2/tag?query=verified";
+function requireUserId(req: NextRequest): string {
+  const uid = req.headers.get("x-user-id");
+  if (!uid) throw new Error("Missing x-user-id header (User.cuid).");
+  return uid;
+}
 
 const normAddr = (s: string) => s.trim().toLowerCase();
 const normTicker = (s: string) => s.trim().toUpperCase();
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-function limiter(concurrency: number) {
-  let active = 0;
-  const q: Array<() => void> = [];
-  const next = () => {
-    active--;
-    if (q.length) q.shift()!();
-  };
-  return async <T>(fn: () => Promise<T>) =>
-    new Promise<T>((resolve, reject) => {
-      const start = async () => {
-        active++;
-        try {
-          resolve(await fn());
-        } catch (e) {
-          reject(e);
-        } finally {
-          next();
-        }
-      };
-      if (active < concurrency) start();
-      else q.push(start);
-    });
-}
-
-function isAuthorized(req: NextRequest) {
-  // 1) Scheduled run from Vercel Cron
-  const isVercelCron = req.headers.get("x-vercel-cron") === "1";
-
-  // 2) Manual run via Authorization: Bearer <CRON_SECRET>
-  const auth = req.headers.get("authorization") || "";
-  const token = auth.startsWith("Bearer ") ? auth.slice(7) : "";
-  const byBearer =
-    !!process.env.CRON_SECRET && token === process.env.CRON_SECRET;
-
-  // 3) (Optional) Manual run via x-cron-secret header that you already used
-  const byHeader =
-    !!process.env.CRON_SECRET &&
-    (req.headers.get("x-cron-secret") ?? "") === process.env.CRON_SECRET;
-
-  return isVercelCron || byBearer || byHeader;
-}
-
-async function getJupiterVerifiedSet(): Promise<Set<string>> {
-  console.log("🔄 Fetching Jupiter verified set...");
-  const res = await fetch(JUP_VERIFIED_URL, { cache: "no-store" });
-  if (!res.ok) throw new Error(`Jupiter HTTP ${res.status}`);
-  const arr = (await res.json()) as any[];
-  const set = new Set<string>();
-  for (const it of arr) {
-    const mint =
-      typeof it === "string"
-        ? it
-        : it?.id || it?.mint || it?.address || it?.mintAddress || it?.tokenMint;
-    if (mint && typeof mint === "string") set.add(mint.toLowerCase());
+async function awardReportPoints(userId: string) {
+  // Skip points awarding for system cron jobs
+  if (userId === "system-cron-daily-reports") {
+    return;
   }
-  console.log(`✅ Jupiter verified set size: ${set.size}`);
-  return set;
-}
 
-type BirdeyeListResult = {
-  ok: boolean;
-  tokens?: any[];
-  status?: number;
-  error?: string;
-  retryAfterSec?: number;
-};
+  // normalize "today" at midnight
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
 
-async function fetchBirdeyePage(opts: {
-  chain: string;
-  offset: number;
-  sort_by: string;
-  sort_type: "asc" | "desc";
-  min_liquidity: number;
-  ui_amount_mode: "raw" | "scaled";
-}): Promise<BirdeyeListResult> {
-  const { chain, offset, sort_by, sort_type, min_liquidity, ui_amount_mode } =
-    opts;
-  const url = new URL(BIRDEYE_TOKENLIST);
-  url.searchParams.set("sort_by", sort_by);
-  url.searchParams.set("sort_type", sort_type);
-  url.searchParams.set("offset", String(offset));
-  url.searchParams.set("limit", String(PAGE_SIZE));
-  url.searchParams.set("min_liquidity", String(Math.max(0, min_liquidity)));
-  url.searchParams.set("ui_amount_mode", ui_amount_mode);
-
-  const res = await fetch(url.toString(), {
-    method: "GET",
-    headers: {
-      accept: "application/json",
-      "x-chain": chain,
-      "X-API-KEY": BIRDEYE_API_KEY,
-    },
-    cache: "no-store",
+  // Only fetch what we need
+  const userForTasks = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { lastReportDate: true, reportsToday: true },
   });
 
-  if (res.status === 429) {
-    const retryAfterHeader = res.headers.get("retry-after");
-    const retryAfterSec = retryAfterHeader
-      ? Math.max(1, parseInt(retryAfterHeader, 10))
-      : undefined;
-    return {
-      ok: false,
-      status: 429,
-      retryAfterSec,
-      error: "Too many requests",
-    };
-  }
+  if (!userForTasks) return;
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    return {
-      ok: false,
-      status: res.status,
-      error: text || `Birdeye HTTP ${res.status}`,
-    };
-  }
+  const { lastReportDate, reportsToday } = userForTasks;
+  const isNewDay = !lastReportDate || lastReportDate < today;
 
-  const json = (await res.json()) as any;
-  const tokens: any[] = Array.isArray(json?.data?.tokens)
-    ? json.data.tokens
-    : [];
-  return { ok: true, tokens, status: 200 };
+  // If reportsToday was ever null, coerce it
+  const safeReportsToday = typeof reportsToday === "number" ? reportsToday : 0;
+
+  await prisma.user.update({
+    where: { id: userId },
+    data: {
+      points: { increment: 100 },
+      lastReportDate: new Date(),
+      reportsToday: isNewDay ? 1 : safeReportsToday + 1,
+    },
+  });
 }
 
-async function fetchBirdeyePageWithRetry(
-  params: Parameters<typeof fetchBirdeyePage>[0],
-  pageNum: number
-) {
-  let attempt = 0;
-  while (attempt <= PAGE_MAX_RETRIES) {
-    const res = await fetchBirdeyePage(params);
-    if (res.ok) {
-      console.log(
-        `✅ Birdeye page ${pageNum} fetched (${res.tokens?.length} tokens)`
+export async function POST(request: NextRequest) {
+  try {
+    const userId = requireUserId(request);
+    const {
+      contractAddress,
+      ticker,
+      projectName,
+      storeToSystem, // admin-only path
+      overwrite, // admin confirm
+    } = await request.json();
+
+    if (!contractAddress || !ticker) {
+      return NextResponse.json(
+        { error: "contractAddress and ticker are required" },
+        { status: 400 }
       );
-      return res;
-    }
-    if (res.status !== 429)
-      throw new Error(res.error || `Birdeye failed (${res.status})`);
-    const waitMs =
-      (res.retryAfterSec
-        ? res.retryAfterSec * 1000
-        : PAGE_BACKOFF_BASE_MS * Math.pow(2, attempt)) +
-      Math.floor(Math.random() * PAGE_BACKOFF_JITTER_MS);
-    console.log(
-      `⚠️ 429 on Birdeye page ${pageNum}, retrying in ${waitMs}ms (attempt ${
-        attempt + 1
-      })`
-    );
-    await sleep(waitMs);
-    attempt++;
-  }
-  throw new Error("Birdeye 429 after retries");
-}
-
-async function collectVerified200() {
-  console.log("🔄 Collecting 200 Jupiter-verified tokens from Birdeye...");
-  const jupVerified = await getJupiterVerifiedSet();
-  const seen = new Set<string>();
-  const out: Array<{ address: string; ticker: string; name?: string }> = [];
-
-  let offset = 0;
-  let pageNum = 1;
-  while (out.length < MAX_REPORTS) {
-    const listed = await fetchBirdeyePageWithRetry(
-      {
-        chain: "solana",
-        offset,
-        sort_by: "v24hUSD",
-        sort_type: "desc",
-        min_liquidity: 100,
-        ui_amount_mode: "scaled",
-      },
-      pageNum
-    );
-
-    const tokens = listed.tokens ?? [];
-    if (tokens.length === 0) break;
-
-    for (const t of tokens) {
-      const addr = (t?.address ?? t?.mint ?? "").toLowerCase();
-      const symbol = t?.symbol;
-      if (!addr || !symbol) continue;
-      if (!jupVerified.has(addr)) continue;
-      if (seen.has(addr)) continue;
-      seen.add(addr);
-      out.push({ address: addr, ticker: symbol, name: t?.name });
-      if (out.length >= MAX_REPORTS) break;
     }
 
-    console.log(`📊 Collected ${out.length}/${MAX_REPORTS} so far...`);
-    offset += PAGE_SIZE;
-    pageNum++;
+    // Handle system cron job user
+    const isSystemUser = userId === "system-cron-daily-reports";
+    let user: any = null;
+    let isAdmin = false;
 
-    if (out.length < MAX_REPORTS) {
-      await sleep(PAGE_DELAY_MS);
+    if (isSystemUser) {
+      // For system cron jobs, create a virtual admin user
+      isAdmin = true;
+      user = { id: userId, email: "system@cron.internal" };
+    } else {
+      user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user)
+        return NextResponse.json({ error: "User not found" }, { status: 401 });
+      isAdmin = isAdminEmail(user.email);
     }
-  }
+    const addr = normAddr(contractAddress);
+    const tkr = normTicker(ticker);
 
-  if (out.length < MAX_REPORTS) {
-    throw new Error(
-      `Only collected ${out.length} verified tokens; need ${MAX_REPORTS}`
-    );
-  }
-  console.log("✅ Finished collecting 200 verified tokens.");
-  return out;
-}
+    // ---------- FAST-PATH for normal users: reuse SystemReport if exists ----------
+    if (!storeToSystem) {
+      const userReport = await prisma.report.findFirst({
+        where: {
+          contractAddress: { equals: addr, mode: "insensitive" },
+          ticker: { equals: tkr, mode: "insensitive" },
+          userId: userId,
+        },
+      });
 
-const client = new OpenAI({
-  baseURL: "https://api.deepseek.com",
-  apiKey: DS_API_KEY,
-});
+      if (userReport) {
+        // Detect chain from existing report data
+        const reportChain = detectChain({
+          dexData: userReport.dexData as any,
+          address: addr,
+        });
 
-async function generateOne(addr: string, tkr: string, projectName?: string) {
-  console.log(`📝 Generating report for ${tkr} (${addr})`);
-  const tokenData = await getTokenData(addr);
-  const tweetsData = await getTweetsSearch(addr, tkr, projectName, 40);
-  const formattedTweets =
-    (tweetsData as any).success && (tweetsData as any).data?.length > 0
-      ? (tweetsData as any).data
-          .slice(0, 20)
-          .map((tweet: string, i: number) => `Tweet ${i + 1}: ${tweet}`)
-          .join("\n\n")
-      : "No tweets available for analysis";
+        const created = await prisma.report.create({
+          data: {
+            userId,
+            contractAddress: addr,
+            ticker: tkr,
+            chain: reportChain,
+            projectName: userReport.projectName ?? projectName ?? undefined,
+            content: userReport.content,
+            dexData: userReport.dexData ?? undefined,
+            tweetsData: userReport.tweetsData ?? undefined,
+            securityData: userReport.securityData ?? undefined,
+            holdersData: userReport.holdersData ?? undefined,
+            conversation: { create: {} },
+          },
+          include: {
+            conversation: {
+              select: { id: true, createdAt: true, updatedAt: true },
+            },
+          },
+        });
 
-  const userPrompt = `Generate a structured technical report for the cryptocurrency project:
+        const userTweetsData = userReport.tweetsData as any;
+        const tweetsCount = Array.isArray(userTweetsData)
+          ? userTweetsData.length
+          : 0;
+        await awardReportPoints(userId);
+        return NextResponse.json({
+          success: true,
+          source: "systemreports",
+          report: userReport.content,
+          tokenData: {
+            dexData: userReport.dexData ?? null,
+            coingeckoData: null,
+          },
+          tweetsData: { success: true, data: userTweetsData || [] },
+          tweetsAnalyzed: tweetsCount,
+          metadata: {
+            contractAddress: addr,
+            ticker: tkr,
+            projectName: created.projectName ?? null,
+            generatedAt: new Date().toISOString(),
+            dataSourcesUsed: {
+              dexScreener: !!userReport.dexData,
+              coinGecko: false,
+              tweets: tweetsCount > 0,
+            },
+          },
+          saved: {
+            reportId: created.id,
+            conversationId: created.conversation?.id ?? null,
+            createdAt: created.createdAt,
+          },
+        });
+      }
+
+      const sysReport = await prisma.systemReport.findFirst({
+        where: {
+          contractAddress: { equals: addr, mode: "insensitive" },
+          ticker: { equals: tkr, mode: "insensitive" },
+        },
+      });
+
+      if (sysReport) {
+        // Detect chain from system report data
+        const sysReportChain = detectChain({
+          dexData: sysReport.dexData as any,
+          address: addr,
+        });
+
+        const created = await prisma.report.create({
+          data: {
+            userId,
+            contractAddress: addr,
+            ticker: tkr,
+            chain: sysReportChain,
+            projectName: sysReport.projectName ?? projectName ?? undefined,
+            content: sysReport.content,
+            dexData: sysReport.dexData ?? undefined,
+            tweetsData: sysReport.tweetsData ?? undefined,
+            securityData: sysReport.securityData ?? undefined,
+            holdersData: sysReport.holdersData ?? undefined,
+            conversation: { create: {} },
+          },
+          include: {
+            conversation: {
+              select: { id: true, createdAt: true, updatedAt: true },
+            },
+          },
+        });
+
+        const systemTweetsData = sysReport.tweetsData as any;
+        const tweetsCount = Array.isArray(systemTweetsData)
+          ? systemTweetsData.length
+          : 0;
+
+        await awardReportPoints(userId);
+
+        return NextResponse.json({
+          success: true,
+          source: "systemreports",
+          report: sysReport.content,
+          tokenData: {
+            dexData: sysReport.dexData ?? null,
+            coingeckoData: null,
+          },
+          tweetsData: { success: true, data: systemTweetsData || [] },
+          tweetsAnalyzed: tweetsCount,
+          metadata: {
+            contractAddress: addr,
+            ticker: tkr,
+            projectName: created.projectName ?? null,
+            generatedAt: new Date().toISOString(),
+            dataSourcesUsed: {
+              dexScreener: !!sysReport.dexData,
+              coinGecko: false,
+              tweets: tweetsCount > 0,
+            },
+          },
+          saved: {
+            reportId: created.id,
+            conversationId: created.conversation?.id ?? null,
+            createdAt: created.createdAt,
+          },
+        });
+      }
+      // else fall through and generate fresh
+    }
+
+    // ---------- Admin protections (no duplicates on store) ----------
+    if (storeToSystem && !isAdmin) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    // If a system report exists and overwrite not confirmed -> 409 so UI can confirm
+    if (storeToSystem) {
+      const exists = await prisma.systemReport.findFirst({
+        where: {
+          contractAddress: { equals: addr, mode: "insensitive" },
+          ticker: { equals: tkr, mode: "insensitive" },
+        },
+        select: { id: true, updatedAt: true },
+      });
+      if (exists && !overwrite) {
+        return NextResponse.json(
+          { exists: true, message: "System report already exists." },
+          { status: 409 }
+        );
+      }
+    }
+
+    // ---------- Full generation ----------
+    const tokenData = await getTokenData(addr);
+    if ((tokenData as any).error) {
+      return NextResponse.json(
+        { error: (tokenData as any).error },
+        { status: 500 }
+      );
+    }
+
+    // Auto-detect chain from token data
+    const detectedChain = detectChain({
+      dexData: (tokenData as any).dexData,
+      address: addr,
+    });
+
+    const tweetsData = await getTweetsSearch(addr, tkr, projectName, 40);
+    const rawTweetsArray =
+      (tweetsData as any).success && (tweetsData as any).data?.length > 0
+        ? (tweetsData as any).data
+        : [];
+
+    const formattedTweets =
+      rawTweetsArray.length > 0
+        ? rawTweetsArray
+            .slice(0, 20)
+            .map(
+              (tweet: any, i: number) =>
+                `Tweet ${i + 1} by @${tweet.tweeter.username}:\n${
+                  tweet.text
+                }\n${
+                  tweet.media.mediaUrl ? `Media: ${tweet.media.mediaUrl}` : ""
+                }`
+            )
+            .join("\n\n")
+        : "No tweets available for analysis";
+
+    // Fetch BNB-specific analytics for BSC tokens
+    let holderAnalytics: any = null;
+    let securityAnalytics: any = null;
+
+    if (detectedChain === "bsc") {
+      console.log("Fetching BNB analytics for BSC token:", addr);
+
+      // Fetch holder analytics
+      try {
+        const holderResult = await getBNBHolderAnalytics(addr);
+        if (holderResult.success) {
+          holderAnalytics = holderResult.data;
+          console.log("Successfully fetched holder analytics");
+        } else {
+          console.warn("Failed to fetch holder analytics:", holderResult.error);
+        }
+      } catch (error) {
+        console.error("Error fetching holder analytics:", error);
+      }
+
+      // Fetch security analytics with metadata
+      try {
+        const securityResult = await getBirdeyeSecurityAnalyticsWithMetadata(
+          addr
+        );
+        if (securityResult.success) {
+          securityAnalytics = securityResult.data;
+          console.log("Successfully fetched security analytics with metadata");
+        } else {
+          console.warn(
+            "Failed to fetch security analytics:",
+            securityResult.error
+          );
+        }
+      } catch (error) {
+        console.error("Error fetching security analytics:", error);
+      }
+    }
+
+    const aiPrompt = `Generate a structured technical report for the cryptocurrency project:
 
 **Inputs:**
 - Contract Address: ${addr}
 - Ticker: ${tkr}
 - Project Name: ${projectName || "Not provided"}
+- Blockchain: ${detectedChain === "bsc" ? "BNB Smart Chain (BSC)" : "Solana"}
 
 ### DexScreener Data:
 ${JSON.stringify((tokenData as any).dexData, null, 2)}
@@ -342,140 +472,340 @@ ${JSON.stringify((tokenData as any).coingeckoData, null, 2)}
 ### Top Tweets Analysis:
 ${formattedTweets}
 
+${
+  holderAnalytics
+    ? `### Holder Analytics (BNB Token):
+${JSON.stringify(holderAnalytics, null, 2)}`
+    : ""
+}
+
+${
+  securityAnalytics
+    ? `### Security Analytics (BNB Token):
+${JSON.stringify(securityAnalytics, null, 2)}`
+    : ""
+}
+
 ### Requirements:
 - Follow the exact report structure outlined in the system prompt
 - Include all available stats, links, and relevant insights
 - Analyze the tweets for sentiment, trends, and key mentions in the Community Chatter section
 - For Individual Tweets section, extract and format the 5 most relevant tweets from the provided data
+- ${
+      holderAnalytics
+        ? "Include the Holder Analytics section with comprehensive analysis of the provided holder data"
+        : ""
+    }
+- ${
+      securityAnalytics
+        ? "Include the Safety Analytics section with detailed security assessment based on the provided security data"
+        : ""
+    }
 - If some data is missing, state clearly **"Data not available"** instead of guessing
 - Focus on creating a professional, readable report structure
 - Make sure each section provides substantial analysis and insights`;
 
-  const ai = await client.chat.completions.create({
-    model: "deepseek-chat",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: userPrompt },
-    ],
-    temperature: 0.7,
-    max_tokens: 4000,
-  });
-
-  console.log(`✅ Report generated for ${tkr}`);
-  return {
-    content: ai.choices?.[0]?.message?.content || "",
-    dexData: (tokenData as any)?.dexData ?? undefined,
-    projectName,
-  };
-}
-
-async function upsertSystemReport(
-  addr: string,
-  tkr: string,
-  payload: { content: string; dexData?: any; projectName?: string }
-) {
-  const contractAddress = normAddr(addr);
-  const ticker = normTicker(tkr);
-
-  try {
-    const existing = await prisma.systemReport.findFirst({
-      where: {
-        contractAddress: { equals: contractAddress, mode: "insensitive" },
-        ticker: { equals: ticker, mode: "insensitive" },
-      },
-      select: { id: true },
+    const aiResponse = await client.chat.completions.create({
+      model: "deepseek-chat",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: aiPrompt },
+      ],
+      temperature: 0.7,
+      max_tokens: 4000,
     });
 
-    if (existing) {
-      await prisma.systemReport.update({
-        where: { id: existing.id },
-        data: {
-          contractAddress,
-          ticker,
-          projectName: payload.projectName ?? undefined,
-          content: payload.content,
-          dexData: payload.dexData ?? undefined,
+    const generatedReport = aiResponse.choices?.[0]?.message?.content || "";
+
+    // ---------- Admin "Generate and Store": UPDATE existing row by id (case-insensitive match), else CREATE ----------
+    if (storeToSystem && isAdmin) {
+      const existingCI = await prisma.systemReport.findFirst({
+        where: {
+          contractAddress: { equals: addr, mode: "insensitive" },
+          ticker: { equals: tkr, mode: "insensitive" },
         },
+        select: { id: true },
       });
-      console.log(`🔄 Updated SystemReport for ${ticker}`);
-      return { mode: "updated", id: existing.id };
+
+      if (existingCI) {
+        // Update the single existing row — no new row created
+        await prisma.systemReport.update({
+          where: { id: existingCI.id },
+          data: {
+            contractAddress: addr, // normalize on write
+            ticker: tkr, // normalize on write
+            chain: detectedChain,
+            projectName: projectName || undefined,
+            content: generatedReport,
+            dexData: (tokenData as any).dexData ?? undefined,
+            tweetsData: rawTweetsArray || undefined,
+            securityData: securityAnalytics || undefined,
+            holdersData: holderAnalytics || undefined,
+            // updatedAt auto via @updatedAt
+          },
+        });
+      } else {
+        // No match -> create a new normalized row
+        await prisma.systemReport.create({
+          data: {
+            contractAddress: addr,
+            ticker: tkr,
+            chain: detectedChain,
+            projectName: projectName || undefined,
+            content: generatedReport,
+            dexData: (tokenData as any).dexData ?? undefined,
+            tweetsData: rawTweetsArray || undefined,
+            securityData: securityAnalytics || undefined,
+            holdersData: holderAnalytics || undefined,
+          },
+        });
+      }
     }
 
-    const created = await prisma.systemReport.create({
-      data: {
-        contractAddress,
-        ticker,
-        projectName: payload.projectName ?? undefined,
-        content: payload.content,
-        dexData: payload.dexData ?? undefined,
+    // ---------- Always create a per-user Report row (skip for system users) ----------
+    let created: any = null;
+    if (!isSystemUser) {
+      created = await prisma.report.create({
+        data: {
+          userId,
+          contractAddress: addr,
+          ticker: tkr,
+          chain: detectedChain,
+          projectName: projectName || undefined,
+          content: generatedReport,
+          dexData: (tokenData as any).dexData ?? undefined,
+          tweetsData: rawTweetsArray || undefined,
+          securityData: securityAnalytics || undefined,
+          holdersData: holderAnalytics || undefined,
+          conversation: { create: {} },
+        },
+        include: {
+          conversation: {
+            select: { id: true, createdAt: true, updatedAt: true },
+          },
+        },
+      });
+    }
+
+    await awardReportPoints(userId);
+
+    return NextResponse.json({
+      success: true,
+      source: storeToSystem ? "generated+stored" : "generated",
+      report: generatedReport,
+      tokenData,
+      tweets: tweetsData,
+      tweetsAnalyzed: (tweetsData as any).data?.length || 0,
+      metadata: {
+        contractAddress: addr,
+        ticker: tkr,
+        projectName: projectName || null,
+        generatedAt: new Date().toISOString(),
+        dataSourcesUsed: {
+          dexScreener: !!(tokenData as any).dexData,
+          coinGecko: !!(tokenData as any).coingeckoData,
+          tweets:
+            (tweetsData as any).success &&
+            ((tweetsData as any).data?.length || 0) > 0,
+        },
       },
-      select: { id: true },
+      saved: created
+        ? {
+            reportId: created.id,
+            conversationId: created.conversation?.id ?? null,
+            createdAt: created.createdAt,
+          }
+        : null,
     });
-    console.log(`🆕 Created SystemReport for ${ticker}`);
-    return { mode: "created", id: created.id };
   } catch (err: any) {
-    console.error(`❌ Failed upsert for ${ticker}:`, err.message);
-    throw err;
+    const msg = err instanceof Error ? err.message : "Unknown error";
+    const status = msg.includes("x-user-id") ? 401 : 500;
+    return NextResponse.json(
+      { error: "Failed to generate report", details: msg },
+      { status }
+    );
   }
 }
 
-export async function handle(req: NextRequest) {
+// GET handler for Vercel cron jobs
+export async function GET(request: NextRequest) {
   try {
-    if (!isAuthorized(req)) {
-      console.error("❌ Forbidden: Missing or invalid cron auth", {
-        xVercelCron: req.headers.get("x-vercel-cron"),
-        hasCronSecretEnv: !!process.env.CRON_SECRET,
-        authHeaderPresent: !!req.headers.get("authorization"),
-        xCronSecretLen: (req.headers.get("x-cron-secret") ?? "").length,
-      });
-      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
-    }
-    if (!DS_API_KEY || !BIRDEYE_API_KEY) {
-      console.error("❌ Missing API keys");
-      return NextResponse.json({ error: "Missing API keys" }, { status: 500 });
+    const { searchParams } = new URL(request.url);
+    const chain = searchParams.get("chain") || "solana";
+    const batch = parseInt(searchParams.get("batch") || "1");
+    const of = parseInt(searchParams.get("of") || "10");
+    const count = parseInt(searchParams.get("count") || "10");
+
+    // Validate parameters
+    if (batch < 1 || batch > of || count < 1) {
+      return NextResponse.json(
+        { error: "Invalid batch parameters" },
+        { status: 400 }
+      );
     }
 
-    console.log("🚀 Starting daily report generation...");
-    const targets = await collectVerified200();
-    const run = limiter(5);
+    // Check if Birdeye API key is available
+    const apiKey = process.env.BIRDEYE_API_KEY;
+    if (!apiKey) {
+      return NextResponse.json(
+        { error: "Missing BIRDEYE_API_KEY" },
+        { status: 500 }
+      );
+    }
 
-    const results: any[] = [];
-    await Promise.all(
-      targets.map((t) =>
-        run(async () => {
-          try {
-            const gen = await generateOne(t.address, t.ticker, t.name);
-            const res = await upsertSystemReport(t.address, t.ticker, gen);
-            results.push({ ticker: t.ticker, ok: true, mode: res.mode });
-          } catch (e: any) {
-            console.error(`❌ Error for ${t.ticker}:`, e.message);
-            results.push({ ticker: t.ticker, ok: false, error: e.message });
-          }
-        })
-      )
+    // Fetch trending tokens based on chain
+    const limit = count;
+    const offset = (batch - 1) * count;
+
+    const trendingResponse = await fetch(
+      `${
+        process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+      }/api/trending`,
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          chain: chain,
+          limit: limit,
+          offset: offset,
+          sort_by: "v24hUSD",
+          sort_type: "desc",
+          min_liquidity: 1000,
+          verified_only: chain === "solana", // Only filter verified for Solana
+          include_creation: false,
+        }),
+      }
     );
 
-    console.log("🏁 Finished all reports.");
+    if (!trendingResponse.ok) {
+      console.error(
+        "Failed to fetch trending tokens:",
+        trendingResponse.status
+      );
+      return NextResponse.json(
+        { error: "Failed to fetch trending tokens" },
+        { status: 500 }
+      );
+    }
+
+    const trendingData = await trendingResponse.json();
+    const tokens = trendingData.items || [];
+
+    if (tokens.length === 0) {
+      console.log(`No tokens found for ${chain} batch ${batch}/${of}`);
+      return NextResponse.json({
+        success: true,
+        message: `No tokens found for ${chain} batch ${batch}/${of}`,
+        processed: 0,
+        results: [],
+      });
+    }
+
+    const systemUserId = "system-cron-daily-reports";
+    const results = [];
+
+    // Process each token
+    for (const token of tokens) {
+      try {
+        const contractAddress = token.tokenAddress;
+        const ticker = token.symbol;
+        const projectName = token.name;
+
+        if (!contractAddress || !ticker) {
+          console.warn(`Skipping token due to missing data:`, {
+            contractAddress,
+            ticker,
+          });
+          continue;
+        }
+
+        // Generate report by calling the POST endpoint internally
+        const reportResponse = await fetch(
+          `${
+            process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000"
+          }/api/systemreports/generate-daily`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "x-user-id": systemUserId,
+            },
+            body: JSON.stringify({
+              contractAddress: contractAddress,
+              ticker: ticker,
+              projectName: projectName,
+              storeToSystem: true,
+              overwrite: true,
+            }),
+          }
+        );
+
+        if (reportResponse.ok) {
+          const reportData = await reportResponse.json();
+          results.push({
+            contractAddress,
+            ticker,
+            projectName,
+            success: true,
+            reportId: reportData.saved?.reportId,
+          });
+          console.log(
+            `Successfully generated report for ${ticker} (${contractAddress})`
+          );
+        } else {
+          const errorData = await reportResponse.json().catch(() => ({}));
+          results.push({
+            contractAddress,
+            ticker,
+            projectName,
+            success: false,
+            error: errorData.error || `HTTP ${reportResponse.status}`,
+          });
+          console.warn(
+            `Failed to generate report for ${ticker} (${contractAddress}):`,
+            errorData.error
+          );
+        }
+      } catch (error) {
+        console.error(`Error processing token:`, error);
+        results.push({
+          contractAddress: token.tokenAddress,
+          ticker: token.symbol,
+          projectName: token.name,
+          success: false,
+          error: error instanceof Error ? error.message : "Unknown error",
+        });
+      }
+    }
+
+    const successCount = results.filter((r) => r.success).length;
+    const failCount = results.filter((r) => !r.success).length;
+
+    console.log(
+      `Batch ${batch}/${of} for ${chain} completed: ${successCount} success, ${failCount} failed`
+    );
+
     return NextResponse.json({
-      attempted: targets.length,
-      succeeded: results.filter((r) => r.ok).length,
-      failed: results.filter((r) => !r.ok).length,
+      success: true,
+      chain,
+      batch,
+      of,
+      requested: count,
+      processed: results.length,
+      successCount,
+      failCount,
       results,
     });
-  } catch (err: any) {
-    console.error("❌ Fatal error:", err.message);
+  } catch (error) {
+    console.error("Cron job error:", error);
     return NextResponse.json(
-      { error: String(err?.message || err) },
+      {
+        error: "Cron job failed",
+        details: error instanceof Error ? error.message : "Unknown error",
+      },
       { status: 500 }
     );
   }
-}
-
-export async function POST(req: NextRequest) {
-  return handle(req);
-}
-
-export async function GET(req: NextRequest) {
-  // Vercel cron sends GET by default
-  return handle(req);
 }

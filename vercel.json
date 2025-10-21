@@ -1,8 +1,84 @@
 {
   "crons": [
     {
-      "path": "/api/systemreports/generate-daily",
-      "schedule": "20 17 * * *"
+      "path": "/api/systemreports/generate-daily?chain=solana&batch=1&of=10&count=10",
+      "schedule": "00 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=solana&batch=2&of=10&count=10",
+      "schedule": "02 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=solana&batch=3&of=10&count=10",
+      "schedule": "04 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=solana&batch=4&of=10&count=10",
+      "schedule": "06 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=solana&batch=5&of=10&count=10",
+      "schedule": "08 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=solana&batch=6&of=10&count=10",
+      "schedule": "10 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=solana&batch=7&of=10&count=10",
+      "schedule": "12 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=solana&batch=8&of=10&count=10",
+      "schedule": "14 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=solana&batch=9&of=10&count=10",
+      "schedule": "16 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=solana&batch=10&of=10&count=10",
+      "schedule": "18 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=bsc&batch=1&of=10&count=10",
+      "schedule": "20 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=bsc&batch=2&of=10&count=10",
+      "schedule": "22 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=bsc&batch=3&of=10&count=10",
+      "schedule": "24 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=bsc&batch=4&of=10&count=10",
+      "schedule": "26 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=bsc&batch=5&of=10&count=10",
+      "schedule": "28 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=bsc&batch=6&of=10&count=10",
+      "schedule": "30 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=bsc&batch=7&of=10&count=10",
+      "schedule": "32 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=bsc&batch=8&of=10&count=10",
+      "schedule": "34 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=bsc&batch=9&of=10&count=10",
+      "schedule": "36 11 * * *"
+    },
+    {
+      "path": "/api/systemreports/generate-daily?chain=bsc&batch=10&of=10&count=10",
+      "schedule": "38 11 * * *"
     }
   ]
 }

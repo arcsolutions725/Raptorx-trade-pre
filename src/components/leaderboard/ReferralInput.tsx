@@ -317,7 +317,7 @@ export function ReferralShare({ userId, referralCode }: ReferralShareProps) {
         <ul className="text-sm text-gray-400 space-y-1">
           <li>• You earn 150 points for each successful referral</li>
           <li>
-            • New users get 100 points (instead of 50) when using your code
+            • New users get 100 points (instead of 50) when using your link
           </li>
           <li>• Share your link on social media, Discord, or with friends!</li>
         </ul>

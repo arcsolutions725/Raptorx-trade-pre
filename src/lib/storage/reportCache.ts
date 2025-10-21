@@ -59,7 +59,63 @@ export const ReportCache = {
     set(this.keys.report(userId, reportId), report, ttl);
   },
   getReport(userId: string, reportId: string): any | null {
-    return get<any>(this.keys.report(userId, reportId));
+    const cached = get<any>(this.keys.report(userId, reportId));
+
+    // If cached data exists, validate its integrity
+    if (cached && this.isReportDataIncomplete(cached)) {
+      // Clear incomplete cache and return null to force fresh fetch
+      this.clearReport(userId, reportId);
+      return null;
+    }
+
+    return cached;
+  },
+
+  // Check if report data is incomplete and should be refetched
+  isReportDataIncomplete(reportData: any): boolean {
+    if (!reportData) return true;
+
+    const content = reportData.content || "";
+
+    // Check if tweets data is incomplete
+    const hasTweetSection =
+      content.includes("Individual Tweets") || content.includes("## 3.");
+    const tweetsData = reportData.tweetsData;
+
+    // If report should have tweets but doesn't, or has empty tweets array
+    if (
+      hasTweetSection &&
+      (!tweetsData || (Array.isArray(tweetsData) && tweetsData.length === 0))
+    ) {
+      return true;
+    }
+
+    // Check if BNB token security data is incomplete (for BNB tokens only)
+    const hasSecuritySection =
+      content.includes("Safety Analytics") || content.includes("## 3.");
+    const securityData = reportData.securityData;
+
+    if (hasSecuritySection && !securityData && reportData.chain === "bsc") {
+      return true;
+    }
+
+    // Check if BNB token holder data is incomplete (for BNB tokens only)
+    const hasHolderSection =
+      content.includes("Holder Analytics") || content.includes("## 2.");
+    const holdersData = reportData.holdersData;
+
+    if (hasHolderSection && !holdersData && reportData.chain === "bsc") {
+      return true;
+    }
+
+    return false;
+  },
+
+  // Clear a specific report from cache
+  clearReport(userId: string, reportId: string) {
+    try {
+      localStorage.removeItem(this.keys.report(userId, reportId));
+    } catch {}
   },
 
   // Merge helper for messages (keeps cache fresh without refetch)

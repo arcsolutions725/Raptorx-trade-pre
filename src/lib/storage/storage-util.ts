@@ -11,6 +11,9 @@ export interface Report {
   content: string;
   createdAt: string;
   dexData: DexScreenerPair | { error: string };
+  tweetsData?: any; // Array of tweet objects with sparse data
+  securityData?: any; // Security analytics for BNB tokens
+  holdersData?: any; // Holder analytics for BNB tokens
 }
 
 export interface Message {
@@ -28,12 +31,12 @@ export interface Conversation {
 }
 
 export interface NavigationState {
-    currentIsViewingChart: boolean;
-    currentTokenAddress: string | null;
-    selectedTokenData: any | null; // TrendingToken
-    hasReportOpen: boolean;
-    lastReportId: string | null;
-  }
+  currentIsViewingChart: boolean;
+  currentTokenAddress: string | null;
+  selectedTokenData: any | null; // TrendingToken
+  hasReportOpen: boolean;
+  lastReportId: string | null;
+}
 
 export class StorageManager {
   private static REPORTS_KEY = "reports";
@@ -223,20 +226,22 @@ export class StorageManager {
         lastReportId: null,
       };
     }
-    
+
     const stored = localStorage.getItem(this.NAVIGATION_STATE_KEY);
-    return stored ? JSON.parse(stored) : {
-      currentIsViewingChart: false,
-      currentTokenAddress: null,
-      selectedTokenData: null,
-      hasReportOpen: false,
-      lastReportId: null,
-    };
+    return stored
+      ? JSON.parse(stored)
+      : {
+          currentIsViewingChart: false,
+          currentTokenAddress: null,
+          selectedTokenData: null,
+          hasReportOpen: false,
+          lastReportId: null,
+        };
   }
 
   static saveNavigationState(state: Partial<NavigationState>): void {
     if (typeof window === "undefined") return;
-    
+
     const current = this.getNavigationState();
     const updated = { ...current, ...state };
     localStorage.setItem(this.NAVIGATION_STATE_KEY, JSON.stringify(updated));

@@ -18,10 +18,9 @@ type PriceChartWidgetProps = {
   tokenAddress: string;
 };
 
-export default function PriceChartWidget({ tokenAddress }: PriceChartWidgetProps) {
-
-  console.log(tokenAddress,)
-
+export default function PriceChartWidget({
+  tokenAddress,
+}: PriceChartWidgetProps) {
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -44,8 +43,7 @@ export default function PriceChartWidget({ tokenAddress }: PriceChartWidgetProps
         pairAddress: tokenAddress,
         showHoldersChart: true,
         defaultInterval: "1D",
-        timeZone:
-          Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Etc/UTC",
+        timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone ?? "Etc/UTC",
         theme: "moralis",
         locale: "en",
         showCurrencyToggle: true,
@@ -56,9 +54,9 @@ export default function PriceChartWidget({ tokenAddress }: PriceChartWidgetProps
     };
 
     const ensureScript = () => {
-      const existing = document.getElementById(SCRIPT_ID) as
-        | HTMLScriptElement
-        | null;
+      const existing = document.getElementById(
+        SCRIPT_ID
+      ) as HTMLScriptElement | null;
 
       if (!existing) {
         const script = document.createElement("script");

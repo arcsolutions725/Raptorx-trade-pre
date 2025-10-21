@@ -71,12 +71,12 @@ export async function getDexscreenerData(
     }
 
     // Sort pairs by 24h trading volume (highest first)
-    const sortedPairs = [...data.pairs].sort(
-      (a, b) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0)
-    );
+    // const sortedPairs = [...data.pairs].sort(
+    //   (a, b) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0)
+    // );
 
     // Pick the highest volume pair
-    const bestPair = sortedPairs[0];
+    const bestPair = data.pairs[0];
 
     return bestPair;
   } catch (err: any) {

@@ -30,7 +30,7 @@ export function TableHeader({
     <div className="sticky top-0 z-20 grid [grid-template-columns:260px_120px_120px_120px_120px_120px_100px_200px] sm:[grid-template-columns:360px_120px_120px_120px_120px_120px_100px_200px] bg-[#7F7F7F] text-white font-semibold border-b border-white/10 shadow-sm">
       {/* Token — sticky only on sm+ */}
       <div className="sm:sticky sm:left-0 sm:z-30 flex items-center px-3 py-2 whitespace-nowrap truncate border-r border-white/30 bg-[#7F7F7F]">
-        <span className="!font-semibold">Token</span>
+        <span className="!font-semibold">Token (Click coin for charting)</span>
       </div>
 
       {/* Mcap — sticky only on sm+ */}

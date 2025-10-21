@@ -12,6 +12,10 @@ import {
 } from "@/hooks/useReports";
 import { useRegenerateReport } from "@/hooks/useRegenerateReport";
 import { CoinOMetry } from "@/components/CoinOMetry";
+import { HolderAnalyticsComponent } from "@/components/analytics/HolderAnalytics";
+import { BirdeyeSafetyAnalyticsComponent } from "@/components/analytics/BirdeyeSafetyAnalytics";
+import type { HolderAnalytics } from "@/lib/api/bnbAnalytics";
+import type { SecurityAnalytics } from "@/lib/api/birdeyeSecurtiy";
 
 export interface DexScreenerPair {
   chainId: string;
@@ -72,6 +76,13 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
   const [sending, setSending] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
 
+  // BNB Analytics state - now using stored data with fallback to API
+  const [holderAnalytics, setHolderAnalytics] =
+    useState<HolderAnalytics | null>(null);
+  const [securityAnalytics, setSecurityAnalytics] =
+    useState<SecurityAnalytics | null>(null);
+  const [analyticsLoading, setAnalyticsLoading] = useState(false);
+
   // Regenerate state
   const [countdown, setCountdown] = useState<number | null>(null);
   const [hasRegenerated, setHasRegenerated] = useState(false);
@@ -99,6 +110,56 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
     const dd = reportData?.dexData as unknown;
     return isDexScreenerPair(dd) ? (dd as DexScreenerPair) : undefined;
   }, [reportData?.dexData]);
+
+  // Check if this is a BNB token
+  const isBNBToken = useMemo(() => {
+    return reportData?.chain === "bsc" || reportData?.chain === "bnb";
+  }, [reportData?.chain]);
+
+  // Load BNB analytics - use stored data from reports, eliminating API calls
+  useEffect(() => {
+    if (!reportData?.contractAddress || !isBNBToken) {
+      setHolderAnalytics(null);
+      setSecurityAnalytics(null);
+      setAnalyticsLoading(false);
+      return;
+    }
+
+    const loadBNBAnalytics = () => {
+      setAnalyticsLoading(true);
+
+      console.log("Loading BNB analytics for:", reportData.contractAddress);
+
+      // Use stored data from the report (no API fallback needed)
+      const storedHolderData = reportData.holdersData;
+      const storedSecurityData = reportData.securityData;
+
+      if (storedHolderData) {
+        setHolderAnalytics(storedHolderData);
+        console.log("Loaded stored holder analytics:", storedHolderData);
+      } else {
+        setHolderAnalytics(null);
+        console.log("No stored holder analytics available");
+      }
+
+      if (storedSecurityData) {
+        setSecurityAnalytics(storedSecurityData);
+        console.log("Loaded stored security analytics:", storedSecurityData);
+      } else {
+        setSecurityAnalytics(null);
+        console.log("No stored security analytics available");
+      }
+
+      setAnalyticsLoading(false);
+    };
+
+    loadBNBAnalytics();
+  }, [
+    reportData?.contractAddress,
+    reportData?.holdersData,
+    reportData?.securityData,
+    isBNBToken,
+  ]);
 
   /* ---------------------------------------------------------------------- */
   /* Timestamp helper                                                       */
@@ -137,7 +198,6 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
     },
   });
 
-  // Start countdown when regeneration begins
   useEffect(() => {
     if (isRegenerating && countdown === null) {
       setCountdown(100);
@@ -210,8 +270,6 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
   const headerImage = dexData?.info?.header;
   const websites = dexData?.info?.websites || [];
   const socials = dexData?.info?.socials || [];
-
-  console.log(dexData?.info, logo, "werwerewewer");
 
   const formatMessage = (content: string) =>
     content.split("\n").map((line, i) => {
@@ -286,65 +344,304 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
     });
   }
 
-  function renderTweetsSection(text: string): React.ReactNode {
-    const lines = text.split("\n").filter(Boolean);
-    if (text.toLowerCase().includes("no tweet data available")) {
+  function renderTweetsSection(_text: string): React.ReactNode {
+    const tweetsData = reportData?.tweetsData;
+
+    if (
+      isFetching &&
+      (!tweetsData || (Array.isArray(tweetsData) && tweetsData.length === 0))
+    ) {
       return (
-        <div className="text-center py-8 text-white/60">
-          <div className="text-4xl mb-2">🐦</div>
-          <p>No tweet data available for analysis</p>
+        <div className="text-center py-6 sm:py-8 text-white/60">
+          <div className="w-6 h-6 sm:w-8 sm:h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3 sm:mb-4"></div>
+          <p className="text-sm sm:text-base">Loading tweet data...</p>
         </div>
       );
     }
-    const blocks: string[] = [];
-    let curr = "";
-    lines.forEach((l) => {
-      if ((l.startsWith("**") || l.startsWith("*")) && l.includes(":")) {
-        if (curr) blocks.push(curr);
-        curr = l;
-      } else if (curr) {
-        curr += "\n" + l;
-      }
-    });
-    if (curr) blocks.push(curr);
 
-    return (
-      <div className="space-y-4">
-        {blocks.map((tweet, idx) => {
-          const [uLine, ...rest] = tweet.split("\n");
-          const username = uLine.replace(/\*+/g, "").replace(":", "");
-          const body = rest
-            .join(" ")
-            .trim()
-            .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-            .replace(/\*(.*?)\*/g, "<strong>$1</strong>");
+    if (tweetsData && Array.isArray(tweetsData) && tweetsData.length > 0) {
+      // Use the structured tweets data with enriched information
+      return (
+        <div className="space-y-4 sm:space-y-6">
+          {tweetsData.map((tweet: any, idx: number) => {
+            const tweeter = tweet.tweeter || {};
+            const username = tweeter.userName || tweeter.username || "unknown";
+            const displayName = tweeter.name || username;
+            const profileImage = tweeter.publicImageUrl;
+            const text = tweet.text || "";
+            const isVerified = tweeter.isBlueVerified;
+            const verifiedType = tweeter.verifiedType;
+            const followers = tweeter.followers || 0;
+            const location = tweeter.location;
 
-          return (
-            <div
-              key={idx}
-              className="bg-black/20 rounded-lg p-4 border-l-4 border-blue-400"
-            >
-              <div className="flex items-start gap-3">
-                <div className="w-10 h-10 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <span className="text-white text-sm font-bold">
-                    {username.charAt(0)}
-                  </span>
-                </div>
-                <div className="flex-1">
-                  <div className="font-semibold text-blue-300 mb-2">
-                    {username}
+            const formatNumber = (num: number) => {
+              if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+              if (num >= 1000) return (num / 1000).toFixed(1) + "K";
+              return num.toString();
+            };
+
+            const formatTimestamp = (timestamp: string) => {
+              if (!timestamp) return "";
+              const date = new Date(timestamp);
+              const now = new Date();
+              const diffMs = now.getTime() - date.getTime();
+              const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+              const diffDays = Math.floor(diffHours / 24);
+
+              if (diffDays > 0) return `${diffDays}d`;
+              if (diffHours > 0) return `${diffHours}h`;
+              return "now";
+            };
+
+            return (
+              <div
+                key={tweet.id || idx}
+                className="bg-black/20 rounded-lg p-3 sm:p-4 md:p-5 border border-white/10 hover:border-blue-400/50 transition-colors"
+              >
+                <div className="flex items-start gap-2 sm:gap-3 md:gap-4">
+                  {/* Avatar - responsive sizing */}
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                    {profileImage ? (
+                      <Image
+                        src={profileImage}
+                        alt={`${displayName}`}
+                        width={48}
+                        height={48}
+                        className="w-full h-full object-cover"
+                      />
+                    ) : (
+                      <span className="text-white text-xs sm:text-sm font-bold">
+                        {displayName.charAt(0).toUpperCase()}
+                      </span>
+                    )}
                   </div>
-                  <p
-                    className="text-white/90 leading-relaxed"
-                    dangerouslySetInnerHTML={{ __html: body }}
-                  />
+
+                  <div className="flex-1 min-w-0">
+                    {/* User info header - mobile responsive layout */}
+                    <div className="mb-2 sm:mb-3">
+                      {/* Main user info line - wraps on mobile */}
+                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-2">
+                        <div className="flex flex-col min-w-0">
+                          {/* Name and verification line */}
+                          <div className="flex items-center gap-1 sm:gap-2 flex-wrap min-w-0">
+                            <span className="font-semibold text-white text-sm sm:text-base truncate">
+                              {displayName}
+                            </span>
+                            {isVerified && (
+                              <span
+                                className="text-blue-400 flex-shrink-0"
+                                title={`Verified ${verifiedType || "account"}`}
+                              >
+                                {verifiedType === "Blue" ? "🔹" : "✓"}
+                              </span>
+                            )}
+                            <span className="text-white/50 text-xs sm:text-sm truncate">
+                              @{username}
+                            </span>
+                            {tweet.createdAt && (
+                              <>
+                                <span className="text-white/30 hidden sm:inline">
+                                  ·
+                                </span>
+                                <span className="text-white/50 text-xs sm:text-sm flex-shrink-0">
+                                  {formatTimestamp(tweet.createdAt)}
+                                </span>
+                              </>
+                            )}
+                          </div>
+
+                          {/* Secondary info line - stacks on mobile */}
+                          <div className="flex items-center gap-2 sm:gap-3 mt-0.5 sm:mt-1 text-xs sm:text-sm text-white/50 flex-wrap">
+                            {followers > 0 && (
+                              <span className="flex-shrink-0">
+                                {formatNumber(followers)} followers
+                              </span>
+                            )}
+                            {location && (
+                              <>
+                                {followers > 0 && (
+                                  <span className="hidden sm:inline">·</span>
+                                )}
+                                <span className="truncate">📍 {location}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+
+                        {/* View on X link - better mobile positioning */}
+                        {tweet.url && (
+                          <a
+                            href={tweet.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-blue-400 hover:text-blue-300 text-xs sm:text-sm transition-colors flex-shrink-0 self-start mt-1 sm:mt-0"
+                          >
+                            <span className="hidden sm:inline">
+                              View on X →
+                            </span>
+                            <span className="sm:hidden">View →</span>
+                          </a>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Reply context */}
+                    {tweet.isReply && tweet.inReplyToUsername && (
+                      <div className="text-white/50 text-xs sm:text-sm mb-2">
+                        Replying to @{tweet.inReplyToUsername}
+                      </div>
+                    )}
+
+                    {/* Tweet content - better mobile text sizing */}
+                    <p className="text-white/90 leading-relaxed mb-3 whitespace-pre-wrap text-sm sm:text-base">
+                      {text}
+                    </p>
+
+                    {/* Tweet entities - mobile responsive */}
+                    {tweet.entities && (
+                      <div className="space-y-2 mb-3">
+                        {/* External Links - better mobile overflow handling */}
+                        {tweet.entities.urls &&
+                          tweet.entities.urls.length > 0 && (
+                            <div className="space-y-1">
+                              {tweet.entities.urls.map(
+                                (urlEntity: any, urlIdx: number) => (
+                                  <div
+                                    key={urlIdx}
+                                    className="text-blue-400 text-xs sm:text-sm"
+                                  >
+                                    <span className="mr-1">🔗</span>
+                                    <a
+                                      href={urlEntity.expanded_url}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="hover:underline break-all"
+                                    >
+                                      {urlEntity.display_url}
+                                    </a>
+                                  </div>
+                                )
+                              )}
+                            </div>
+                          )}
+
+                        {/* Hashtags and Mentions - better mobile wrapping */}
+                        <div className="flex flex-wrap gap-1 sm:gap-2">
+                          {tweet.entities.hashtags &&
+                            tweet.entities.hashtags.map(
+                              (hashtag: any, hashIdx: number) => (
+                                <span
+                                  key={hashIdx}
+                                  className="text-blue-400 text-xs sm:text-sm break-all"
+                                >
+                                  #{hashtag.text}
+                                </span>
+                              )
+                            )}
+                          {tweet.entities.user_mentions &&
+                            tweet.entities.user_mentions.map(
+                              (mention: any, mentionIdx: number) => (
+                                <span
+                                  key={mentionIdx}
+                                  className="text-green-400 text-xs sm:text-sm"
+                                >
+                                  @{mention.screen_name}
+                                </span>
+                              )
+                            )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Media - mobile responsive */}
+                    {tweet.media?.mediaUrl && (
+                      <div className="mt-2 sm:mt-3 mb-2 sm:mb-3">
+                        <Image
+                          src={tweet.media.mediaPreview || tweet.media.mediaUrl}
+                          alt="Tweet media"
+                          width={400}
+                          height={250}
+                          className="rounded-md border border-white/10 w-full h-auto"
+                        />
+                      </div>
+                    )}
+
+                    {/* Engagement metrics - improved mobile grid */}
+                    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm text-white/60 pt-2 sm:pt-3 border-t border-white/10">
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className="flex-shrink-0">💬</span>
+                        <span className="truncate">
+                          {formatNumber(tweet.replyCount || 0)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className="flex-shrink-0">🔄</span>
+                        <span className="truncate">
+                          {formatNumber(tweet.retweetCount || 0)}
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className="flex-shrink-0">❤️</span>
+                        <span className="truncate">
+                          {formatNumber(tweet.likeCount || 0)}
+                        </span>
+                      </div>
+                      {tweet.viewCount && (
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="flex-shrink-0">👁️</span>
+                          <span className="truncate">
+                            {formatNumber(tweet.viewCount)}
+                          </span>
+                        </div>
+                      )}
+                      {tweet.quoteCount && tweet.quoteCount > 0 && (
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="flex-shrink-0">💭</span>
+                          <span className="truncate">
+                            {formatNumber(tweet.quoteCount)}
+                          </span>
+                        </div>
+                      )}
+                      {tweet.bookmarkCount && tweet.bookmarkCount > 0 && (
+                        <div className="flex items-center gap-1 min-w-0">
+                          <span className="flex-shrink-0">🔖</span>
+                          <span className="truncate">
+                            {formatNumber(tweet.bookmarkCount)}
+                          </span>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Additional metadata - mobile responsive */}
+                    {(tweet.source || tweet.lang !== "en") && (
+                      <div className="mt-2 pt-2 border-t border-white/10 flex flex-wrap gap-2 sm:gap-4 text-xs text-white/40">
+                        {tweet.source && (
+                          <span className="truncate">via {tweet.source}</span>
+                        )}
+                        {tweet.lang && tweet.lang !== "en" && (
+                          <span className="flex-shrink-0">
+                            lang: {tweet.lang}
+                          </span>
+                        )}
+                      </div>
+                    )}
+                  </div>
                 </div>
               </div>
-            </div>
-          );
-        })}
-      </div>
-    );
+            );
+          })}
+        </div>
+      );
+    } else {
+      return (
+        <div className="text-center py-6 sm:py-8 text-white/60">
+          <div className="text-3xl sm:text-4xl mb-2">🐦</div>
+          <p className="text-sm sm:text-base">
+            No tweet data available for analysis
+          </p>
+        </div>
+      );
+    }
   }
 
   function getSectionIcon(title: string): React.ReactNode {
@@ -371,6 +668,21 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
           height={35}
         />
       );
+    if (t.includes("holder analytics")) return "💎";
+    if (t.includes("safety analytics"))
+      return (
+        <svg
+          className="w-6 h-6 text-[#ffc000]"
+          fill="currentColor"
+          viewBox="0 0 20 20"
+        >
+          <path
+            fillRule="evenodd"
+            d="M2.166 4.999A11.954 11.954 0 0010 1.944 11.954 11.954 0 0017.834 5c.11.65.166 1.32.166 2.001 0 5.225-3.34 9.67-8 11.317C5.34 16.67 2 12.225 2 7c0-.682.057-1.35.166-2.001zm11.541 3.708a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+            clipRule="evenodd"
+          />
+        </svg>
+      );
     if (t.includes("technical analysis")) return "📈";
     return "📄";
   }
@@ -378,9 +690,65 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
   function renderSectionContent(title: string, lines: string[]) {
     const t = title.toLowerCase();
     const body = lines.join("\n");
+
+    // Handle Individual Tweets section
     if (t.includes("individual tweets")) return renderTweetsSection(body);
+
+    // Handle Coin-O-Metry section
     if (t.includes("coin-o-metry"))
       return dexData ? <CoinOMetry dexData={dexData} /> : "";
+
+    // Handle Safety Analytics section - show both the report content and analytics component
+    if (t.includes("safety analytics")) {
+      return (
+        <div className="space-y-6">
+          {/* Render the markdown content first */}
+          {renderMarkdownSection(body)}
+
+          {/* Show BirdeyeSafetyAnalyticsComponent if we have security data */}
+          {securityAnalytics && (
+            <div className="mt-8">
+              <BirdeyeSafetyAnalyticsComponent data={securityAnalytics} />
+            </div>
+          )}
+
+          {/* Show loading state if analytics are still loading */}
+          {analyticsLoading && (
+            <div className="text-center py-8 text-white/60">
+              <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p>Loading safety analytics...</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Handle Holder Analytics section - show both the report content and analytics component
+    if (t.includes("holder analytics")) {
+      return (
+        <div className="space-y-6">
+          {/* Render the markdown content first */}
+          {renderMarkdownSection(body)}
+
+          {/* Show HolderAnalyticsComponent if we have holder data */}
+          {holderAnalytics && (
+            <div className="mt-8">
+              <HolderAnalyticsComponent data={holderAnalytics} />
+            </div>
+          )}
+
+          {/* Show loading state if analytics are still loading */}
+          {analyticsLoading && (
+            <div className="text-center py-8 text-white/60">
+              <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+              <p>Loading holder analytics...</p>
+            </div>
+          )}
+        </div>
+      );
+    }
+
+    // Default case - just render markdown
     return renderMarkdownSection(body);
   }
 
@@ -666,7 +1034,7 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
             <CopyReportButton reportContent={reportData.content} />
           </div>
 
-          <div className="text-white/90 text-xl whitespace-pre-wrap break-words overflow-x-hidden">
+          <div className="text-white/90 text-xl whitespace-pre-wrap break-words overflow-x-hidden pt-4">
             {formatStructuredReport(reportData.content)}
           </div>
         </div>

@@ -5,6 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { isAdminEmail } from "@/lib/auth/isAdmin";
 import { getTokenData } from "@/lib/api/tokenData";
 import { getTweetsSearch } from "@/lib/api/tweet";
+import { detectChain } from "@/lib/utils/detectChain";
+import { getBNBHolderAnalytics } from "@/lib/api/bnbAnalytics";
+import { getBirdeyeSecurityAnalyticsWithMetadata } from "@/lib/api/birdeyeSecurtiy";
 
 // Modified system prompt focused on updating data sections only
 const systemPrompt = `You are a professional crypto research analyst and technical writer. Your task is to update specific data-dependent sections of an existing cryptocurrency report with fresh data.
@@ -17,6 +20,52 @@ const systemPrompt = `You are a professional crypto research analyst and technic
 - Do NOT fabricate any data. If some data is missing, clearly state "Data not available"
 
 ### Sections to Update:
+
+## 2. Holder Analytics (BNB Tokens Only)
+**Only include this section for BNB Smart Chain tokens. Skip for Solana tokens.**
+**IMPORTANT: Provide only accurate, factual holder analysis. Do NOT fabricate distribution data or make speculative claims about holder behavior. Base analysis strictly on the provided holderAnalytics data.**
+
+If holderAnalytics data is provided, analyze with factual accuracy:
+- **Total Holders:** Report exact holder count from the data - cite the precise number
+- **Distribution Analysis:** Report actual concentration percentages as provided in the data
+- **Top Holder Concentration:** Report exact percentages for top holders (if available in data)
+- **Whale Analysis:** List only whale addresses and percentages found in the actual data
+- **Distribution Insights:** Analyze decentralization based solely on provided metrics
+- **Holder Behavior Patterns:** Report only observable patterns from the actual data
+- **Token Concentration Metrics:** Use exact percentages and counts from the data source
+
+**Critical Guidelines for Accurate Holder Reporting:**
+- Report exact holder counts - do not estimate or round significantly
+- Use precise percentages for token concentration as provided in data
+- If whale addresses are provided, list them with exact holding percentages
+- Do not speculate about holder intentions or future behavior
+- Distinguish between verified data points and missing information
+- When data points are missing, state clearly "Data not available" rather than guessing
+- Focus on mathematical distribution facts rather than subjective interpretations
+- If distribution appears centralized/decentralized, cite specific percentages that support this conclusion
+
+## Safety Analytics (BNB Tokens Only)
+**Only include this section for BNB Smart Chain tokens. Skip for Solana tokens.**
+**IMPORTANT: Provide only accurate, factual security assessment. Do NOT fabricate or exaggerate security threats. Base analysis strictly on the provided securityAnalytics data.**
+
+If securityAnalytics data is provided, analyze with factual accuracy:
+- **Risk Score:** Overall security risk assessment (0-100) - cite the exact score from data
+- **Risk Level:** Low, Medium, High, or Critical classification - use only the level from data
+- **Security Warnings:** List only the actual warnings found in the data - do not add fictional warnings
+- **Safety Indicators:** List only the positive security features detected in the data
+- **Token Security Features:** Contract analysis, taxes, restrictions - report exact values from tokenSecurity data
+- **Honeypot Detection:** Report exact honeypot status (0 = not honeypot, 1 = honeypot detected)
+- **Trading Restrictions:** Report only actual trading limitations found (cannotBuy, cannotSellAll)
+- **LP Analysis:** Report liquidity pool lock percentages and holder distribution as provided
+- **Tax Analysis:** Report exact buy/sell/transfer tax percentages - do not estimate or inflate
+
+**Critical Guidelines for Accurate Reporting:**
+- If isHoneypot = "0", state clearly "Not identified as honeypot"
+- If no security warnings exist in the data, state "No security warnings identified"
+- Do not label legitimate projects as scams without clear evidence in the data
+- Distinguish between high taxes and actual scams - high taxes are not necessarily scams
+- Focus on factual contract behavior rather than speculative risk assessment
+- When in doubt, err on the side of neutral, factual reporting
 
 ## Community Chatter
 Update with fresh sentiment analysis from the provided tweets data:
@@ -115,6 +164,12 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // Auto-detect chain from token data
+    const detectedChain = detectChain({
+      dexData: (tokenData as any).dexData,
+      address: contractAddress,
+    });
+
     // Fetch fresh tweets
     const tweetsData = await getTweetsSearch(
       contractAddress,
@@ -122,13 +177,64 @@ export async function POST(request: NextRequest) {
       projectName || undefined,
       40
     );
-    const formattedTweets =
+    const rawTweetsArray =
       (tweetsData as any).success && (tweetsData as any).data?.length > 0
         ? (tweetsData as any).data
+        : [];
+
+    const formattedTweets =
+      rawTweetsArray.length > 0
+        ? rawTweetsArray
             .slice(0, 20)
-            .map((tweet: string, i: number) => `Tweet ${i + 1}: ${tweet}`)
+            .map(
+              (tweet: any, i: number) =>
+                `Tweet ${i + 1} by @${tweet.tweeter.username}:\n${
+                  tweet.text
+                }\n${
+                  tweet.media.mediaUrl ? `Media: ${tweet.media.mediaUrl}` : ""
+                }`
+            )
             .join("\n\n")
         : "No tweets available for analysis";
+
+    // Fetch BNB-specific analytics for BSC tokens
+    let holderAnalytics: any = null;
+    let securityAnalytics: any = null;
+
+    if (detectedChain === "bsc") {
+      console.log("Fetching BNB analytics for BSC token:", contractAddress);
+
+      // Fetch holder analytics
+      try {
+        const holderResult = await getBNBHolderAnalytics(contractAddress);
+        if (holderResult.success) {
+          holderAnalytics = holderResult.data;
+          console.log("Successfully fetched holder analytics");
+        } else {
+          console.warn("Failed to fetch holder analytics:", holderResult.error);
+        }
+      } catch (error) {
+        console.error("Error fetching holder analytics:", error);
+      }
+
+      // Fetch security analytics with metadata
+      try {
+        const securityResult = await getBirdeyeSecurityAnalyticsWithMetadata(
+          contractAddress
+        );
+        if (securityResult.success) {
+          securityAnalytics = securityResult.data;
+          console.log("Successfully fetched security analytics with metadata");
+        } else {
+          console.warn(
+            "Failed to fetch security analytics:",
+            securityResult.error
+          );
+        }
+      } catch (error) {
+        console.error("Error fetching security analytics:", error);
+      }
+    }
 
     // Create optimized AI prompt for regeneration
     const aiPrompt = `Update the data-dependent sections of this cryptocurrency report with fresh data:
@@ -150,6 +256,20 @@ ${JSON.stringify((tokenData as any).coingeckoData, null, 2)}
 ### Fresh Tweets Analysis:
 ${formattedTweets}
 
+${
+  holderAnalytics
+    ? `### Holder Analytics (BNB Token):
+${JSON.stringify(holderAnalytics, null, 2)}`
+    : ""
+}
+
+${
+  securityAnalytics
+    ? `### Security Analytics (BNB Token):
+${JSON.stringify(securityAnalytics, null, 2)}`
+    : ""
+}
+
 ### Requirements:
 - Preserve the overall structure and formatting of the original report
 - Update ONLY the data-dependent sections (Community Chatter, Individual Tweets, Coin-O-Metry, Technical Analysis)
@@ -166,7 +286,7 @@ ${formattedTweets}
         { role: "user", content: aiPrompt },
       ],
       temperature: 0.3, // Lower temperature for more focused updates
-      max_tokens: 2500, // Slightly reduced tokens since we're only updating parts
+      max_tokens: 4000, // Slightly reduced tokens since we're only updating parts
     });
 
     const regeneratedReport = aiResponse.choices?.[0]?.message?.content || "";
@@ -176,8 +296,12 @@ ${formattedTweets}
     await prisma.report.update({
       where: { id: reportId },
       data: {
+        chain: detectedChain,
         content: regeneratedReport,
         dexData: (tokenData as any).dexData ?? undefined,
+        tweetsData: rawTweetsArray || undefined,
+        securityData: securityAnalytics || undefined,
+        holdersData: holderAnalytics || undefined,
         updatedAt: new Date(), // This will update the timestamp
       },
     });
@@ -195,8 +319,12 @@ ${formattedTweets}
         await prisma.systemReport.update({
           where: { id: systemReport.id },
           data: {
+            chain: detectedChain,
             content: regeneratedReport,
             dexData: (tokenData as any).dexData ?? undefined,
+            tweetsData: rawTweetsArray || undefined,
+            securityData: securityAnalytics || undefined,
+            holdersData: holderAnalytics || undefined,
             // updatedAt auto via @updatedAt
           },
         });

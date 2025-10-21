@@ -10,7 +10,6 @@ import { LeaderboardModal } from "@/components/leaderboard/LeaderboradModal";
 import type { TrendingToken } from "@/hooks/useTrendingTokens";
 import type { Report } from "@/lib/storage/storage-util";
 import Image from "next/image";
-import { X } from "lucide-react";
 
 export default function Home() {
   const { authenticated, user: privyUser, ready } = usePrivy();
@@ -61,8 +60,8 @@ export default function Home() {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             privyId: privyUser.id,
-            email,
-            ...(referralCode && { referralCode }),
+            email: email,
+            referralCode: referralCode,
           }),
         });
         if (res.ok) {
@@ -107,13 +106,6 @@ export default function Home() {
     address: string | null,
     viewing: boolean
   ) => {
-    console.log(
-      "[handleTokenSelect]",
-      viewing ? "SELECT" : "DESELECT",
-      token?.name ?? token?.symbol ?? "unknown",
-      address
-    );
-
     setSelectedToken(token);
     setSelectedTokenAddress(address);
     setIsViewingChart(viewing);
@@ -153,7 +145,7 @@ export default function Home() {
       >
         <button
           onClick={() => setShowCompactReport(false)}
-          className="absolute top-3 right-3 z-40 px-3 py-1 rounded-md bg-white/10 hover:bg-white/20 text-white"
+          className="absolute top-3 right-3 z-40 px-3 py-1 rounded-md text-white"
           aria-label="Close AI Report"
         >
           ✕
@@ -171,7 +163,12 @@ export default function Home() {
 
       {/* Fixed Action Buttons - Always visible when user is logged in */}
       {currentUserId && (
-        <div className="fixed bottom-12 left-4 z-40 flex flex-col gap-3">
+        <div
+          className={[
+            "fixed bottom-20 sm:bottom-12 left-4 z-40 gap- flex-col",
+            showCompactReport ? "hidden lg:flex" : "flex",
+          ].join(" ")}
+        >
           {/* Daily Tasks Button */}
           <button
             onClick={() => setShowDailyTasksPopup(true)}
@@ -204,23 +201,21 @@ export default function Home() {
         </div>
       )}
 
-      <button
-        onClick={() => setShowCompactReport((v) => !v)}
-        className="lg:hidden fixed bottom-4 right-4 z-40 px-[10px] py-2 rounded-full border border-white bg-black text-white font-semibold shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
-        aria-label="Toggle AI Report"
-        disabled={loadingUser} // ✅ another read; prevents toggling during user fetch
-      >
-        {showCompactReport ? (
-          <X width={30} height={30} color="#fff" />
-        ) : (
+      {!showCompactReport && (
+        <button
+          onClick={() => setShowCompactReport((v) => !v)}
+          className="lg:hidden fixed bottom-20 right-4 z-40 px-[10px] py-2 rounded-full border border-white bg-black text-white font-semibold shadow-lg disabled:opacity-60 disabled:cursor-not-allowed"
+          aria-label="Toggle AI Report"
+          disabled={loadingUser}
+        >
           <Image
             src={"/images/report-btn.png"}
             alt="AI Report"
             width={45}
             height={45}
           />
-        )}
-      </button>
+        </button>
+      )}
 
       {/* Daily Tasks Popup */}
       <DailyTasksPopup

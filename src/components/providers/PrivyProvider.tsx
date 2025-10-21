@@ -1,7 +1,7 @@
-// src/components/providers/PrivyProvider.tsx
 "use client";
 
 import { PrivyProvider } from "@privy-io/react-auth";
+import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 import { ReactNode } from "react";
 
 interface PrivyProviderWrapperProps {
@@ -13,17 +13,67 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
     <PrivyProvider
       appId={process.env.NEXT_PUBLIC_PRIVY_APP_ID || ""}
       config={{
-        // Customize Privy's appearance in your app
         appearance: {
           theme: "dark",
           accentColor: "#676FFF",
           logo: "/images/home-logo.png",
+          walletChainType: "ethereum-and-solana",
+          walletList: [
+            "wallet_connect",
+            "detected_wallets",
+            "metamask",
+            "coinbase_wallet",
+            "phantom",
+            "solflare",
+            "backpack",
+            "okx_wallet",
+          ],
         },
-        // Create embedded wallets for users who don't have a wallet
+        loginMethods: ["email", "wallet"],
+        fundingMethodConfig: {
+          moonpay: {
+            useSandbox: true,
+          },
+        },
         embeddedWallets: {
-          createOnLogin: "users-without-wallets",
+          showWalletUIs: true,
+          ethereum: {
+            createOnLogin: "users-without-wallets",
+          },
+          solana: {
+            createOnLogin: "users-without-wallets",
+          },
         },
-        loginMethods: ["email", "wallet",],
+        mfa: {
+          noPromptOnMfaRequired: false,
+        },
+        externalWallets: { solana: { connectors: toSolanaWalletConnectors() } },
+        supportedChains: [
+          {
+            id: 56,
+            name: "BNB Smart Chain",
+            network: "bsc",
+            nativeCurrency: {
+              name: "BNB",
+              symbol: "BNB",
+              decimals: 18,
+            },
+            rpcUrls: {
+              default: {
+                http: ["https://bsc-dataseed.binance.org"],
+              },
+              public: {
+                http: ["https://bsc-dataseed.binance.org"],
+              },
+            },
+            blockExplorers: {
+              default: {
+                name: "BscScan",
+                url: "https://bscscan.com",
+              },
+            },
+          },
+        ],
       }}
     >
       {children}

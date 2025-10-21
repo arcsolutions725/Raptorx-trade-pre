@@ -345,7 +345,6 @@ export function useTechnicalAnalysis(options: TechnicalAnalysisOptions = {}) {
 
   const generateMACD = useCallback(
     async (tokenAddress: string, timeframe: TimeframeType = "15m") => {
-      console.log(tokenAddress, "zzz");
       try {
         return await generateAnalysis("macd", tokenAddress, timeframe);
       } catch (e) {

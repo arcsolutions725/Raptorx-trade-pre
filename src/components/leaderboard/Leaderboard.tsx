@@ -11,6 +11,7 @@ import {
   Check,
 } from "lucide-react";
 import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
+import Image from "next/image";
 
 interface LeaderboardProps {
   currentUserId?: string;
@@ -158,21 +159,21 @@ function RowsPerPageSelect({
   );
 }
 
-// Leaderboard Header component with even grid layout
+// Leaderboard Header component with responsive grid layout
 function LeaderboardHeader() {
   return (
-    <div className="sticky top-0 z-20 grid grid-cols-4 bg-[#7F7F7F] text-white font-semibold border-b border-white/10 shadow-sm">
-      <div className="sticky left-0 z-30 flex items-center justify-center px-3 py-2 whitespace-nowrap truncate border-r border-white/30 bg-[#7F7F7F]">
-        <span className="!font-semibold">Rank</span>
+    <div className="sticky top-0 z-20 grid grid-cols-[1fr_3fr_1fr_1fr] bg-[#7F7F7F] text-white font-semibold border-b border-white/10 shadow-sm">
+      <div className="sticky left-0 z-30 flex items-center justify-center px-0.5 sm:px-1 py-2 sm:py-2.5 whitespace-nowrap truncate border-r border-white/30 bg-[#7F7F7F]">
+        <span className="!font-semibold text-sm sm:text-[18px]">Rank</span>
       </div>
-      <div className="flex items-center justify-center px-3 py-2 whitespace-nowrap truncate border-r border-white/30">
-        <span className="!font-semibold">Trader</span>
+      <div className="flex items-center justify-center px-1 sm:px-2 py-2 sm:py-2.5 whitespace-nowrap truncate border-r border-white/30">
+        <span className="!font-semibold text-sm sm:text-[18px]">Trader</span>
       </div>
-      <div className="flex items-center justify-center px-3 py-2 whitespace-nowrap truncate border-r border-white/30">
-        <span className="!font-semibold">Badge</span>
+      <div className="flex items-center justify-center px-0.5 sm:px-1 py-2 sm:py-2.5 whitespace-nowrap truncate border-r border-white/30">
+        <span className="!font-semibold text-sm sm:text-[18px]">Badge</span>
       </div>
-      <div className="flex items-center justify-center px-3 py-2 whitespace-nowrap truncate">
-        <span className="!font-semibold">Points</span>
+      <div className="flex items-center justify-center px-0.5 sm:px-1 py-2 sm:py-2.5 whitespace-nowrap truncate">
+        <span className="!font-semibold text-sm sm:text-[18px]">Points</span>
       </div>
     </div>
   );
@@ -189,11 +190,22 @@ function LeaderboardRow({
   const getBadgeIcon = (badgeName: string) => {
     switch (badgeName) {
       case "King of the Jungle":
-        return <Crown className="w-4 h-4 text-yellow-400" />;
-      case "Alpha Raptors":
-        return <Trophy className="w-4 h-4 text-orange-400" />;
-      case "Hatchlings":
-        return <Star className="w-4 h-4 text-blue-400" />;
+        return (
+          <Image src={"/images/king.png"} alt="king" width={40} height={40} />
+        );
+      case "Alpha Raptor":
+        return (
+          <Image src={"/images/alpha.png"} alt="king" width={40} height={40} />
+        );
+      case "Hatchling":
+        return (
+          <Image
+            src={"/images/hatchling.png"}
+            alt="king"
+            width={40}
+            height={40}
+          />
+        );
       default:
         return <Users className="w-4 h-4 text-gray-400" />;
     }
@@ -202,43 +214,49 @@ function LeaderboardRow({
   const getRankDisplay = () => {
     if (user.rank <= 3) {
       if (user.rank === 1) {
-        return <Crown className="w-6 h-6 text-yellow-400" />;
+        return <Crown className="w-4 h-4 sm:w-5 sm:h-5 text-yellow-400" />;
       } else if (user.rank === 2) {
-        return <Trophy className="w-5 h-5 text-gray-300" />;
+        return <Trophy className="w-4 h-4 sm:w-5 sm:h-5 text-gray-300" />;
       } else {
-        return <Star className="w-5 h-5 text-amber-600" />;
+        return <Star className="w-4 h-4 sm:w-5 sm:h-5 text-amber-600" />;
       }
     }
-    return <span className="font-bold text-lg">#{user.rank}</span>;
+    return (
+      <span className="font-bold text-sm sm:text-[18px] text-white">
+        #{user.rank}
+      </span>
+    );
   };
 
   return (
     <div
-      className={`grid grid-cols-4 hover:bg-white/5 transition-colors border-b border-white/5 ${
-        isCurrentUser ? "bg-blue-600/10 border-l-4 border-blue-400" : ""
+      className={`grid grid-cols-[1fr_3fr_1fr_1fr] hover:bg-white/5 transition-colors border-b border-white/5 ${
+        isCurrentUser
+          ? "bg-blue-600/10 border-l-2 sm:border-l-4 border-blue-400"
+          : ""
       }`}
     >
       {/* Rank */}
-      <div className="sticky left-0 z-10 flex items-center justify-center px-3 py-4 bg-black/50 border-r border-white/10">
+      <div className="sticky left-0 z-10 flex items-center justify-center px-0.5 sm:px-1 py-2 sm:py-2.5 bg-black border-r border-white/10">
         <div className="flex items-center justify-center">
           {getRankDisplay()}
         </div>
       </div>
 
       {/* Trader */}
-      <div className="flex items-center justify-center px-3 py-4 border-r border-white/10">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className="flex items-center px-1 sm:px-2 py-2 sm:py-2.5 border-r border-white/10">
+        <div className="flex items-center gap-1 sm:gap-2 min-w-0 w-full">
           <div className="min-w-0 flex-1">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-center gap-1 sm:gap-1.5">
               <h3
-                className={`font-semibold !text-[18px] truncate ${
+                className={`font-medium !text-sm sm:text-[18px] truncate ${
                   isCurrentUser ? "text-blue-300" : "text-white"
                 }`}
               >
                 {user.username}
               </h3>
               {isCurrentUser && (
-                <span className="text-xs bg-[#ffc000] text-white px-2 py-0.5 rounded-full flex-shrink-0">
+                <span className="text-[10px] sm:text-xs bg-[#ffc000] text-black px-1 sm:px-1.5 py-0.5 rounded-full flex-shrink-0 font-medium">
                   You
                 </span>
               )}
@@ -248,20 +266,19 @@ function LeaderboardRow({
       </div>
 
       {/* Badge */}
-      <div className="flex items-center justify-center px-3 py-4 border-r border-white/10">
-        <div className="flex items-center gap-2">
-          {getBadgeIcon(user.badge.name)}
-          <span className="text-sm text-gray-300 hidden sm:block">
-            {user.badge.name}
-          </span>
+      <div className="flex items-center justify-center px-0.5 sm:px-1 py-2 sm:py-2.5 border-r border-white/10">
+        <div className="flex items-center justify-center">
+          <div className="transform scale-[0.5] sm:scale-[0.7]">
+            {getBadgeIcon(user.badge.name)}
+          </div>
         </div>
       </div>
 
       {/* Points */}
-      <div className="flex items-center justify-center px-3 py-4">
-        <div className="text-right">
+      <div className="flex items-center justify-center px-0.5 sm:px-1 py-2 sm:py-2.5">
+        <div className="text-center">
           <div
-            className={`text-lg font-bold ${
+            className={`text-sm sm:text-[18px] font-bold ${
               isCurrentUser ? "text-blue-300" : "text-green-400"
             }`}
           >
@@ -352,101 +369,103 @@ export function Leaderboard({ currentUserId }: LeaderboardProps) {
     <div className="w-full h-full grid grid-rows-[1fr_auto] gap-3">
       {/* Scrollable table area */}
       <div className="relative flex-1 min-h-0 border border-white/10 rounded-md overflow-hidden">
-        {/* Horizontal scroll wrapper so wide content still scrolls sideways */}
-        <div className="h-full overflow-x-auto">
-          {/* Vertical scroll area for rows; flex-1 via parent + min-h-0 keeps it inside modal */}
-          <div className="h-full overflow-y-auto custom-sidebar-scrollbar scroll-pb-24 pb-2">
-            <div className="min-w-[550px] w-full">
-              <LeaderboardHeader />
-              <div className="divide-y divide-white/10 w-full">
-                {leaderboard.map((user) => {
-                  const isCurrentUser = currentUserId === user.id;
-                  return (
-                    <LeaderboardRow
-                      key={user.id}
-                      user={user}
-                      isCurrentUser={isCurrentUser}
-                    />
-                  );
-                })}
-              </div>
+        {/* Vertical scroll area for rows */}
+        <div className="h-full overflow-y-auto custom-sidebar-scrollbar scroll-pb-24 pb-2">
+          <div className="w-full">
+            <LeaderboardHeader />
+            <div className="divide-y divide-white/10 w-full">
+              {leaderboard.map((user) => {
+                const isCurrentUser = currentUserId === user.id;
+                return (
+                  <LeaderboardRow
+                    key={user.id}
+                    user={user}
+                    isCurrentUser={isCurrentUser}
+                  />
+                );
+              })}
             </div>
           </div>
         </div>
       </div>
 
       {/* Footer / Pagination: always visible (not inside the scroll area) */}
-      <div className="flex flex-col gap-2 text-sm text-white/80 px-2">
-        <div className="flex items-center gap-3 flex-wrap">
-          <button
-            className={`px-3 py-1 rounded border border-white/20 ${
-              pagination.hasPrev
-                ? "hover:bg-white/10"
-                : "opacity-40 cursor-not-allowed"
-            }`}
-            onClick={prevPage}
-            disabled={!pagination.hasPrev}
-          >
-            Prev
-          </button>
+      <div className="flex flex-col gap-2 text-sm text-white/80 px-1 sm:px-2">
+        <div className="flex flex-col items-end gap-2">
+          <div className="flex sm:items-center sm:justify-between">
+            <div className="flex items-center gap-3">
+              {currentUserRank && (
+                <div className="bg-[#ffc000] rounded px-2 py-1">
+                  <span className="text-black font-medium text-sm">
+                    Your Rank: #{currentUserRank}
+                  </span>
+                </div>
+              )}
 
-          <div className="flex items-center gap-2">
-            <span>Page</span>
-            <input
-              type="number"
-              min={1}
-              max={pagination.totalPages}
-              value={pagination.page}
-              onChange={(e) => setPageIndex(Number(e.target.value))}
-              inputMode="numeric"
-              pattern="[0-9]*"
-              placeholder="1"
-              className="w-20 px-3 py-1.5 text-sm rounded-md bg-black/30 border border-white/20 text-white placeholder-white/40 outline-none
+              {pagination.totalUsers > 0 && (
+                <span className="text-white/40 text-sm">
+                  Total: {pagination.totalUsers.toLocaleString()} traders
+                </span>
+              )}
+            </div>
+          </div>
+          {/* Pagination Controls */}
+          <div className="flex flex-col w-full sm:flex-row sm:justify-between gap-2">
+            <div className="flex flex-row gap-2 w-full sm:w-auto justify-center items-center">
+              <button
+                className={`px-3 sm:px-4 py-2 text-sm sm:text-base rounded border border-white/20 ${
+                  pagination.hasPrev
+                    ? "hover:bg-white/10"
+                    : "opacity-40 cursor-not-allowed"
+                }`}
+                onClick={prevPage}
+                disabled={!pagination.hasPrev}
+              >
+                Prev
+              </button>
+
+              <div className="flex items-center gap-2">
+                <span className="text-sm sm:text-base">Page</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={pagination.totalPages}
+                  value={pagination.page}
+                  onChange={(e) => setPageIndex(Number(e.target.value))}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="1"
+                  className="w-16 sm:w-20 px-2 sm:px-3 py-1.5 sm:py-2 text-sm sm:text-base rounded-md bg-black/30 border border-white/20 text-white placeholder-white/40 outline-none
                        focus:border-[#FFD700]/60 focus:ring-2 focus:ring-[#FFD700]/50 transition
                        [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-            />
-            {pagination.totalPages > 0 && (
-              <span className="text-white/60">of {pagination.totalPages}</span>
-            )}
-          </div>
-
-          <button
-            className={`px-3 py-1 rounded border border-white/20 ${
-              pagination.hasNext
-                ? "hover:bg-white/10"
-                : "opacity-40 cursor-not-allowed"
-            }`}
-            onClick={nextPage}
-            disabled={!pagination.hasNext}
-          >
-            Next
-          </button>
-
-          <label className="flex items-center gap-2">
-            <span>Rows per page</span>
-            <RowsPerPageSelect
-              value={pagination.pageSize}
-              onChange={setPageSize}
-              options={[25, 50]}
-              direction="up"
-              className="ml-1"
-            />
-          </label>
-
-          <div className="ml-auto flex items-center gap-3">
-            {currentUserRank && (
-              <div className="bg-[#ffc000] rounded-lg px-3 py-1">
-                <span className="text-black font-semibold">
-                  Your Rank: #{currentUserRank}
-                </span>
+                />
+                {pagination.totalPages > 0 && (
+                  <span className="text-white/60 text-sm sm:text-base">
+                    of {pagination.totalPages}
+                  </span>
+                )}
               </div>
-            )}
 
-            {pagination.totalUsers > 0 && (
-              <span className="text-white/40">
-                Total: {pagination.totalUsers.toLocaleString()} traders
-              </span>
-            )}
+              <button
+                className={`px-3 sm:px-4 py-2 text-sm sm:text-base rounded border border-white/20 ${
+                  pagination.hasNext
+                    ? "hover:bg-white/10"
+                    : "opacity-40 cursor-not-allowed"
+                }`}
+                onClick={nextPage}
+                disabled={!pagination.hasNext}
+              >
+                Next
+              </button>
+            </div>
+            <div className="flex items-center justify-center gap-2">
+              <RowsPerPageSelect
+                value={pagination.pageSize}
+                onChange={setPageSize}
+                options={[25, 50]}
+                direction="up"
+              />
+            </div>
           </div>
         </div>
       </div>
