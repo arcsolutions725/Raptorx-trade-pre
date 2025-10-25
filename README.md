@@ -1,4 +1,4 @@
-🦖 RaptorX - Intelligent Solana Trading Reports
+🦖 RaptorX - The Bloomberg Intelligence Terminal for the trenches.
 
 RaptorX is an advanced AI-powered trading intelligence platform specifically designed for the Solana ecosystem. It provides real-time market analysis, technical indicators, and AI-generated trading reports to help traders make informed decisions in the fast-paced world of cryptocurrency trading.
 
