@@ -4,7 +4,6 @@
 import { useEffect, useState } from "react";
 import { X, Trophy, CheckCircle, Circle, Star } from "lucide-react";
 import type { DailyTasksStatus } from "@/app/api/daily-tasks/route";
-import { BnbMission } from "./BnbMission";
 
 interface DailyTasksPopupProps {
   userId: string;
@@ -64,12 +63,12 @@ export function DailyTasksPopup({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 sm:p-6"
+      className="fixed inset-0 z-80 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 sm:p-6"
       role="dialog"
       aria-modal="true"
     >
       {/* Modal container: constrained height + internal flex layout */}
-      <div className="bg-gray-900 border border-gray-700 rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-[#0D0D0D] border border-[#303030] rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col">
         {/* Header (fixed) */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700">
           <div className="flex items-center gap-3">
@@ -95,10 +94,10 @@ export function DailyTasksPopup({
         {/* Scrollable body */}
         <div className="px-6 py-4 overflow-y-auto custom-sidebar-scrollbar">
           {/* Points Display */}
-          <div className="bg-[#ffc000] rounded-lg p-4 mb-6">
-            <div className="flex items-center justify-between text-black">
+          <div className="bg-[#191919] rounded-lg p-4 mb-6">
+            <div className="flex items-center justify-between text-white">
               <div>
-                <p className="text-sm opacity-80">Total Points</p>
+                <p className="text-sm text-[#7A7A7A]">Total Points</p>
                 <p className="text-2xl font-bold">
                   {userPoints.toLocaleString()}
                 </p>
@@ -132,16 +131,17 @@ export function DailyTasksPopup({
               </div>
 
               {/* Mission Progress */}
-              <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
+              <div className="bg-[#191919] rounded-xl p-4 border border-[#303030]">
                 <div className="flex items-center justify-between mb-3">
                   <h4 className="font-semibold text-white">
                     Daily Mission Progress
                   </h4>
                   <span
-                    className={`px-2 py-1 rounded-full text-xs text-nowrap font-medium ${tasks.isCompleted
+                    className={`px-2 py-1 rounded-full text-xs text-nowrap font-medium ${
+                      tasks.isCompleted
                         ? "bg-green-500/20 text-green-400"
                         : "bg-yellow-500/20 text-yellow-400"
-                      }`}
+                    }`}
                   >
                     {tasks.isCompleted ? "Completed!" : "In Progress"}
                   </span>
@@ -192,9 +192,6 @@ export function DailyTasksPopup({
                 </div>
               </div>
 
-              {/* BNB Chain Mission */}
-              <BnbMission userId={userId} />
-
               {/* Mission Completion */}
               {tasks.isCompleted && (
                 <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg p-4">
@@ -209,7 +206,7 @@ export function DailyTasksPopup({
               )}
 
               {/* Instructions */}
-              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+              <div className="bg-[#191919] rounded-lg p-4 border border-[#303030]">
                 <h4 className="text-white font-medium mb-2">
                   How to complete:
                 </h4>
@@ -221,7 +218,7 @@ export function DailyTasksPopup({
                 </ul>
               </div>
 
-              <div className="bg-gray-800 rounded-lg p-4 border border-gray-700">
+              <div className="bg-[#191919] rounded-lg p-4 border border-[#303030]">
                 <h4 className="text-white font-medium mb-2">
                   Earn from Referrals
                 </h4>

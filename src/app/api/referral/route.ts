@@ -34,9 +34,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }
 
+    // Calculate total points earned from referrals
+    // Each successful referral awards 150 points to the referrer
+    // This calculation assumes all referrals in the array successfully awarded points
+    // (which should be true since the transaction is atomic)
+    const REFERRER_BONUS = 150;
     const referralStats = {
       totalReferrals: user.referrals.length,
-      totalPointsEarned: user.referrals.length * 150, // 150 points per referral
+      totalPointsEarned: user.referrals.length * REFERRER_BONUS,
       recentReferrals: user.referrals
         .sort(
           (a, b) =>
@@ -96,6 +101,9 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const REFERRER_BONUS = 150;
+    const REFEREE_BONUS = 100; // New user gets 100 points (50 base + 50 bonus) instead of 50
+
     return NextResponse.json({
       valid: true,
       referrer: {
@@ -103,8 +111,8 @@ export async function POST(request: NextRequest) {
         username: referrer.username,
       },
       bonus: {
-        refereePoints: 100, // Points the new user will get (instead of 50)
-        referrerPoints: 150, // Bonus points for the referrer (150 MORE)
+        refereePoints: REFEREE_BONUS, // Points the new user will get (instead of 50)
+        referrerPoints: REFERRER_BONUS, // Bonus points for the referrer (150 MORE)
       },
     });
   } catch (error: any) {

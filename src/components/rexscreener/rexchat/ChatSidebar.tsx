@@ -10,6 +10,7 @@ interface ChatSidebarProps {
   currentReportId?: string;
   onSelectReport: (reportId: string) => void;
   onClose?: () => void;
+  reportType?: "crypto" | "market" | "all";
 }
 
 export default function ChatSidebar({
@@ -17,6 +18,7 @@ export default function ChatSidebar({
   currentReportId,
   onSelectReport,
   onClose,
+  reportType = "all",
 }: ChatSidebarProps) {
   const [searchQuery, setSearchQuery] = useState("");
   const [confirmDelete, setConfirmDelete] = useState<string | null>(null);
@@ -32,7 +34,7 @@ export default function ChatSidebar({
     Record<string, ReturnType<typeof setTimeout>>
   >({});
 
-  const { data: reports = [], isLoading, refetch } = useReports(userId);
+  const { data: reports = [], isLoading, refetch } = useReports(userId, reportType);
   const { mutateAsync: deleteReport, isPending: deleting } =
     useDeleteReport(userId);
 
@@ -126,9 +128,16 @@ export default function ChatSidebar({
   }, []);
 
   const filtered = useMemo(() => {
+    // First filter by reportType (client-side safety check)
+    let filteredReports = reports;
+    if (reportType !== "all") {
+      filteredReports = reports.filter((r: any) => r.reportType === reportType);
+    }
+    
+    // Then filter by search query
     const q = searchQuery.trim().toLowerCase();
-    if (!q) return reports;
-    return reports.filter((r: any) => {
+    if (!q) return filteredReports;
+    return filteredReports.filter((r: any) => {
       const pName = (r.projectName || "").toLowerCase();
       return (
         r.ticker.toLowerCase().includes(q) ||
@@ -136,7 +145,7 @@ export default function ChatSidebar({
         pName.includes(q)
       );
     });
-  }, [reports, searchQuery]);
+  }, [reports, searchQuery, reportType]);
 
   const formatAbsolute = (date: Date) =>
     `${date.toLocaleTimeString("en-US", {
@@ -274,20 +283,34 @@ export default function ChatSidebar({
                     </div>
                     <div className="flex items-start justify-between">
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 mb-1">
-                          <span className="text-black font-bold text-[16px]">
-                            ${r.ticker}
-                          </span>
-                          {r.projectName ? (
-                            <span className="text-black/70 text-[12px] truncate">
+                        {/* Show report title prominently */}
+                        {r.reportType === "market" && r.projectName ? (
+                          <div className="mb-1">
+                            <span className="text-black font-bold text-[16px] block truncate">
                               {r.projectName}
                             </span>
-                          ) : null}
-                        </div>
-                        <div className="text-gray-700 font-mono text-[12px]">
-                          {r.contractAddress.slice(0, 6)}…
-                          {r.contractAddress.slice(-4)}
-                        </div>
+                            <span className="text-black/70 text-[12px]">
+                              {r.ticker}
+                            </span>
+                          </div>
+                        ) : (
+                          <div className="flex items-center gap-2 mb-1">
+                            <span className="text-black font-bold text-[16px]">
+                              ${r.ticker}
+                            </span>
+                            {r.projectName ? (
+                              <span className="text-black/70 text-[12px] truncate">
+                                {r.projectName}
+                              </span>
+                            ) : null}
+                          </div>
+                        )}
+                        {r.reportType !== "market" && (
+                          <div className="text-gray-700 font-mono text-[12px]">
+                            {r.contractAddress.slice(0, 6)}…
+                            {r.contractAddress.slice(-4)}
+                          </div>
+                        )}
                       </div>
                       <div className="flex flex-col items-end gap-1">
                         <span

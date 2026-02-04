@@ -63,8 +63,8 @@
 }
 
 html {
+  height: 100%;
   scroll-behavior: smooth; /* Enables smooth scrolling for page-level navigation */
-  scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: contain;
   touch-action: pan-x pan-y;
@@ -75,6 +75,8 @@ html {
 }
 
 body {
+  height: 100%;
+  min-height: 100vh;
   background: var(--background);
   color: var(--foreground);
   font-family: aptos, sans-serif;
@@ -116,6 +118,10 @@ span,
 button {
   font-family: var(--font-georgia);
   font-weight: 400;
+}
+
+button {
+  cursor: pointer;
 }
 
 input,
@@ -213,14 +219,14 @@ a.chakra-link.custom-fcnbia {
 }
 
 .custom-hscroll-top {
-  overflow-x: scroll;
+  overflow-x: auto;
   overflow-y: hidden;
   scrollbar-gutter: stable both-edges;
   overscroll-behavior: contain; /* Prevents scroll chaining to the body */
 }
 
 .custom-hscroll-top::-webkit-scrollbar {
-  height: 14px; /* "a bit fat" */
+  height: 14px;
 }
 .custom-hscroll-top::-webkit-scrollbar-thumb {
   background-color: #ffc000;
@@ -287,3 +293,88 @@ a.chakra-link.custom-fcnbia {
 .custom-sidebar-scrollbar {
   scrollbar-color: #ffc000 transparent;
 }
+
+/* Slide up animation for DEX panel */
+@keyframes slideUp {
+  from {
+    transform: translateY(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up {
+  animation: slideUp 0.3s ease-out;
+}
+
+
+@keyframes slideUpRight {
+  from {
+    transform: translateY(100%) translateX(0);
+    opacity: 0;
+  }
+  to {
+    transform: translateY() translateX(0);
+    opacity: 1;
+  }
+}
+
+.animate-slide-up-right {
+  animation: slideUpRight 0.5s ease-in-out;
+}
+
+/* Pulsing live indicator dot */
+@keyframes liveDotPulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.4);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+.live-dot-pulse {
+  animation: liveDotPulse 1.2s ease-in-out infinite;
+}
+
+/* Infinite scroll animation for footer live data */
+@keyframes scrollInfinite {
+  0% {
+    transform: translateX(0);
+  }
+  100% {
+    transform: translateX(-50%);
+  }
+}
+
+.animate-scroll-infinite {
+  animation: scrollInfinite 60s linear infinite;
+  will-change: transform;
+}
+
+/* Pause animation on hover for better UX */
+.animate-scroll-infinite:hover {
+  animation-play-state: paused;
+}
+
+/* Main content panel width animation for Rex Pilot sidebar - desktop only */
+@media (min-width: 1024px) {
+  .main-content-shrink {
+    width: calc(100% - 700px) !important;
+  }
+}
+
+/*  */
+.MuiButtonBase-root.MuiIconButton-root.MuiIconButton-sizeMedium.css-1uvpzpw-MuiButtonBase-root-MuiIconButton-root {
+  display: hidden !important;
+}
+

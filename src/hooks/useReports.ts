@@ -17,24 +17,38 @@ async function fetchJSON(input: RequestInfo, init?: RequestInit) {
  * - Initial data from localStorage (if present)
  * - No refetch on window focus/reconnect
  * - Writes to localStorage on success
+ * - Supports filtering by reportType: "crypto", "market", or "all" (default: "all")
  */
-export function useReports(userId?: string) {
+export function useReports(userId?: string, reportType: "crypto" | "market" | "all" = "all") {
   const enabled = !!userId;
   const cacheList = userId ? ReportCache.getReports(userId) : null;
+  
+  // Filter cached data by reportType if a specific type is requested
+  // This ensures we don't show wrong report types from cache
+  const filteredCache = cacheList && reportType !== "all"
+    ? cacheList.filter((r: any) => r.reportType === reportType)
+    : cacheList;
 
   return useQuery({
-    queryKey: ["reports", userId],
+    queryKey: ["reports", userId, reportType],
     enabled,
     queryFn: async () => {
-      const data = await fetchJSON("/api/reports", {
+      const url = reportType === "all" 
+        ? "/api/reports"
+        : `/api/reports?reportType=${reportType}`;
+      const data = await fetchJSON(url, {
         headers: { "x-user-id": userId! },
       });
       const reports = (data.reports ?? []) as any[];
-      ReportCache.setReports(userId!, reports); // write cache
+      // Only cache if we got all reports, otherwise we'd overwrite with filtered data
+      if (reportType === "all") {
+        ReportCache.setReports(userId!, reports);
+      }
       return reports;
     },
-    initialData: cacheList ?? undefined,
-    staleTime: 5 * 60 * 1000, // 5 min fresh
+    // Use filtered cache as initial data, but always fetch fresh to ensure accuracy
+    initialData: filteredCache ?? undefined,
+    staleTime: 5 * 60 * 1000, // 5 min fresh - React Query will handle different reportTypes separately via queryKey
     gcTime: 30 * 60 * 1000, // 30 min in cache (TanStack v5)
     refetchOnWindowFocus: false, // <-- stop refetch on tab focus
     refetchOnReconnect: false, // <-- stop refetch on reconnect
@@ -131,12 +145,23 @@ export function useDeleteReport(userId: string) {
         headers: { "x-user-id": userId },
       }),
     onSuccess: (_data, reportId) => {
-      // Update list cache
-      qc.setQueryData<any[]>(["reports", userId], (prev) => {
-        const next = (prev ?? []).filter((r) => r.id !== reportId);
-        ReportCache.setReports(userId, next);
-        return next;
+      // Get the report to determine its type before deleting
+      const allReports = qc.getQueryData<any[]>(["reports", userId, "all"]) ?? [];
+      const reportToDelete = allReports.find((r) => r.id === reportId);
+      const reportType = reportToDelete?.reportType;
+
+      // Update query cache for all reportTypes
+      ["crypto", "market", "all"].forEach((type) => {
+        qc.setQueryData<any[]>(["reports", userId, type], (prev) => {
+          const next = (prev ?? []).filter((r) => r.id !== reportId);
+          // Only update localStorage cache for "all" to avoid overwriting
+          if (type === "all") {
+            ReportCache.setReports(userId, next);
+          }
+          return next;
+        });
       });
+
       // Remove item cache
       ReportCache.setReport(userId, reportId, null as any, 1); // expire quickly
       qc.removeQueries({ queryKey: ["report", userId, reportId] });

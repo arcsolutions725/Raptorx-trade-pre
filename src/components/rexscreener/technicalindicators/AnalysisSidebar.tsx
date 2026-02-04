@@ -2,7 +2,6 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import Image from "next/image";
 import copy from "copy-to-clipboard";
 import {
   Check,
@@ -19,7 +18,6 @@ import {
 import type {
   TechnicalAnalysis,
   IndicatorType,
-  TimeframeType,
 } from "@/hooks/useTechnicalAnalysis";
 
 interface AnalysisSidebarProps {

@@ -167,12 +167,15 @@ async function awardReportPoints(userId: string) {
   // If reportsToday was ever null, coerce it
   const safeReportsToday = typeof reportsToday === "number" ? reportsToday : 0;
 
+  // Cap at 3 reports per day -> max 300 pts/day for reports
+  const reachedDailyCap = !isNewDay && safeReportsToday >= 3;
+
   await prisma.user.update({
     where: { id: userId },
     data: {
-      points: { increment: 100 },
+      ...(reachedDailyCap ? {} : { points: { increment: 100 } }),
       lastReportDate: new Date(),
-      reportsToday: isNewDay ? 1 : safeReportsToday + 1,
+      reportsToday: isNewDay ? 1 : Math.min(safeReportsToday + 1, 3),
     },
   });
 }

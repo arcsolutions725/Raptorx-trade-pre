@@ -29,7 +29,7 @@ export function useDailyTasks(userId: string) {
     } finally {
       setLoading(false);
     }
-  }, [userId]); // ← memoize by userId
+  }, [userId]);
 
   useEffect(() => {
     if (userId) {

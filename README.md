@@ -1,4 +1,4 @@
-🦖 RaptorX - The Bloomberg Intelligence Terminal for the trenches.
+🦖 RaptorX - Intelligent Solana Trading Reports
 
 RaptorX is an advanced AI-powered trading intelligence platform specifically designed for the Solana ecosystem. It provides real-time market analysis, technical indicators, and AI-generated trading reports to help traders make informed decisions in the fast-paced world of cryptocurrency trading.
 
@@ -58,6 +58,15 @@ APIs: Dexscreener, CoinGecko, custom trading APIs
 
 Deployment: Vercel with edge functions
 
+⚡ Performance
+
+- Optimized for edge: Next.js 15 App Router, edge functions, streaming SSR
+- Fast data: request batching, SWR caching, incremental revalidation (ISR)
+- Database efficiency: Prisma with connection pooling and indexed queries
+- UI responsiveness: React 19 concurrent rendering, memoization, virtualization
+- Assets: route-level code splitting, prefetch, and image optimization
+- Reliability: debounced inputs, retry with backoff, and rate limiting
+
 🚀 Quick Start
 
 Prerequisites
@@ -72,7 +81,7 @@ Installation
 
 Clone the repository
 
-git clone https://github.com/your-repo/raptorx-trade.git
+git clone https://github.com/Typhon0130/raptorx-trade
 cd raptorx-trade
 
 Install dependencies

@@ -113,8 +113,8 @@ export function TokenSearchBar({
             value={searchInput}
             onChange={(e) => setSearchInput(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Search by ticker or address."
-            className="w-full pl-10 pr-20 py-3 bg-black/30 border border-white/20 rounded-lg text-white placeholder-white/50 outline-none focus:border-[#FFD700]/60 focus:ring-2 focus:ring-[#FFD700]/30 transition-all"
+            placeholder="Search here..."
+            className="w-full pl-10 pr-12 py-2.5 bg-[#262626] border-[0.5px] border-[#3c3c3c] rounded-lg text-[14px] text-[#A0A0A0] placeholder-[#A0A0A0] outline-none transition-all"
           />
           <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
             {hasActiveSearch && (
@@ -130,26 +130,14 @@ export function TokenSearchBar({
             <button
               type="submit"
               disabled={!searchInput.trim()}
-              className="p-2 rounded-md bg-[#FFD700]/20 hover:bg-[#FFD700]/30 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="p-2 rounded-md bg-[#fff]/10 hover:bg-[#fff]/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               title="Search"
             >
-              <Search className="w-5 h-5 text-[#FFD700]" />
+              <Search className="w-4 h-4 text-white" />
             </button>
           </div>
         </div>
       </form>
-
-      {hasActiveSearch && (
-        <div className="mt-2 text-blue-400 text-sm flex items-center gap-2">
-          <span>🔍 Search active</span>
-          <button
-            onClick={handleClear}
-            className="text-white/60 hover:text-white underline text-xs"
-          >
-            Show all trending
-          </button>
-        </div>
-      )}
     </div>
   );
 }

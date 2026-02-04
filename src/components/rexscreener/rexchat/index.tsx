@@ -11,6 +11,8 @@ interface RexChatProps {
   onReportChange?: (reportId: string | null) => void;
   showSidebar?: boolean;
   onBack?: () => void;
+  reportType?: "crypto" | "market" | "all";
+  onViewHistory?: () => void;
 }
 
 export function RexChat({
@@ -19,6 +21,8 @@ export function RexChat({
   onReportChange,
   showSidebar = false,
   onBack,
+  reportType = "all",
+  onViewHistory,
 }: RexChatProps) {
   const [selectedReportId, setSelectedReportId] = useState<string | null>(
     initialReportId
@@ -29,7 +33,7 @@ export function RexChat({
     if (initialReportId) setSelectedReportId(initialReportId);
   }, [initialReportId]);
 
-  const { data: reports = [] } = useReports(userId);
+  const { data: reports = [] } = useReports(userId, reportType);
 
   const handleSelectReport = (rid: string) => {
     setSelectedReportId(rid);
@@ -43,21 +47,23 @@ export function RexChat({
   };
 
   return (
-    <div className="flex h-full w-full max-w-[1440px] mx-auto overflow-x-hidden">
+    <div className="flex h-full w-full max-w-[1440px] mx-auto overflow-x-hidden min-h-0">
       {isSidebarOpen && (
         <ChatSidebar
           userId={userId}
           currentReportId={selectedReportId || undefined}
           onSelectReport={handleSelectReport}
+          reportType={reportType}
         />
       )}
       {/* Ensure the chat area can shrink without overflowing */}
-      <div className="flex-1 min-w-0">
+      <div className="flex-1 min-w-0 min-h-0 flex flex-col">
         {selectedReportId ? (
           <ChatInterface
             userId={userId}
             reportId={selectedReportId}
             onBack={handleBack}
+            onViewHistory={onViewHistory}
           />
         ) : (
           <div className="flex items-center justify-center h-full">

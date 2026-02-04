@@ -450,11 +450,11 @@ export async function getBNBHolderAnalytics(
         ),
       ]);
 
-    console.log("Results received:", {
-      totalHolders: totalHoldersResult.success,
-      holders: holdersResult.success,
-      security: securityResult.success,
-    });
+    // console.log("Results received:", {
+    //   totalHolders: totalHoldersResult.success,
+    //   holders: holdersResult.success,
+    //   security: securityResult.success,
+    // });
 
     if (!totalHoldersResult.success) {
       return {
@@ -532,12 +532,12 @@ export async function getBNBHolderAnalytics(
       analytics.tokenInfo = tokenInfo;
     }
 
-    console.log("Analytics completed successfully:", {
-      totalHolders: analytics.totalHolders,
-      hasSecurityData: !!analytics.security,
-      hasTokenInfo: !!analytics.tokenInfo,
-      riskLevel: analytics.security?.riskLevel,
-    });
+    // console.log("Analytics completed successfully:", {
+    //   totalHolders: analytics.totalHolders,
+    //   hasSecurityData: !!analytics.security,
+    //   hasTokenInfo: !!analytics.tokenInfo,
+    //   riskLevel: analytics.security?.riskLevel,
+    // });
 
     return {
       success: true,

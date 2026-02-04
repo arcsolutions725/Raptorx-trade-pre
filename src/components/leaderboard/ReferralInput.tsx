@@ -1,7 +1,8 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
-import { Check, Copy, Users, Gift } from "lucide-react";
+import { Check, Copy, Users, Gift, CheckIcon } from "lucide-react";
+import Image from "next/image";
 
 interface ReferralInputProps {
   onReferralCodeEntered?: (code: string) => void;
@@ -238,10 +239,16 @@ export function ReferralShare({ userId, referralCode }: ReferralShareProps) {
   }
 
   return (
-    <div className="w-full bg-gray-900 border border-gray-700 rounded-2xl p-6">
+    <div className="w-full bg-white/5 border border-white/10 rounded-2xl p-6">
       <div className="flex items-center gap-3 mb-6">
-        <div className="bg-[#ffc000] p-2 rounded-lg">
-          <Users className="w-6 h-6 text-white" />
+        <div className="rounded-lg">
+          {/* <Users className="w-6 h-6 text-white" /> */}
+          <Image
+            src={"/images/referral.png"}
+            width={80}
+            height={80}
+            alt="referral"
+          />
         </div>
         <div>
           <h3 className="text-xl font-bold text-white">Your Referral Link</h3>
@@ -252,34 +259,38 @@ export function ReferralShare({ userId, referralCode }: ReferralShareProps) {
       </div>
 
       {/* Referral Code Display */}
-      <div className="bg-gray-800 rounded-lg p-4 mb-6">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-gray-400 text-sm mb-1">Your Link</p>
-            <p className="text-white font-mono text-lg font-bold">
-              {referralCode}
-            </p>
+      <div className="flex gap-3 items-center justify-center mb-6">
+        <div className="bg-[#262626] rounded-lg h-[40px] flex items-center justify-center w-full">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-white font-mono text-[14px] font-bold">
+                https://raptorx.trade?referralcode={referralCode}
+              </p>
+            </div>
           </div>
-          <button
-            onClick={copyReferralCode}
-            className="flex items-center gap-2 bg-[#00b050] text-white px-4 py-2 rounded-lg transition-colors"
-          >
-            <Copy className="w-4 h-4" />
-            {copied ? "Copied!" : "Copy"}
-          </button>
         </div>
+        <button
+          onClick={copyReferralCode}
+          className="flex items-center justify-center gap-1 bg-black text-[#F9B80C] border border-[#6D4F03] w-[81px] h-[40px] rounded-lg transition-colors text-[14px]"
+        >
+          {!copied ? (
+            <Copy className="w-4 h-4" />
+          ) : (
+            <CheckIcon className="w-4 h-4" />
+          )}
+        </button>
       </div>
 
       {/* Stats */}
       {stats && (
         <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-gray-800 rounded-lg p-4">
+          <div className="bg-white/5 border border-white/10 rounded-lg p-4">
             <p className="text-gray-400 text-sm">Total Referrals</p>
             <p className="text-white text-2xl font-bold">
               {stats.totalReferrals}
             </p>
           </div>
-          <div className="bg-gray-800 rounded-lg p-4">
+          <div className="bg-white/5 border border-white/10 rounded-lg p-4">
             <p className="text-gray-400 text-sm">Points Earned</p>
             <p className="text-green-400 text-2xl font-bold">
               +{stats.totalPointsEarned}
@@ -296,7 +307,7 @@ export function ReferralShare({ userId, referralCode }: ReferralShareProps) {
             {stats.recentReferrals.map((referral) => (
               <div
                 key={referral.id}
-                className="flex items-center justify-between bg-gray-800 rounded-lg p-3"
+                className="flex items-center justify-between bg-white/5 border border-white/10 rounded-lg p-3"
               >
                 <div>
                   <p className="text-white font-medium">{referral.username}</p>

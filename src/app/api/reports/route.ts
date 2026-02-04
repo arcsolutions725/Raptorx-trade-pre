@@ -12,18 +12,28 @@ function requireUserId(req: NextRequest) {
 export async function GET(req: NextRequest) {
   try {
     const userId = requireUserId(req);
+    
+    // Get reportType from query params (defaults to "crypto" for backward compatibility)
+    const { searchParams } = new URL(req.url);
+    const reportType = searchParams.get("reportType") || "crypto";
+    
     const reports = await prisma.report.findMany({
-      where: { userId },
+      where: { 
+        userId,
+        reportType: reportType === "all" ? undefined : reportType,
+      },
       orderBy: { createdAt: "desc" },
       select: {
         id: true,
         contractAddress: true,
         ticker: true,
         projectName: true,
+        reportType: true,
         content: true,
         tweetsData: true,
         securityData: true,
         holdersData: true,
+        marketData: true,
         createdAt: true,
         updatedAt: true,
       },

@@ -53,15 +53,29 @@ export function useGenerateRexReport(opts: UseGenerateRexReportOptions = {}) {
         error: "dex fetch failed",
       }));
 
-      const report: Report = {
+      // Build report object matching the API response structure
+      const report: any = {
         id: genJson?.saved?.reportId,
         contractAddress,
         ticker: genJson?.metadata?.ticker || genJson?.ticker,
         projectName,
+        reportType: "crypto",
         content: genJson?.report || "",
+        dexData,
         createdAt: genJson?.saved?.createdAt ?? new Date().toISOString(),
         updatedAt: genJson?.saved?.updatedAt ?? new Date().toISOString(),
-        dexData,
+      };
+
+      // Also create Report type for backward compatibility
+      const reportTyped: Report = {
+        id: report.id,
+        contractAddress: report.contractAddress,
+        ticker: report.ticker,
+        projectName: report.projectName,
+        content: report.content,
+        createdAt: report.createdAt,
+        updatedAt: report.updatedAt,
+        dexData: report.dexData,
       };
 
       if (userId && report.id) {
@@ -69,7 +83,8 @@ export function useGenerateRexReport(opts: UseGenerateRexReportOptions = {}) {
       }
 
       if (userId) {
-        qc.setQueryData<any[]>(["reports", userId], (prev: any) => {
+        // Update query cache for "crypto" reportType
+        qc.setQueryData<any[]>(["reports", userId, "crypto"], (prev: any) => {
           const prevList = Array.isArray(prev) ? prev : [];
           const existingIdx = prevList.findIndex((r) => r.id === report.id);
           let next: any[];
@@ -79,13 +94,28 @@ export function useGenerateRexReport(opts: UseGenerateRexReportOptions = {}) {
           } else {
             next = [report, ...prevList];
           }
+          return next;
+        });
+
+        // Update query cache for "all" reportType
+        qc.setQueryData<any[]>(["reports", userId, "all"], (prev: any) => {
+          const prevList = Array.isArray(prev) ? prev : [];
+          const existingIdx = prevList.findIndex((r) => r.id === report.id);
+          let next: any[];
+          if (existingIdx >= 0) {
+            next = prevList.slice();
+            next[existingIdx] = { ...prevList[existingIdx], ...report };
+          } else {
+            next = [report, ...prevList];
+          }
+          // Update localStorage cache with all reports
           ReportCache.setReports(userId, next);
           return next;
         });
       }
 
-      onReportGenerated?.(report);
-      return report;
+      onReportGenerated?.(reportTyped);
+      return reportTyped;
     },
     [onReportGenerated, qc, userId]
   );

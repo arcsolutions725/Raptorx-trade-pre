@@ -13,6 +13,21 @@ export function formatUsd(n: unknown): string {
   return `$${v.toLocaleString(undefined, { maximumFractionDigits: 6 })}`;
 }
 
+/**
+ * Transforms a series title to URL-friendly format
+ * Example: "hurricane hits florida" -> "hurricane-hits-florida"
+ */
+export function transformSeriesTitleToUrl(title: string): string {
+  if (!title) return "";
+  return title
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, "") // Remove special characters except spaces and hyphens
+    .replace(/\s+/g, "-") // Replace spaces with hyphens
+    .replace(/-+/g, "-") // Replace multiple hyphens with single hyphen
+    .replace(/^-|-$/g, ""); // Remove leading/trailing hyphens
+}
+
 export function parseDateLike(d: unknown): Date | null {
   if (!d && d !== 0) return null;
   if (typeof d === "number" && d < 1e12) return new Date(d * 1000);

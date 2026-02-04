@@ -3,11 +3,21 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import copy from "copy-to-clipboard";
-import { Copy, Check, ChevronDown } from "lucide-react";
+import {
+  Copy,
+  Check,
+  ChevronDown,
+  ExternalLink,
+  ArrowLeft,
+} from "lucide-react";
 import { useGenerateRexReport } from "@/hooks/useGenerateRexReport";
 import { usePrivy } from "@privy-io/react-auth";
 import type { TrendingToken } from "@/hooks/useTrendingTokens";
-import { useReportGenStatus } from "@/lib/storage/reportGenStore";
+import {
+  useReportGenStatus,
+  reportGenStore,
+} from "@/lib/storage/reportGenStore";
+import ExplorerModal from "./ExplorerModal";
 
 type DexscreenerViewProps = {
   token: TrendingToken;
@@ -99,6 +109,9 @@ export default function DexscreenerView({
     copyTimeoutRef.current = setTimeout(() => setCopied(false), 1500);
   };
 
+  // Explorer modal state
+  const [isExplorerOpen, setIsExplorerOpen] = useState(false);
+
   // Chart interval
   const [intervalKey, setIntervalKey] = useState<string>("15m");
   const selected = useMemo(
@@ -118,9 +131,17 @@ export default function DexscreenerView({
     });
     return p;
   }, [selected.value]);
-  
-  const chain = token?.chainId?.toLowerCase() === "bsc" || token?.chainId === "56" ? "bsc" : "solana";
+
+  const chain =
+    token?.chainId?.toLowerCase() === "bsc" || token?.chainId === "56"
+      ? "bsc"
+      : "solana";
   const src = `https://dexscreener.com/${chain}/${tokenAddress}?${params.toString()}`;
+
+  const explorerUrl =
+    chain === "bsc"
+      ? `https://bscscan.com/token/${token?.tokenAddress}`
+      : `https://solscan.io/token/${token?.tokenAddress}`;
 
   // Dropdown
   const [open, setOpen] = useState(false);
@@ -175,11 +196,20 @@ export default function DexscreenerView({
   }, [isGenerating, startedAt, countdown]);
 
   useEffect(() => {
-    if (countdown !== null && countdown > 0) {
+    // Clear any existing interval first
+    if (countdownRef.current) {
+      clearInterval(countdownRef.current);
+      countdownRef.current = null;
+    }
+
+    // Start interval if countdown is set and we're generating
+    if (countdown !== null && countdown > 0 && isGenerating) {
       countdownRef.current = setInterval(() => {
         setCountdown((prev) => {
           if (prev === null) return null;
-          if (prev <= 1) return isGenerating ? 100 : null;
+          // Check store directly to avoid stale closure
+          const stillGenerating = reportGenStore.getStartedAt(tokenAddress) > 0;
+          if (prev <= 1) return stillGenerating ? 100 : null;
           return prev - 1;
         });
       }, 1000);
@@ -190,7 +220,7 @@ export default function DexscreenerView({
         }
       };
     }
-  }, [countdown, isGenerating]);
+  }, [countdown, isGenerating, tokenAddress]);
 
   const handleSignIn = async () => {
     if (!ready) return;
@@ -199,7 +229,6 @@ export default function DexscreenerView({
 
   const onGenerateClick = async () => {
     try {
-      setCountdown(100);
       await generateFromToken(token);
       setHasGenerated(true);
       onReportGenerated?.(null);
@@ -216,53 +245,52 @@ export default function DexscreenerView({
   return (
     <div className="flex flex-col w-full h-[calc(100vh-195px)] overflow-hidden">
       {/* Header */}
-      <div className="flex flex-col min-[1340px]:flex-row items-center gap-5 min-[1340px]:gap-0 justify-between p-3 bg-black/50 border-b border-white/10">
-        <div className="flex items-center w/full min-[1340px]:w-auto justify-between min-[1340px]:justify-center gap-3">
+      <div className="flex flex-col md:flex-row items-center gap-5 min-[1340px]:gap-0 justify-between p-3 bg-black/50 border-b border-white/10">
+        <div className="flex items-center gap-2 flex-wrap">
           <button
             type="button"
             onClick={onBack}
-            className="px-3 py-1 text-white rounded border border-white/20 hover:bg-white/10"
+            className="flex items-center justify-center gap-1 w-[40px] h-[40px] bg-[#3C3C3C] rounded-[8px] cursor-pointer text-[14px]"
           >
-            ← Back
+            <ArrowLeft className="w-5 h-5" color="white" />
           </button>
 
-          <div className="flex items-center gap-2">
-            <div className="text-white/90 font-semibold">
-              {title ?? "Dexscreener Chart"}
-            </div>
+          <div className="text-white/90 font-semibold">
+            {title ?? "Dexscreener Chart"}
+          </div>
 
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="inline-flex items-center justify-center rounded px-1.5 py-1 border border-white/20 hover:bg-white/10 active:scale-95 focus:outline-none focus:ring-2 focus:ring-white/30"
-              aria-label={`Copy address ${tokenAddress}`}
-              title="Copy contract address"
-            >
-              {copied ? (
-                <Check className="w-4 h-4" />
-              ) : (
-                <Copy className="w-4 h-4" />
-              )}
-            </button>
-
-            {isGenerating && countdown !== null ? (
-              <div className="flex flex-col items-center ml-1">
-                <div className="text-[#FFD700] font-bold text-lg animate-pulse">
-                  {countdown}s
-                </div>
-              </div>
-            ) : hasGenerated ? (
-              <div className="ml-1 flex items-center justify-center w-[86px] h-[32px] rounded-sm bg-[#FFD700]">
-                <span className="text-black !font-bold text-sm">
-                  Generated!
-                </span>
-              </div>
+          <button
+            type="button"
+            onClick={handleCopy}
+            className="inline-flex items-center justify-center rounded px-1.5 py-1 border border-white/20 hover:bg-white/10 active:scale-95 focus:outline-none focus:ring-2 focus:ring-white/30"
+            aria-label={`Copy address ${tokenAddress}`}
+            title="Copy contract address"
+          >
+            {copied ? (
+              <Check className="w-4 h-4" color="white" />
             ) : (
+              <Copy className="w-4 h-4" color="white" />
+            )}
+          </button>
+
+          {/* Generate and Explorer buttons */}
+          {isGenerating && countdown !== null ? (
+            <div className="flex items-center">
+              <div className="text-[#FFD700] font-bold text-lg animate-pulse">
+                {countdown}s
+              </div>
+            </div>
+          ) : hasGenerated ? (
+            <div className="flex items-center justify-center w-[86px] h-[32px] rounded-sm bg-[#FFD700]">
+              <span className="text-black !font-bold text-sm">Generated!</span>
+            </div>
+          ) : (
+            <>
               <button
                 type="button"
                 onClick={!authenticated ? handleSignIn : onGenerateClick}
                 disabled={isGenerating || !ready}
-                className={`ml-1 px-2 transition w-[80px] h-[32px] flex items-center justify-center !font-bold bg-[#FFC000] !text-[14px] rounded-[8px] text-black ${
+                className={`px-2 transition w-[83px] h-[40px] flex items-center justify-center !font-bold bg-[#000] !text-[14px] border border-[#6D4F03] rounded-[12px] text-[#F9B80C] ${
                   isGenerating || !ready
                     ? "opacity-60 cursor-wait"
                     : "cursor-pointer"
@@ -272,11 +300,25 @@ export default function DexscreenerView({
               >
                 Generate
               </button>
-            )}
-          </div>
+              <a
+                href={explorerUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="px-2 h-[40px] w-[40px] border-[0.5px] flex items-center justify-center gap-1.5 !font-medium !text-[14px] rounded-[8px] text-[#F9B80C] transition-colors cursor-pointer hover:text-[#6D4F03]"
+                aria-label={`View on ${
+                  chain === "bsc" ? "BSCScan" : "SolScan"
+                }`}
+                title={`View token on ${
+                  chain === "bsc" ? "BSCScan" : "SolScan"
+                }`}
+              >
+                <ExternalLink className="w-3.5 h-3.5" />
+              </a>
+            </>
+          )}
         </div>
 
-        <div className="relative flex items-center justify-end min-[1340px]:justify-center gap-1.5 w-full min-[1340px]:w-auto">
+        <div className="relative flex items-center justify-end min-[1340px]:justify-center gap-1.5 min-[1340px]:w-auto">
           {QUICK.map((k) => {
             const it = findInterval(k)!;
             const active = intervalKey === k;
@@ -290,10 +332,10 @@ export default function DexscreenerView({
                 className={[
                   "px-2 py-1 rounded border text-xs",
                   disabled
-                    ? "opacity-40 cursor-not-allowed border-white/10"
+                    ? "opacity-40 cursor-not-allowed border-white/10 text-white/50"
                     : active
                     ? "border-white/60 bg-white/10 text-white"
-                    : "border-white/15 hover:bg-white/10",
+                    : "border-white/15 hover:bg-white/10 text-white/80",
                 ].join(" ")}
                 title={
                   disabled && (k.endsWith("s") || it.value.endsWith("S"))
@@ -310,7 +352,7 @@ export default function DexscreenerView({
             <button
               type="button"
               onClick={() => setOpen((v) => !v)}
-              className="px-2 py-1 rounded border text-xs border-white/15 hover:bg-white/10 inline-flex items-center gap-1"
+              className="px-2 py-1 rounded border text-xs border-white/15 hover:bg-white/10 inline-flex items-center gap-1 text-white/80"
               aria-haspopup="menu"
               aria-expanded={open}
               title="More intervals"
@@ -342,7 +384,7 @@ export default function DexscreenerView({
                               setOpen(false);
                             }}
                             className={[
-                              "text-left px-2 py-1 rounded text-xs",
+                              "text-left px-2 py-1 rounded text-xs text-white/80",
                               !it.supported
                                 ? "opacity-40 cursor-not-allowed"
                                 : active
@@ -380,6 +422,15 @@ export default function DexscreenerView({
           referrerPolicy="no-referrer"
         />
       </div>
+
+      {/* Explorer Modal */}
+      <ExplorerModal
+        isOpen={isExplorerOpen}
+        onClose={() => setIsExplorerOpen(false)}
+        tokenAddress={tokenAddress}
+        chainId={token?.chainId}
+        tokenName={token?.name || token?.symbol}
+      />
     </div>
   );
 }

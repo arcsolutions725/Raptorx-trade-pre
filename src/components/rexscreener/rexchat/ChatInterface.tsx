@@ -58,12 +58,19 @@ type Props = {
   reportId: string;
   /** Optional: navigate back to analysis / indicator view */
   onBack?: () => void;
+  /** Optional: callback to open report history */
+  onViewHistory?: () => void;
 };
 
 const COPY_MS = 500;
 const MAX_H = 200;
 
-export default function ChatInterface({ userId, reportId, onBack }: Props) {
+export default function ChatInterface({
+  userId,
+  reportId,
+  onBack,
+  onViewHistory,
+}: Props) {
   const {
     data: reportData,
     isLoading,
@@ -75,6 +82,7 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
   const [inputMessage, setInputMessage] = useState("");
   const [sending, setSending] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
+  const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
 
   // BNB Analytics state - now using stored data with fallback to API
   const [holderAnalytics, setHolderAnalytics] =
@@ -91,10 +99,91 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
 
   const endRef = useRef<HTMLDivElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const shouldAutoScrollRef = useRef(true);
 
-  // useEffect(() => {
-  //   endRef.current?.scrollIntoView({ behavior: "smooth" });
-  // }, [reportData?.conversation?.messages?.length, streamingContent]);
+  // Check if user is near bottom of scroll container
+  const checkIfNearBottom = useCallback(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return false;
+    const threshold = 100; // pixels from bottom
+    const isNearBottom =
+      container.scrollHeight - container.scrollTop - container.clientHeight <
+      threshold;
+    return isNearBottom;
+  }, []);
+
+  // Handle scroll events to track if user manually scrolled
+  const handleScroll = useCallback(() => {
+    if (scrollContainerRef.current) {
+      shouldAutoScrollRef.current = checkIfNearBottom();
+    }
+  }, [checkIfNearBottom]);
+
+  // Attach scroll listener to the scroll container
+  useEffect(() => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      container.removeEventListener("scroll", handleScroll);
+    };
+  }, [handleScroll]);
+
+  useEffect(() => {
+    // Only auto-scroll when initiated by the user sending a query AND user is near bottom
+    if (!shouldAutoScroll) return;
+    if (!shouldAutoScrollRef.current) return;
+
+    // Use requestAnimationFrame for better performance
+    const rafId = requestAnimationFrame(() => {
+      endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [
+    reportData?.conversation?.messages?.length,
+    streamingContent,
+    shouldAutoScroll,
+  ]);
+
+  // When switching conversations (e.g., via chat history), do not auto-scroll initially
+  useEffect(() => {
+    setShouldAutoScroll(false);
+  }, [reportId]);
+
+  // Auto-scroll to bottom when answer generation finishes
+  useEffect(() => {
+    // When sending becomes false and streamingContent is empty, streaming has finished
+    // Also check if we have messages to ensure the message was saved
+    if (
+      !sending &&
+      !streamingContent &&
+      shouldAutoScroll &&
+      reportData?.conversation?.messages?.length
+    ) {
+      // Force scroll to bottom to show the complete generated answer
+      // Use a small delay to ensure DOM has updated
+      let rafId: number | null = null;
+      const timeoutId = setTimeout(() => {
+        rafId = requestAnimationFrame(() => {
+          endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        });
+      }, 100);
+      return () => {
+        clearTimeout(timeoutId);
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+        }
+      };
+    }
+  }, [
+    sending,
+    streamingContent,
+    shouldAutoScroll,
+    reportData?.conversation?.messages?.length,
+  ]);
 
   useEffect(() => {
     if (taRef.current) {
@@ -128,26 +217,24 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
     const loadBNBAnalytics = () => {
       setAnalyticsLoading(true);
 
-      console.log("Loading BNB analytics for:", reportData.contractAddress);
-
       // Use stored data from the report (no API fallback needed)
       const storedHolderData = reportData.holdersData;
       const storedSecurityData = reportData.securityData;
 
       if (storedHolderData) {
         setHolderAnalytics(storedHolderData);
-        console.log("Loaded stored holder analytics:", storedHolderData);
+        // console.log("Loaded stored holder analytics:", storedHolderData);
       } else {
         setHolderAnalytics(null);
-        console.log("No stored holder analytics available");
+        // console.log("No stored holder analytics available");
       }
 
       if (storedSecurityData) {
         setSecurityAnalytics(storedSecurityData);
-        console.log("Loaded stored security analytics:", storedSecurityData);
+        // console.log("Loaded stored security analytics:", storedSecurityData);
       } else {
         setSecurityAnalytics(null);
-        console.log("No stored security analytics available");
+        // console.log("No stored security analytics available");
       }
 
       setAnalyticsLoading(false);
@@ -344,7 +431,7 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
     });
   }
 
-  function renderTweetsSection(_text: string): React.ReactNode {
+  function renderTweetsSection(): React.ReactNode {
     const tweetsData = reportData?.tweetsData;
 
     if (
@@ -692,28 +779,26 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
     const body = lines.join("\n");
 
     // Handle Individual Tweets section
-    if (t.includes("individual tweets")) return renderTweetsSection(body);
+    if (t.includes("individual tweets")) return renderTweetsSection();
 
     // Handle Coin-O-Metry section
     if (t.includes("coin-o-metry"))
       return dexData ? <CoinOMetry dexData={dexData} /> : "";
 
-    // Handle Safety Analytics section - show both the report content and analytics component
     if (t.includes("safety analytics")) {
+      // Hide Safety Analytics section entirely for non-BNB chains
+      if (!isBNBToken) return "";
       return (
         <div className="space-y-6">
-          {/* Render the markdown content first */}
           {renderMarkdownSection(body)}
 
-          {/* Show BirdeyeSafetyAnalyticsComponent if we have security data */}
-          {securityAnalytics && (
+          {securityAnalytics && isBNBToken && (
             <div className="mt-8">
               <BirdeyeSafetyAnalyticsComponent data={securityAnalytics} />
             </div>
           )}
 
-          {/* Show loading state if analytics are still loading */}
-          {analyticsLoading && (
+          {analyticsLoading && isBNBToken && (
             <div className="text-center py-8 text-white/60">
               <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
               <p>Loading safety analytics...</p>
@@ -723,22 +808,20 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
       );
     }
 
-    // Handle Holder Analytics section - show both the report content and analytics component
     if (t.includes("holder analytics")) {
+      // Hide Holder Analytics section entirely for non-BNB chains
+      if (!isBNBToken) return "";
       return (
         <div className="space-y-6">
-          {/* Render the markdown content first */}
           {renderMarkdownSection(body)}
 
-          {/* Show HolderAnalyticsComponent if we have holder data */}
-          {holderAnalytics && (
+          {holderAnalytics && isBNBToken && (
             <div className="mt-8">
               <HolderAnalyticsComponent data={holderAnalytics} />
             </div>
           )}
 
-          {/* Show loading state if analytics are still loading */}
-          {analyticsLoading && (
+          {analyticsLoading && isBNBToken && (
             <div className="text-center py-8 text-white/60">
               <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
               <p>Loading holder analytics...</p>
@@ -769,15 +852,27 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
 
     return (
       <div className="space-y-8">
-        {Object.entries(sections).map(([title, body], i) => (
-          <div key={i}>
-            <h2 className="text-white mb-4 flex items-center gap-3">
-              {title}
-              {getSectionIcon(title)}
-            </h2>
-            <div className="space-y-3">{renderSectionContent(title, body)}</div>
-          </div>
-        ))}
+        {Object.entries(sections).map(([title, body], i) => {
+          const lowerTitle = title.toLowerCase();
+          if (
+            !isBNBToken &&
+            (lowerTitle.includes("holder analytics") ||
+              lowerTitle.includes("safety analytics"))
+          ) {
+            return null;
+          }
+          return (
+            <div key={i}>
+              <h2 className="text-white mb-4 flex items-center gap-3">
+                {title}
+                {getSectionIcon(title)}
+              </h2>
+              <div className="space-y-3">
+                {renderSectionContent(title, body)}
+              </div>
+            </div>
+          );
+        })}
       </div>
     );
   }
@@ -817,13 +912,17 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
     );
   }
 
-  function CopyReportButton({ reportContent }: { reportContent: string }) {
+  function CopyContractAddressButton({
+    contractaddress,
+  }: {
+    contractaddress: string;
+  }) {
     const [copied, setCopied] = useState(false);
     const onCopy = useCallback(() => {
-      copy(reportContent);
+      copy(contractaddress);
       setCopied(true);
       setTimeout(() => setCopied(false), COPY_MS);
-    }, [reportContent]);
+    }, [contractaddress]);
 
     return (
       <button
@@ -853,6 +952,11 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
     try {
       setSending(true);
       setStreamingContent("");
+      setShouldAutoScroll(true);
+      // Reset auto-scroll flag when sending a new message
+      shouldAutoScrollRef.current = true;
+      // Scroll immediately to show the newly sent message area
+      endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
 
       await appendMessage.mutateAsync({
         reportId,
@@ -898,6 +1002,8 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
       });
 
       setStreamingContent("");
+      // Keep shouldAutoScroll true for the current interaction; it will be
+      // reset on conversation switch via the effect on reportId
     } catch (e) {
       console.error("Chat error:", e);
     } finally {
@@ -933,10 +1039,24 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
   const msgs = reportData?.conversation?.messages || [];
 
   return (
-    <div className="flex-1 min-w-0 flex flex-col h-full w-full max-w-[1440px] mx-auto overflow-x-hidden">
-      <div className="flex-1 overflow-y-auto scrollbar-none p-4 pb-32">
-        {onBack && (
-          <div className="mb-4 mt-4">
+    <div
+      className="flex-1 min-w-0 flex flex-col h-full w-full max-w-[1440px] mx-auto overflow-x-hidden min-h-0"
+      style={{
+        maxHeight: "100dvh", // Use dynamic viewport height for mobile
+      }}
+    >
+      <div
+        ref={scrollContainerRef}
+        className="flex-1 overflow-y-auto scrollbar-none p-4 min-h-0"
+        style={{
+          WebkitOverflowScrolling: "touch",
+          touchAction: "pan-y",
+          overscrollBehavior: "contain",
+          paddingBottom: "0.5rem", // Reduced padding on mobile
+        }}
+      >
+        <div className="mt-2 flex items-center justify-between gap-4">
+          {onBack && (
             <button
               onClick={onBack}
               className="inline-flex items-center gap-2 text-white/70 hover:text-white transition cursor-pointer"
@@ -946,22 +1066,22 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
               <ArrowLeft className="w-7 h-7" />
               <span className="text-xl">Back</span>
             </button>
-          </div>
-        )}
-        <div className="mb-6 p-6 rounded-lg relative max-w-full">
-          <div className="flex flex-col w-full justify-center items-center gap-4 mb-6">
+          )}
+        </div>
+        <div className="px-4 py-2 rounded-lg relative max-w-full">
+          <div className="flex flex-col w-full justify-center items-center gap-4">
             <div className="flex items-center gap-5">
               {logo && (
                 <Image
                   src={logo}
                   alt="Token Logo"
-                  width={60}
-                  height={60}
+                  width={30}
+                  height={30}
                   className="rounded-full border border-white/10"
                 />
               )}
-              <h2 className="text-white text-[32px]">
-                Ticker: {reportData.ticker}{" "}
+              <h2 className="text-white text-[28px]">
+                {reportData.ticker}{" "}
                 {reportData.projectName ? `(${reportData.projectName})` : ""}
               </h2>
             </div>
@@ -976,9 +1096,9 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
                 <Image
                   src={headerImage}
                   alt="Header"
-                  width={300}
-                  height={100}
-                  className="rounded-lg border border-white/10 object-cover"
+                  width={75}
+                  height={25}
+                  className="rounded-lg border border-white/10 object-cover w-[200] h-[60]"
                 />
               )}
               <div className="flex fle-row justify-center w-full gap-8 mt-1">
@@ -1029,9 +1149,10 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
           </div>
 
           <div className="w-full flex justify-center">
-            {/* Regenerate button (left) and Copy button (right) */}
             <RegenerateButton />
-            <CopyReportButton reportContent={reportData.content} />
+            <CopyContractAddressButton
+              contractaddress={reportData?.contractAddress}
+            />
           </div>
 
           <div className="text-white/90 text-xl whitespace-pre-wrap break-words overflow-x-hidden pt-4">
@@ -1051,22 +1172,20 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
             >
               <div className="max-w-full p-4 rounded-lg break-words">
                 <div className="flex items-center gap-2 mb-2">
-                  <div
-                    className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                      m.role === "user" ? "bg-blue-500" : "bg-transparent"
-                    }`}
-                  >
-                    {m.role === "user" ? (
+                  {m.role === "user" ? (
+                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-500">
                       <span className="text-white text-xs">U</span>
-                    ) : (
+                    </div>
+                  ) : (
+                    <div>
                       <Image
-                        src="/images/banner.png"
+                        src="/images/assistant_banner.png"
                         alt="Assistant avatar"
-                        width={40}
-                        height={40}
+                        width={120}
+                        height={80}
                       />
-                    )}
-                  </div>
+                    </div>
+                  )}
                 </div>
                 <div className="text-white/90 break-words">
                   {formatMessage(m.content)}
@@ -1079,11 +1198,13 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
         {streamingContent && (
           <div className="mb-4 flex justify-end">
             <div className="p-4 rounded-lg max-w-full break-words">
-              <div className="flex items-center gap-2 mb-2">
-                <div className="w-6 h-6 rounded-full bg-purple-500 flex items-center justify-center">
-                  <span className="text-white text-xs">A</span>
-                </div>
-                <span className="text-white/70 text-sm">Assistant</span>
+              <div className="flex items-center">
+                <Image
+                  src="/images/assistant_banner.png"
+                  alt="Assistant avatar"
+                  width={120}
+                  height={80}
+                />
               </div>
               <div className="text-white/90 break-words">
                 {formatMessage(streamingContent)}
@@ -1096,7 +1217,16 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
         <div ref={endRef} />
       </div>
 
-      <div className="p-4 w-full max-w-[1440px] mx-auto">
+      <div
+        className="px-4 sm:px-8 w-full max-w-[1440px] mx-auto flex-shrink-0 pb-2 sm:pb-2"
+        style={{
+          paddingBottom: "0.5rem", // Consistent padding on mobile
+          position: "sticky",
+          bottom: 0,
+          backgroundColor: "#141414",
+          zIndex: 10,
+        }}
+      >
         <div className="relative">
           <textarea
             ref={taRef}
@@ -1105,14 +1235,14 @@ export default function ChatInterface({ userId, reportId, onBack }: Props) {
             onKeyDown={onKeyDown}
             placeholder="Ask any follow-up questions!"
             disabled={sending}
-            className="w-full max-w-full bg-white shadow-xl/30 text-[16px] text-black/40 placeholder-black/40 rounded-2xl pl-4 pr-20 py-3 resize-none outline-none focus:ring-2 disabled:opacity-50 min-h-[50px] max-h-[200px] break-words"
-            rows={3}
+            className="w-full max-w-full bg-[#262626] border-[0.5px] border-[#3C3C3C] text-[#BEBEBE] placeholder-[#BEBEBE] rounded-[8px] pl-4 pr-20 py-2.5 resize-none outline-none disabled:opacity-50 min-h-[50px] max-h-[200px] break-words text-[14px]"
+            rows={2}
             aria-label="Message input"
           />
           <button
             onClick={handleSend}
             disabled={!inputMessage.trim() || sending}
-            className="absolute right-2 bottom-0 transform -translate-y-1/2 text-white font-semibold rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+            className="absolute right-2 bottom-0 transform -translate-y-1/3 text-white font-semibold rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
             aria-label="Send message"
           >
             <Image

@@ -21,6 +21,7 @@ import PageLoaderOverlay from "@/components/PageLoaderOverlay";
 import { TokenSearchBar } from "@/components/rexscreener/TokenSearchBar";
 import { ChevronDown, Check } from "lucide-react";
 import { ChainButtons } from "./ChainButtons";
+import { useTopbar } from "@/contexts/TopbarContext";
 
 /* ============================ Styled, Up-Opening Select ============================ */
 
@@ -175,6 +176,7 @@ interface TrendingTableContentProps {
     address: string | null,
     isViewing: boolean
   ) => void;
+  onChainChange?: (chain: Chain) => void;
 }
 
 export function TrendingTableContent({
@@ -182,14 +184,22 @@ export function TrendingTableContent({
   currentUserId,
   isAdmin,
   onTokenSelect,
+  onChainChange,
 }: TrendingTableContentProps) {
+  const { isTopbarVisible } = useTopbar();
+  
   // Search state
   const [searchQuery, setSearchQuery] = useState<string>("");
   const [searchType, setSearchType] = useState<"ticker" | "address" | null>(
     null
   );
   const [isSearchMode, setIsSearchMode] = useState(false);
-  const [selectedChain, setSelectedChain] = useState<Chain>("solana");
+  const [selectedChain, setSelectedChain] = useState<Chain>("all");
+
+  // Notify parent of chain change
+  useEffect(() => {
+    onChainChange?.(selectedChain);
+  }, [selectedChain, onChainChange]);
 
   const {
     data,
@@ -446,8 +456,7 @@ export function TrendingTableContent({
 
   return (
     <div className="w-full flex flex-col gap-3">
-      <div className="px-4 py-3 bg-black/20 border-b border-white/10 flex flex-col sm:flex-row items-center justify-center sm:justify-between gap-10">
-        {/* Chain Buttons */}
+      <div className="px-4 py-3 flex flex-col sm:flex-row items-start justify-center sm:justify-between gap-5 sm:gap-10">
         <div className="flex-shrink-0">
           <ChainButtons
             selectedChain={selectedChain}
@@ -458,9 +467,8 @@ export function TrendingTableContent({
           />
         </div>
 
-        {/* Token Search */}
         <div className="w-full sm:flex-1 flex justify-center sm:justify-end">
-          <div className="w-full max-w-2xl">
+          <div className="w-full max-w-full sm:max-w-[300px]">
             <TokenSearchBar
               onSearch={handleSearch}
               onClear={handleClearSearch}
@@ -470,7 +478,11 @@ export function TrendingTableContent({
         </div>
       </div>
 
-      <div className="relative h-[calc(100vh-335px)] sm:h-[calc(100vh-320px)] md:h-[calc(100vh-350px)] border border-white/10">
+      <div className={`relative border border-white/10 ${
+        isTopbarVisible 
+          ? "h-[calc(100vh-490px)] sm:h-[calc(100vh-395px)] md:h-[calc(100vh-390px)]"
+          : "h-[calc(100vh-450px)] sm:h-[calc(100vh-355px)] md:h-[calc(100vh-350px)]"
+      }`}>
         {isPageLoading && <PageLoaderOverlay />}
 
         {showCenteredOverlay && (
@@ -502,7 +514,7 @@ export function TrendingTableContent({
         {/* Always-visible top scrollbar */}
         <div
           ref={topScrollRef}
-          className={`sticky top-0 z-10 custom-hscroll-top bg-black/0 h-[16px] overflow-x-scroll overflow-y-hidden ${
+          className={`sticky top-0 z-10 custom-hscroll-top bg-black/0 h-[16px] overflow-x-auto overflow-y-hidden ${
             ready ? "" : "pointer-events-none opacity-80"
           }`}
           onScroll={onTopScroll}
@@ -518,10 +530,7 @@ export function TrendingTableContent({
           className="relative h-[calc(100%-16px)] overflow-y-auto overflow-x-auto hide-vert-scroll hide-bottom-hscroll"
           onScroll={onMainScroll}
         >
-          <div
-            ref={contentRef}
-            className="min-w-[1160px] sm:min-w-[1260px] align-top w-full"
-          >
+          <div ref={contentRef} className="w-full align-top">
             <TableHeader
               sortField={sortField}
               sortDirection={sortDirection}
@@ -535,7 +544,7 @@ export function TrendingTableContent({
             )}
 
             {!isLoading && !isError && rows.length > 0 && (
-              <div className="divide-y divide-white/10 w-full min-w-[1040px] sm:min-w-[1140px]">
+              <div className="divide-y divide-white/10 w-full">
                 {rows.map((t, i) => (
                   <TableRow
                     key={t.tokenAddress ?? `${t.symbol ?? "row"}-${i}`}
@@ -545,6 +554,7 @@ export function TrendingTableContent({
                     onOpenChart={handleOpenChart}
                     currentUserId={currentUserId}
                     isAdmin={isAdmin}
+                    index={i}
                   />
                 ))}
               </div>

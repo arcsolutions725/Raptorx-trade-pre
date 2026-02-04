@@ -727,10 +727,18 @@ async function handleTokenSearch(opts: {
     let searchResults: any[] = [];
 
     if (search_type === "address") {
-      // Direct address lookup using Birdeye token overview
+      // If chain is "all", detect based on address pattern (0x... => bsc)
+      const targetChain =
+        chain === "all"
+          ? /^0x[a-fA-F0-9]{40}$/.test(search_query.trim())
+            ? "bsc"
+            : "solana"
+          : chain;
+
+      // Direct address lookup using Birdeye token overview on the resolved chain
       const tokenData = await fetchBirdeyeTokenOverview(
         search_query,
-        chain,
+        targetChain,
         apiKey
       );
 
@@ -740,7 +748,7 @@ async function handleTokenSearch(opts: {
           uniqueCount: 0,
           offset: 0,
           limit,
-          chain,
+          chain: targetChain,
           upstreamTotal: 0,
           exhausted: true,
           searchQuery: search_query,
@@ -751,115 +759,197 @@ async function handleTokenSearch(opts: {
       }
 
       // Convert Birdeye token overview to trending token format
-      const searchResult = normalizeBirdeyeTokenOverview(tokenData, chain);
+      const searchResult = normalizeBirdeyeTokenOverview(tokenData, targetChain);
       searchResults = [searchResult];
     } else if (search_type === "ticker") {
-      // New logic: use Jupiter search to get candidate mints, then resolve via Birdeye overview
-      const jupMints = await fetchJupiterMintsByQuery(search_query);
+      if (chain === "bsc") {
+        // BNB chain: resolve by scanning Birdeye tokenlist for exact symbol matches
+        const listed = await searchTokenByTicker(search_query, chain, apiKey, 10);
+        const normalized = listed.map((t) => normalizeTokenlistToken(t, chain));
+        // Apply market cap filter for BNB results
+        const filtered = filterValidMarketCap(normalized, chain);
+        searchResults = dedupeByAddress(filtered).slice(0, limit);
+      } else if (chain === "all") {
+        // ALL chains: fetch both in parallel and merge
+        const [solResults, bnbListed] = await Promise.all([
+          (async () => {
+            const jupMints = await fetchJupiterMintsByQuery(search_query);
+            if (jupMints.length === 0) return [] as any[];
 
-      if (jupMints.length === 0) {
-        return NextResponse.json({
-          items: [],
-          uniqueCount: 0,
-          offset: 0,
-          limit,
-          chain,
-          upstreamTotal: 0,
-          exhausted: true,
-          searchQuery: search_query,
-          searchType: search_type,
-          searchResults: true,
-          message: `No tokens found from Jupiter search for: ${search_query}`,
-        });
-      }
+            const jupResultsRaw = await (async () => {
+              const url = `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(
+                search_query
+              )}`;
+              try {
+                const r = await fetch(url, { cache: "no-store" });
+                if (!r.ok) return [];
+                return (await r.json()) as Array<any>;
+              } catch {
+                return [];
+              }
+            })();
 
-      // Prefer exact symbol matches first (case-insensitive), then fill with the rest.
-      // To do that, we need quick symbol lookups from Jupiter results:
-      const jupResultsRaw = await (async () => {
-        const url = `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(
-          search_query
-        )}`;
-        try {
-          const r = await fetch(url, { cache: "no-store" });
-          if (!r.ok) return [];
-          return (await r.json()) as Array<any>;
-        } catch {
-          return [];
+            const target = search_query.toLowerCase();
+            const exactMintOrder: string[] = [];
+            const fuzzyMintOrder: string[] = [];
+            const seen = new Set<string>();
+            for (const it of jupResultsRaw) {
+              const mint =
+                it?.id ||
+                it?.mint ||
+                it?.address ||
+                it?.mintAddress ||
+                it?.tokenMint ||
+                null;
+              if (!mint || seen.has(mint)) continue;
+              seen.add(mint);
+              const sym = String(it?.symbol ?? "").toLowerCase();
+              const name = String(it?.name ?? "").toLowerCase();
+              if (sym === target) exactMintOrder.push(mint);
+              else if (sym.includes(target) || name.includes(target))
+                fuzzyMintOrder.push(mint);
+            }
+            const leftovers = jupMints.filter(
+              (m) => !exactMintOrder.includes(m) && !fuzzyMintOrder.includes(m)
+            );
+            const orderedMints = [
+              ...exactMintOrder,
+              ...fuzzyMintOrder,
+              ...leftovers,
+            ];
+            const overviews = await fetchOverviewsForMints({
+              mints: orderedMints.slice(0, Math.max(limit * 3, 30)),
+              chain: "solana",
+              apiKey,
+              concurrency: 8,
+            });
+            const normalized = overviews.map((d) =>
+              normalizeBirdeyeTokenOverview(d, "solana")
+            );
+            const byAddr = new Map<string, any>();
+            for (const n of normalized) {
+              const addr = (n?.tokenAddress || "").toLowerCase();
+              if (addr && !byAddr.has(addr)) byAddr.set(addr, n);
+            }
+            const ordered = orderedMints
+              .map((m) => byAddr.get(m.toLowerCase()))
+              .filter(Boolean) as any[];
+            return ordered;
+          })(),
+          (async () => {
+            const listed = await searchTokenByTicker(
+              search_query,
+              "bsc",
+              apiKey,
+              10
+            );
+            const normalized = listed.map((t) =>
+              normalizeTokenlistToken(t, "bsc")
+            );
+            const filtered = filterValidMarketCap(normalized, "bsc");
+            return dedupeByAddress(filtered);
+          })(),
+        ]);
+
+        const combined = [...bnbListed, ...solResults];
+        searchResults = combined.slice(0, Math.max(limit, 25));
+      } else {
+        // Solana and others: use Jupiter search + Birdeye overview
+        const jupMints = await fetchJupiterMintsByQuery(search_query);
+
+        if (jupMints.length === 0) {
+          return NextResponse.json({
+            items: [],
+            uniqueCount: 0,
+            offset: 0,
+            limit,
+            chain,
+            upstreamTotal: 0,
+            exhausted: true,
+            searchQuery: search_query,
+            searchType: search_type,
+            searchResults: true,
+            message: `No tokens found from Jupiter search for: ${search_query}`,
+          });
         }
-      })();
 
-      const target = search_query.toLowerCase();
+        const jupResultsRaw = await (async () => {
+          const url = `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(
+            search_query
+          )}`;
+          try {
+            const r = await fetch(url, { cache: "no-store" });
+            if (!r.ok) return [];
+            return (await r.json()) as Array<any>;
+          } catch {
+            return [];
+          }
+        })();
 
-      const exactMintOrder: string[] = [];
-      const fuzzyMintOrder: string[] = [];
+        const target = search_query.toLowerCase();
+        const exactMintOrder: string[] = [];
+        const fuzzyMintOrder: string[] = [];
+        const seen = new Set<string>();
+        for (const it of jupResultsRaw) {
+          const mint =
+            it?.id ||
+            it?.mint ||
+            it?.address ||
+            it?.mintAddress ||
+            it?.tokenMint ||
+            null;
+          if (!mint || seen.has(mint)) continue;
+          seen.add(mint);
 
-      const seen = new Set<string>();
-      for (const it of jupResultsRaw) {
-        const mint =
-          it?.id ||
-          it?.mint ||
-          it?.address ||
-          it?.mintAddress ||
-          it?.tokenMint ||
-          null;
-        if (!mint || seen.has(mint)) continue;
-        seen.add(mint);
+          const sym = String(it?.symbol ?? "").toLowerCase();
+          const name = String(it?.name ?? "").toLowerCase();
 
-        const sym = String(it?.symbol ?? "").toLowerCase();
-        const name = String(it?.name ?? "").toLowerCase();
+          if (sym === target) exactMintOrder.push(mint);
+          else if (sym.includes(target) || name.includes(target))
+            fuzzyMintOrder.push(mint);
+        }
 
-        if (sym === target) exactMintOrder.push(mint);
-        else if (sym.includes(target) || name.includes(target))
-          fuzzyMintOrder.push(mint);
-      }
+        const leftovers = jupMints.filter(
+          (m) => !exactMintOrder.includes(m) && !fuzzyMintOrder.includes(m)
+        );
+        const orderedMints = [...exactMintOrder, ...fuzzyMintOrder, ...leftovers];
 
-      // final order: exact first, then fuzzy, then any leftovers from the raw mint set
-      const leftovers = jupMints.filter(
-        (m) => !exactMintOrder.includes(m) && !fuzzyMintOrder.includes(m)
-      );
-      const orderedMints = [...exactMintOrder, ...fuzzyMintOrder, ...leftovers];
-
-      // Fetch Birdeye overviews for ordered mints (cap to a reasonable batch before normalize)
-      const overviews = await fetchOverviewsForMints({
-        mints: orderedMints.slice(0, Math.max(limit * 3, 30)), // small overfetch to allow filtering
-        chain,
-        apiKey,
-        concurrency: 8,
-      });
-
-      if (overviews.length === 0) {
-        return NextResponse.json({
-          items: [],
-          uniqueCount: 0,
-          offset: 0,
-          limit,
+        const overviews = await fetchOverviewsForMints({
+          mints: orderedMints.slice(0, Math.max(limit * 3, 30)),
           chain,
-          upstreamTotal: 0,
-          exhausted: true,
-          searchQuery: search_query,
-          searchType: search_type,
-          searchResults: true,
-          message: `No Birdeye overviews for Jupiter results: ${search_query}`,
+          apiKey,
+          concurrency: 8,
         });
+
+        if (overviews.length === 0) {
+          return NextResponse.json({
+            items: [],
+            uniqueCount: 0,
+            offset: 0,
+            limit,
+            chain,
+            upstreamTotal: 0,
+            exhausted: true,
+            searchQuery: search_query,
+            searchType: search_type,
+            searchResults: true,
+            message: `No Birdeye overviews for Jupiter results: ${search_query}`,
+          });
+        }
+
+        const normalized = overviews.map((d) =>
+          normalizeBirdeyeTokenOverview(d, chain)
+        );
+        const byAddr = new Map<string, any>();
+        for (const n of normalized) {
+          const addr = (n?.tokenAddress || "").toLowerCase();
+          if (addr && !byAddr.has(addr)) byAddr.set(addr, n);
+        }
+        const ordered = orderedMints
+          .map((m) => byAddr.get(m.toLowerCase()))
+          .filter(Boolean) as any[];
+        searchResults = ordered.slice(0, limit);
       }
-
-      // Normalize Birdeye overview payloads
-      const normalized = overviews.map((d) =>
-        normalizeBirdeyeTokenOverview(d, chain)
-      );
-
-      // Keep the Jupiter ordering as much as possible
-      const byAddr = new Map<string, any>();
-      for (const n of normalized) {
-        const addr = (n?.tokenAddress || "").toLowerCase();
-        if (addr && !byAddr.has(addr)) byAddr.set(addr, n);
-      }
-      const ordered = orderedMints
-        .map((m) => byAddr.get(m.toLowerCase()))
-        .filter(Boolean) as any[];
-
-      // Limit results to the requested limit
-      searchResults = ordered.slice(0, limit);
     }
 
     // Apply sorting by market cap (higher first) then liquidity (higher first)

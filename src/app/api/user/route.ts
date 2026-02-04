@@ -64,7 +64,7 @@ async function generateUniqueReferralCode(): Promise<string> {
  */
 async function attachReferralOnce(
   newUserId: string,
-  newUserPrivyId: string,
+  newUserAuthId: string,
   referralCode: string
 ): Promise<boolean> {
   const REFERRER_BONUS = 150;
@@ -73,10 +73,17 @@ async function attachReferralOnce(
   // Look up referrer outside tx (keeps tx tiny)
   const referrer = await prisma.user.findUnique({
     where: { referralCode },
-    select: { id: true, privyId: true },
+    select: { id: true, privyId: true, phantomId: true },
   });
-  if (!referrer) return false;
-  if (referrer.privyId === newUserPrivyId) return false; // self-referral guard
+  if (!referrer) {
+    console.log(`attachReferralOnce: Referrer not found for code ${referralCode}`);
+    return false;
+  }
+  // Self-referral guard - check both auth IDs
+  if (referrer.privyId === newUserAuthId || referrer.phantomId === newUserAuthId) {
+    console.log(`attachReferralOnce: Self-referral detected for user ${newUserId}`);
+    return false;
+  }
 
   try {
     const awarded = await prisma.$transaction(
@@ -87,21 +94,27 @@ async function attachReferralOnce(
           data: { referredBy: referrer.id },
         });
 
-        if (setRef.count !== 1) return false;
+        if (setRef.count !== 1) {
+          console.log(`attachReferralOnce: Failed to set referredBy for user ${newUserId} (already set or user not found)`);
+          return false;
+        }
 
+        // Award points to referrer
         await tx.user.update({
           where: { id: referrer.id },
           data: { points: { increment: REFERRER_BONUS } },
         });
 
+        // Award points to new user
         await tx.user.update({
           where: { id: newUserId },
           data: { points: { increment: EXTRA_SIGNUP_POINTS } },
         });
 
+        console.log(`attachReferralOnce: Successfully awarded ${REFERRER_BONUS} points to referrer ${referrer.id} and ${EXTRA_SIGNUP_POINTS} points to new user ${newUserId}`);
         return true;
       },
-      { timeout: 10_000, maxWait: 5_000, isolationLevel: "ReadCommitted" }
+      { timeout: 10_000, maxWait: 5_000, isolationLevel: "Serializable" }
     );
     return awarded;
   } catch (err) {
@@ -116,6 +129,17 @@ export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
     const privyId: string | undefined = body?.privyId;
+    const phantomId: string | undefined = body?.phantomId;
+
+    const solanaWallet: string | undefined =
+      typeof body?.solanaWallet === "string" && body.solanaWallet.trim() !== ""
+        ? body.solanaWallet.trim()
+        : undefined;
+    const ethereumWallet: string | undefined =
+      typeof body?.ethereumWallet === "string" &&
+      body.ethereumWallet.trim() !== ""
+        ? body.ethereumWallet.trim()
+        : undefined;
 
     // Normalize email ONCE (treat "" as null)
     const normalizedEmail: string | null =
@@ -129,20 +153,30 @@ export async function POST(request: NextRequest) {
         ? body.referralCode.trim()
         : undefined;
 
-    if (!privyId) {
+    // Require at least one auth ID
+    if (!privyId && !phantomId) {
       return NextResponse.json(
-        { error: "privyId is required" },
+        { error: "privyId or phantomId is required" },
         { status: 400 }
       );
     }
 
-    // Fast path: user exists
-    let existing = await prisma.user.findUnique({ where: { privyId } });
+    // Use the appropriate ID for lookup
+    const authId = privyId || phantomId!;
+    const authField = privyId ? "privyId" : "phantomId";
+
+    // Fast path: user exists - check both auth methods
+    let existing = privyId
+      ? await prisma.user.findUnique({ where: { privyId } })
+      : await prisma.user.findUnique({ where: { phantomId: phantomId! } });
+    
     if (existing) {
       // If referral provided and not yet set, try to attach exactly once
       if (referralCode && !existing.referredBy) {
-        await attachReferralOnce(existing.id, privyId, referralCode);
-        existing = await prisma.user.findUnique({ where: { privyId } });
+        await attachReferralOnce(existing.id, authId, referralCode);
+        existing = privyId
+          ? await prisma.user.findUnique({ where: { privyId } })
+          : await prisma.user.findUnique({ where: { phantomId: phantomId! } });
         if (!existing) {
           return NextResponse.json(
             { error: "User disappeared after update" },
@@ -160,6 +194,11 @@ export async function POST(request: NextRequest) {
       const needsEmailUpdate =
         normalizedEmail !== null && normalizedEmail !== existing.email;
 
+      const needsSolanaUpdate =
+        solanaWallet && solanaWallet !== existing.solanaWallet;
+      const needsEthereumUpdate =
+        ethereumWallet && ethereumWallet !== existing.ethereumWallet;
+
       if (needsEmailUpdate) {
         console.log(
           `Updating email for privyId=${privyId} → ${normalizedEmail}`
@@ -169,11 +208,13 @@ export async function POST(request: NextRequest) {
       let updated;
       try {
         updated = await prisma.user.update({
-          where: { privyId },
+          where: privyId ? { privyId } : { phantomId: phantomId! },
           data: {
             lastLoginDate: new Date(),
             ...(isNewDay && { reportsToday: 0, queriesToday: 0 }),
             ...(needsEmailUpdate ? { email: normalizedEmail } : {}),
+            ...(needsSolanaUpdate ? { solanaWallet } : {}),
+            ...(needsEthereumUpdate ? { ethereumWallet } : {}),
           },
         });
       } catch (err: any) {
@@ -205,12 +246,14 @@ export async function POST(request: NextRequest) {
     try {
       existing = await prisma.user.create({
         data: {
-          privyId,
+          ...(privyId ? { privyId } : { phantomId: phantomId! }),
           username,
           email: normalizedEmail, // <-- write email on create (null if not provided)
           points: BASE_SIGNUP_POINTS,
           referralCode: userReferralCode,
           lastLoginDate: new Date(),
+          ...(solanaWallet ? { solanaWallet } : {}),
+          ...(ethereumWallet ? { ethereumWallet } : {}),
         },
       });
       console.log("User created successfully:", existing.id);
@@ -224,7 +267,9 @@ export async function POST(request: NextRequest) {
       console.warn(
         "Concurrent create detected (P2002). Loading existing user."
       );
-      existing = await prisma.user.findUnique({ where: { privyId } });
+      existing = privyId
+        ? await prisma.user.findUnique({ where: { privyId } })
+        : await prisma.user.findUnique({ where: { phantomId: phantomId! } });
     }
 
     if (!existing) {
@@ -239,7 +284,7 @@ export async function POST(request: NextRequest) {
     if (referralCode) {
       const awarded = await attachReferralOnce(
         existing.id,
-        privyId,
+        authId,
         referralCode
       );
       if (awarded)
@@ -247,7 +292,9 @@ export async function POST(request: NextRequest) {
     }
 
     // Return freshest snapshot
-    const fresh = await prisma.user.findUnique({ where: { privyId } });
+    const fresh = privyId
+      ? await prisma.user.findUnique({ where: { privyId } })
+      : await prisma.user.findUnique({ where: { phantomId: phantomId! } });
     if (!fresh) {
       return NextResponse.json(
         { error: "User not found after creation" },
@@ -277,14 +324,19 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const privyId = searchParams.get("privyId");
-    if (!privyId) {
+    const phantomId = searchParams.get("phantomId");
+    
+    if (!privyId && !phantomId) {
       return NextResponse.json(
-        { error: "PrivyId is required" },
+        { error: "privyId or phantomId is required" },
         { status: 400 }
       );
     }
 
-    const user = await prisma.user.findUnique({ where: { privyId } });
+    const user = privyId
+      ? await prisma.user.findUnique({ where: { privyId } })
+      : await prisma.user.findUnique({ where: { phantomId: phantomId! } });
+    
     if (!user) {
       return NextResponse.json({ error: "User not found" }, { status: 404 });
     }

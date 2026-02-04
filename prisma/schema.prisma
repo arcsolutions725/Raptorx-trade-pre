@@ -5,15 +5,19 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+  // directUrl = env("DIRECT_DATABASE_URL")
   url      = env("DATABASE_URL")
 }
 
 model User {
-  id       String  @id @default(cuid())
-  username String  @unique
-  email    String? @unique
-  privyId  String  @unique
-  points   Int     @default(0)
+  id        String  @id @default(cuid())
+  username  String  @unique
+  email     String? @unique
+  privyId   String? @unique
+  phantomId String? @unique
+  solanaWallet   String?
+  ethereumWallet String?
+  points    Int     @default(0)
 
   // TEMP: make it optional and remove @unique for first push
   referralCode String? @unique
@@ -28,13 +32,9 @@ model User {
   lastQueryDate  DateTime?
   queriesToday   Int       @default(0)
 
-  // BNB Daily Mission tracking
-  lastBnbMissionDate DateTime?
-  bnbMissionCompleted Boolean @default(false)
-  bnbWalletConnected Boolean @default(false)
-  bnbSignatureCompleted Boolean @default(false)
-
   reports   Report[]
+  swaps     SwapTransaction[]
+  clawV5Chats ClawV5Chat[]
   referrer  User?    @relation("UserReferrals", fields: [referredBy], references: [id])
   referrals User[]   @relation("UserReferrals")
 
@@ -50,11 +50,13 @@ model Report {
   ticker          String
   projectName     String?
   chain           String   @default("solana") // "solana" | "bnb"
+  reportType      String   @default("crypto") // "crypto" | "market"
   content         String
   dexData         Json? // store Dexscreener payload
   tweetsData      Json? // store parsed tweets data
   securityData    Json? // store security analytics data for BNB tokens
   holdersData     Json? // store holder analytics data for BNB tokens
+  marketData      Json? // store market-specific data for prediction markets
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -63,6 +65,7 @@ model Report {
 
   @@index([userId])
   @@index([userId, chain])
+  @@index([userId, reportType])
   @@index([contractAddress, chain])
   @@map("reports")
 }
@@ -112,4 +115,53 @@ model SystemReport {
   @@unique([contractAddress, ticker, chain])
   @@index([chain])
   @@map("systemreports")
+}
+
+model SwapTransaction {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  amountUSD       Float
+  fromToken       String
+  toToken         String
+  fromAddress     String
+  toAddress       String
+  chain           String   // "solana" | "bnb"
+  isBuy           Boolean  // true for buy, false for sell
+  pointsAwarded   Int      @default(0)
+  createdAt       DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, chain])
+  @@map("swaptransactions")
+}
+
+model ClawV5Chat {
+  id        String          @id @default(cuid())
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title     String
+  messages  ClawV5Message[]
+  createdAt DateTime        @default(now())
+  updatedAt DateTime        @updatedAt
+
+  @@index([userId])
+  @@map("clawv5chats")
+}
+
+enum ClawV5MessageRole {
+  user
+  assistant
+}
+
+model ClawV5Message {
+  id        String          @id @default(cuid())
+  chatId    String
+  chat      ClawV5Chat      @relation(fields: [chatId], references: [id], onDelete: Cascade)
+  role      ClawV5MessageRole
+  content   String
+  createdAt DateTime        @default(now())
+
+  @@index([chatId])
+  @@map("clawv5messages")
 }

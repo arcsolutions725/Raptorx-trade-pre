@@ -1,5 +1,6 @@
 "use client";
 
+import { useRef, useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 
 export type Chain = "solana" | "bsc" | "all";
@@ -9,62 +10,218 @@ interface ChainButtonsProps {
   onChainChange: (chain: Chain) => void;
 }
 
+type SliderStyle = {
+  left: number;
+  width: number;
+};
+
 export function ChainButtons({
   selectedChain,
   onChainChange,
 }: ChainButtonsProps) {
   const isActive = (chain: Chain) => selectedChain === chain;
+  const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [sliderStyle, setSliderStyle] = useState<SliderStyle | null>(null);
+
+  const chains: Chain[] = ["all", "bsc", "solana"];
+  const activeIndex = chains.indexOf(selectedChain);
+
+  const updateSliderPosition = useCallback(() => {
+    if (
+      activeIndex < 0 ||
+      !buttonRefs.current[activeIndex] ||
+      !containerRef.current
+    ) {
+      setSliderStyle(null);
+      return;
+    }
+
+    const activeButton = buttonRefs.current[activeIndex];
+    const container = containerRef.current;
+    const flexContainer = activeButton.parentElement;
+
+    if (!flexContainer || !activeButton) {
+      setSliderStyle(null);
+      return;
+    }
+
+    try {
+      const flexContainerRect = flexContainer.getBoundingClientRect();
+      const containerRect = container.getBoundingClientRect();
+      const flexContainerLeft =
+        flexContainerRect.left - containerRect.left + container.scrollLeft;
+
+      const buttonLeft = activeButton.offsetLeft;
+      const padding = 2;
+
+      setSliderStyle({
+        left: flexContainerLeft + buttonLeft + padding,
+        width: activeButton.offsetWidth,
+      });
+    } catch (err) {
+      console.warn("Failed to update slider position:", err);
+      setSliderStyle(null);
+    }
+  }, [activeIndex]);
+
+  useEffect(() => {
+    buttonRefs.current = new Array(chains.length).fill(null);
+  }, []);
+
+  useEffect(() => {
+    const rafId = requestAnimationFrame(() => {
+      updateSliderPosition();
+    });
+
+    return () => cancelAnimationFrame(rafId);
+  }, [activeIndex, updateSliderPosition]);
+
+  useEffect(() => {
+    let rafId: number | null = null;
+
+    const scheduleUpdate = () => {
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+      rafId = requestAnimationFrame(() => {
+        updateSliderPosition();
+      });
+    };
+
+    const handleResize = () => {
+      scheduleUpdate();
+    };
+
+    window.addEventListener("resize", handleResize, { passive: true });
+
+    const container = containerRef.current;
+    if (container && typeof ResizeObserver !== "undefined") {
+      const resizeObserver = new ResizeObserver(() => {
+        scheduleUpdate();
+      });
+      resizeObserver.observe(container);
+
+      return () => {
+        window.removeEventListener("resize", handleResize);
+        resizeObserver.disconnect();
+        if (rafId !== null) {
+          cancelAnimationFrame(rafId);
+        }
+      };
+    }
+
+    return () => {
+      window.removeEventListener("resize", handleResize);
+      if (rafId !== null) {
+        cancelAnimationFrame(rafId);
+      }
+    };
+  }, [updateSliderPosition]);
 
   return (
-    <div className="flex items-center gap-2">
-      <button
-        onClick={() => onChainChange("solana")}
-        className={`flex items-center gap-2 px-3 py-1.5 rounded-md border-none transition ${
-          isActive("solana")
-            ? "border-[#14F195] bg-[#14F195]/10 ring-2 ring-[#14F195]/50"
-            : "border-white/20 bg-black/30 hover:bg-white/10"
-        }`}
-        title="Solana"
-      >
-        <Image
-          src="/images/btn_solana.png"
-          alt="Solana"
-          width={16}
-          height={16}
-          className="object-contain"
+    <div
+      ref={containerRef}
+      className="relative flex items-center bg-white/12 p-0.5 overflow-x-auto scrollbar-none"
+      style={{
+        borderRadius: "12px",
+        maxWidth: "100%",
+        WebkitOverflowScrolling: "touch",
+        touchAction: "pan-x pan-y",
+        overscrollBehavior: "contain",
+        scrollBehavior: "smooth",
+      }}
+    >
+      {/* Animated background slider */}
+      {sliderStyle && (
+        <div
+          className="absolute top-[2px] bottom-[2px] bg-[#3C3C3C] shadow-md pointer-events-none"
+          style={{
+            left: `${sliderStyle.left}px`,
+            width: `${sliderStyle.width}px`,
+            height: "40px",
+            borderRadius: "12px",
+            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+            willChange: "left, width",
+            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+          }}
         />
-        {/* <span className="text-sm text-white font-medium">Solana</span> */}
-      </button>
-      <div className="w-[1px] h-[22px] bg-white mx-1"></div>
-      <button
-        onClick={() => onChainChange("bsc")}
-        className={`transition ${
-          isActive("bsc")
-            ? "opacity-100 ring-2 ring-[#F3BA2F] rounded-lg"
-            : "opacity-60 hover:opacity-100"
-        }`}
-        title="BNB Chain"
-      >
-        <Image
-          src="/images/bnb_btn.png"
-          alt="BNB Chain"
-          width={100}
-          height={100}
-          className="object-contain"
-        />
-      </button>
-      <div className="w-[1px] h-[22px] border-white bg-white mx-1"></div>
-      <button
-        onClick={() => onChainChange("all")}
-        className={`flex items-center gap-2 px-2.5 py-1 rounded-md transition ${
-          isActive("all")
-            ? "border-[#ffc000] bg-purple-500/10 ring-2 ring-[#ffc000]"
-            : "border-white/20 bg-black/30 hover:bg-white/10"
-        }`}
-        title="All Chains (Mixed)"
-      >
-        <span className="text-sm text-white font-medium">All</span>
-      </button>
+      )}
+
+      {/* Chain Buttons Container */}
+      <div className="relative flex items-center justify-start min-w-max gap-0">
+        <button
+          ref={(el) => {
+            buttonRefs.current[0] = el;
+          }}
+          onClick={() => onChainChange("all")}
+          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center flex-shrink-0 ${
+            isActive("all")
+              ? "text-white font-semibold"
+              : "text-white hover:text-white/90"
+          }`}
+          style={{
+            padding: "10px 14px",
+            height: "40px",
+            borderRadius: "12px",
+          }}
+          title="All Chains (Mixed)"
+        >
+          <span className="text-sm text-white font-medium">All</span>
+        </button>
+        <button
+          ref={(el) => {
+            buttonRefs.current[2] = el;
+          }}
+          onClick={() => onChainChange("solana")}
+          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 flex-shrink-0 ${
+            isActive("solana")
+              ? "text-white font-semibold"
+              : "text-white hover:text-white/90"
+          }`}
+          style={{
+            padding: "10px 14px",
+            height: "40px",
+            borderRadius: "12px",
+          }}
+          title="Solana"
+        >
+          <Image
+            src="/images/solana.png"
+            alt="Solana"
+            width={16}
+            height={16}
+            className="object-contain"
+          />
+          <span className="font-normal text-[14px]">Solana</span>
+        </button>
+        <button
+          ref={(el) => {
+            buttonRefs.current[1] = el;
+          }}
+          onClick={() => onChainChange("bsc")}
+          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 flex-shrink-0 ${
+            isActive("bsc")
+              ? "text-white font-semibold"
+              : "text-white hover:text-white/90"
+          }`}
+          style={{
+            padding: "10px 14px",
+            height: "40px",
+            borderRadius: "12px",
+          }}
+          title="BNB Chain"
+        >
+          <Image
+            src="/images/bnbchain.png"
+            alt="BNB Chain"
+            width={20}
+            height={20}
+            className="object-contain"
+          />
+          <span className="font-normal text-[14px]">BNB Chain</span>
+        </button>
+      </div>
     </div>
   );
 }

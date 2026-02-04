@@ -2,6 +2,9 @@
 
 import { PrivyProvider } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
+import { addRpcUrlOverrideToChain } from "@privy-io/chains";
+import { polygon } from "viem/chains";
+import { POLYGON_RPC_URL } from "@/constants/polymarket";
 import { ReactNode } from "react";
 
 interface PrivyProviderWrapperProps {
@@ -48,7 +51,9 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
           noPromptOnMfaRequired: false,
         },
         externalWallets: { solana: { connectors: toSolanaWalletConnectors() } },
+        defaultChain: polygon,
         supportedChains: [
+          addRpcUrlOverrideToChain(polygon, POLYGON_RPC_URL as string),
           {
             id: 56,
             name: "BNB Smart Chain",

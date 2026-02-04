@@ -67,7 +67,7 @@ export async function POST(
       data: { updatedAt: new Date() },
     });
 
-    // ---------- Daily Task Points: Award 100 points for user follow-up queries ----------
+    // ---------- Daily Task Points: Award up to 300 points/day for user follow-up queries ----------
     if (role === "user") {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -80,13 +80,22 @@ export async function POST(
       if (userForTasks) {
         const lastQueryDate = userForTasks.lastQueryDate;
         const isNewDay = !lastQueryDate || lastQueryDate < today;
+        const currentQueries =
+          typeof userForTasks.queriesToday === "number"
+            ? userForTasks.queriesToday
+            : 0;
+
+        // Cap at 3 queries per day -> max 300 pts/day for queries
+        const reachedDailyCap = !isNewDay && currentQueries >= 3;
 
         await prisma.user.update({
           where: { id: userId },
           data: {
-            points: { increment: 100 }, // Award 100 points for each follow-up query
+            ...(reachedDailyCap ? {} : { points: { increment: 100 } }),
             lastQueryDate: new Date(),
-            queriesToday: isNewDay ? 1 : { increment: 1 },
+            queriesToday: isNewDay
+              ? 1
+              : Math.min(currentQueries + 1, 3),
           },
         });
       }
