@@ -4,7 +4,7 @@
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import type { TrendingToken } from "@/hooks/useTrendingTokens";
-import { formatUsd } from "@/lib/utils/format";
+import { formatUsd } from "@/utils/format";
 import { useGenerateRexReport } from "@/hooks/useGenerateRexReport";
 import { usePrivy } from "@privy-io/react-auth";
 import copy from "copy-to-clipboard";
@@ -224,7 +224,7 @@ export function TableRow({
   const isEvenRow = index % 2 === 1;
 
   return (
-    <div className={`grid [grid-template-columns:minmax(300px,1.5fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] sm:[grid-template-columns:minmax(400px,2fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] items-center px-0 py-0 text-sm text-white/90 text-[14px]`}>
+    <div className={`grid grid-cols-[minmax(300px,1.5fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] sm:grid-cols-[minmax(400px,2fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] items-center px-0 py-0 text-sm text-white/90 text-[14px]`}>
       {/* Token */}
       <div
         className={`sm:sticky sm:left-0 sm:z-10 flex items-center px-3 py-2 gap-2 whitespace-nowrap truncate ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}
@@ -237,7 +237,7 @@ export function TableRow({
             type="button"
             onClick={openChart}
             onKeyDown={keyOpenChart}
-            className="pl-3 w-[35px] h-[35px] outline-none cursor-pointer group !py-0 !px-0 shrink-0 hidden sm:block"
+            className="pl-3 w-8.75 h-8.75 outline-none cursor-pointer group py-0! px-0! shrink-0 hidden sm:block"
             aria-label={`Open chart for ${displayName}`}
             title="Open chart"
           >
@@ -299,12 +299,12 @@ export function TableRow({
       </div>
 
       {/* Market Cap */}
-      <div className={`sm:sticky sm:left-[400px] h-[51px] items-center sm:z-10 flex justify-center px-3 py-2 whitespace-nowrap truncate ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
-        <span className="!font-bold">{formatUsd(mcap)}</span>
+      <div className={`sm:sticky sm:left-100 h-12.75 items-center sm:z-10 flex justify-center px-3 py-2 whitespace-nowrap truncate ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
+        <span className="font-bold!">{formatUsd(mcap)}</span>
       </div>
 
       {/* AI Report */}
-      <div className={`sm:sticky sm:left-[540px] h-[51px] sm:z-10 flex items-center justify-center px-3 py-2 whitespace-nowrap ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
+      <div className={`sm:sticky sm:left-135 h-12.75 sm:z-10 flex items-center justify-center px-3 py-2 whitespace-nowrap ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
         {isGenerating && countdown !== null ? (
           <div className="flex flex-col items-center">
             <div className="text-[#FFD700] font-bold text-lg animate-pulse">
@@ -312,8 +312,8 @@ export function TableRow({
             </div>
           </div>
         ) : hasGenerated ? (
-          <div className="flex items-center justify-center w-[78px] h-[32px] rounded-sm bg-[#FFD700]">
-            <span className="text-black !font-bold text-sm">
+          <div className="flex items-center justify-center w-19.5 h-8 rounded-sm bg-[#FFD700]">
+            <span className="text-black font-bold! text-sm">
               {isAdmin ? "Stored!" : "Generated!"}
             </span>
           </div>
@@ -323,7 +323,7 @@ export function TableRow({
               type="button"
               onClick={!authenticated ? handleSignIn : onGenerateClick}
               disabled={isGenerating || !ready}
-              className={`w-[70px] h-[30px] flex items-center justify-center transition ${
+              className={`w-17.5 h-7.5 flex items-center justify-center transition ${
                 isGenerating || !ready
                   ? "opacity-60 cursor-wait"
                   : "cursor-pointer"
@@ -345,7 +345,7 @@ export function TableRow({
               href={explorerUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-1.5 !font-medium !text-[14px] rounded-[8px] text-[#ffc000] transition-colors cursor-pointer hover:text-[#ffda44]"
+              className="flex items-center justify-center gap-1.5 font-medium! text-[14px]! rounded-lg text-[#ffc000] transition-colors cursor-pointer hover:text-[#ffda44]"
               aria-label={`View on ${isBnbChain ? "BSCScan" : "SolScan"}`}
               title={`View token on ${isBnbChain ? "BSCScan" : "SolScan"}`}
             >
@@ -356,28 +356,28 @@ export function TableRow({
       </div>
 
       {/* Volume */}
-      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-[51px] items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
-        <span className="!font-bold">{formatUsd(vol)}</span>
+      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-12.75 items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
+        <span className="font-bold!">{formatUsd(vol)}</span>
       </div>
 
       {/* Price */}
-      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-[51px] items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
-        <span className="!font-bold">{formatUsd(price)}</span>
+      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-12.75 items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
+        <span className="font-bold!">{formatUsd(price)}</span>
       </div>
 
       {/* Liquidity */}
-      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-[51px] items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
-        <span className="!font-bold">{formatUsd(liq)}</span>
+      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-12.75 items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
+        <span className="font-bold!">{formatUsd(liq)}</span>
       </div>
 
       {/* Age */}
-      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-[51px] items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
-        <span className="!font-bold">{age}</span>
+      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-12.75 items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
+        <span className="font-bold!">{age}</span>
       </div>
 
       {/* Last Generated On */}
-      <div className={`px-3 py-2 whitespace-nowrap truncate h-[51px] items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
-        <span className="!font-bold">{localLastGeneratedOn ?? ""}</span>
+      <div className={`px-3 py-2 whitespace-nowrap truncate h-12.75 items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
+        <span className="font-bold!">{localLastGeneratedOn ?? ""}</span>
       </div>
     </div>
   );

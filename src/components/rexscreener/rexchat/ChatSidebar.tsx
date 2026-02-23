@@ -345,7 +345,7 @@ export default function ChatSidebar({
                               </div>
                             ) : hasRegeneratedThis ? (
                               <div className="flex items-center justify-center rounded-sm bg-[#FFD700] px-1">
-                                <span className="text-black !font-bold text-xs">
+                                <span className="text-black font-bold! text-xs">
                                   Regenerated!
                                 </span>
                               </div>

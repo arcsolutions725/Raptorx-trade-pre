@@ -4,8 +4,18 @@ import { PrivyProvider } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 import { addRpcUrlOverrideToChain } from "@privy-io/chains";
 import { polygon } from "viem/chains";
+import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { POLYGON_RPC_URL } from "@/constants/polymarket";
 import { ReactNode } from "react";
+
+const SOLANA_RPC_URL =
+  process.env.NEXT_PUBLIC_HELIUS_RPC_URL ||
+  process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
+  "https://api.mainnet-beta.solana.com";
+const SOLANA_WS_URL = SOLANA_RPC_URL.replace(/^https:/, "wss:").replace(
+  /^http:/,
+  "ws:",
+);
 
 interface PrivyProviderWrapperProps {
   children: ReactNode;
@@ -51,6 +61,15 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
           noPromptOnMfaRequired: false,
         },
         externalWallets: { solana: { connectors: toSolanaWalletConnectors() } },
+        solana: {
+          rpcs: {
+            "solana:mainnet": {
+              rpc: createSolanaRpc(SOLANA_RPC_URL),
+              rpcSubscriptions: createSolanaRpcSubscriptions(SOLANA_WS_URL),
+              blockExplorerUrl: "https://explorer.solana.com",
+            },
+          },
+        },
         defaultChain: polygon,
         supportedChains: [
           addRpcUrlOverrideToChain(polygon, POLYGON_RPC_URL as string),

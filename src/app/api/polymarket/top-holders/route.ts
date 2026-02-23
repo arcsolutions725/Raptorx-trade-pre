@@ -27,8 +27,6 @@ export async function GET(request: NextRequest) {
     // The market parameter should be a condition ID (0x-prefixed 64-hex string)
     const holdersUrl = `https://data-api.polymarket.com/holders?market=${encodeURIComponent(market)}&limit=${limit}`;
     
-    console.log("Fetching Polymarket top holders:", holdersUrl);
-
     const response = await fetch(holdersUrl, {
       method: "GET",
       headers: {
@@ -50,7 +48,6 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
 
-    console.log("Polymarket holders data received:", JSON.stringify(data).substring(0, 500));
 
     // Parse the response from Polymarket Data API
     // The response structure is an array of token objects:

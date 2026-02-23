@@ -135,7 +135,7 @@ export function ChainButtons({
       {/* Animated background slider */}
       {sliderStyle && (
         <div
-          className="absolute top-[2px] bottom-[2px] bg-[#3C3C3C] shadow-md pointer-events-none"
+          className="absolute top-0.5 bottom-0.5 bg-[#3C3C3C] shadow-md pointer-events-none"
           style={{
             left: `${sliderStyle.left}px`,
             width: `${sliderStyle.width}px`,
@@ -155,7 +155,7 @@ export function ChainButtons({
             buttonRefs.current[0] = el;
           }}
           onClick={() => onChainChange("all")}
-          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center flex-shrink-0 ${
+          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center shrink-0 ${
             isActive("all")
               ? "text-white font-semibold"
               : "text-white hover:text-white/90"
@@ -174,7 +174,7 @@ export function ChainButtons({
             buttonRefs.current[2] = el;
           }}
           onClick={() => onChainChange("solana")}
-          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 flex-shrink-0 ${
+          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
             isActive("solana")
               ? "text-white font-semibold"
               : "text-white hover:text-white/90"
@@ -200,7 +200,7 @@ export function ChainButtons({
             buttonRefs.current[1] = el;
           }}
           onClick={() => onChainChange("bsc")}
-          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 flex-shrink-0 ${
+          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
             isActive("bsc")
               ? "text-white font-semibold"
               : "text-white hover:text-white/90"

@@ -109,7 +109,7 @@ function RowsPerPageSelect({
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onKeyDownButton}
-        className="flex items-center justify-between gap-2 w-[112px] px-3 py-1.5 rounded-md border border-white/20 bg-black/30 hover:bg-white/10 transition text-white"
+        className="flex items-center justify-between gap-2 w-28 px-3 py-1.5 rounded-md border border-white/20 bg-black/30 hover:bg-white/10 transition text-white"
       >
         <span className="text-sm">{value}</span>
         <ChevronDownIcon
@@ -124,7 +124,7 @@ function RowsPerPageSelect({
           tabIndex={-1}
           aria-activedescendant={`rpp-opt-${activeIndex}`}
           onKeyDown={onKeyDownList}
-          className={`absolute z-80 ${popPos} left-0 w-[160px] max-h-60 overflow-auto rounded-lg border border-white/15 bg-[#0A0A0A]/95 backdrop-blur supports-[backdrop-filter]:bg-[#0A0A0A]/70 shadow-2xl`}
+          className={`absolute z-80 ${popPos} left-0 w-40 max-h-60 overflow-auto rounded-lg border border-white/15 bg-[#0A0A0A]/95 backdrop-blur supports-backdrop-filter:bg-[#0A0A0A]/70 shadow-2xl`}
         >
           {options.map((opt, idx) => {
             const selected = opt === value;
@@ -164,16 +164,16 @@ function LeaderboardHeader() {
   return (
     <div className="sticky top-0 z-20 grid grid-cols-[1fr_3fr_1fr_1fr] text-white font-semibold shadow-sm bg-black">
       <div className="sticky left-0 z-30 flex items-center justify-center px-0.5 sm:px-1 py-2 sm:py-2.5 whitespace-nowrap truncate">
-        <span className="!font-semibold text-[12px]">Rank</span>
+        <span className="font-semibold! text-[12px]">Rank</span>
       </div>
       <div className="flex items-center justify-center px-1 sm:px-2 py-2 sm:py-2.5 whitespace-nowrap truncate">
-        <span className="!font-semibold text-[12px]">Trader</span>
+        <span className="font-semibold! text-[12px]">Trader</span>
       </div>
       <div className="flex items-center justify-center px-0.5 sm:px-1 py-2 sm:py-2.5 whitespace-nowrap truncate">
-        <span className="!font-semibold text-[12px]">Badge</span>
+        <span className="font-semibold! text-[12px]">Badge</span>
       </div>
       <div className="flex items-center justify-center px-0.5 sm:px-1 py-2 sm:py-2.5 whitespace-nowrap truncate">
-        <span className="!font-semibold text-[12px]">Points</span>
+        <span className="font-semibold! text-[12px]">Points</span>
       </div>
     </div>
   );
@@ -273,7 +273,7 @@ function PodiumCard({
 
       {/* Username */}
       <div className="mb-3 text-center">
-        <p className="text-base sm:text-lg font-semibold truncate max-w-[160px]">
+        <p className="text-base sm:text-lg font-semibold truncate max-w-40">
           {user.username}
         </p>
       </div>
@@ -368,14 +368,14 @@ function LeaderboardRow({
           <div className="min-w-0 flex-1">
             <div className="flex items-center justify-center gap-1 sm:gap-1.5">
               <h3
-                className={`font-medium !text-sm sm:!text-[14px] truncate ${
+                className={`font-medium text-sm! sm:text-[14px]! truncate ${
                   isCurrentUser ? "text-blue-300" : "text-white"
                 }`}
               >
                 {user.username}
               </h3>
               {isCurrentUser && (
-                <span className="text-[10px] sm:text-xs bg-[#ffc000] text-black px-1 sm:px-1.5 py-0.5 rounded-full flex-shrink-0 font-medium">
+                <span className="text-[10px] sm:text-xs bg-[#ffc000] text-black px-1 sm:px-1.5 py-0.5 rounded-full shrink-0 font-medium">
                   You
                 </span>
               )}
@@ -397,7 +397,7 @@ function LeaderboardRow({
       <div className="flex items-center justify-center px-0.5 sm:px-1 py-2 sm:py-2.5">
         <div className="text-center">
           <div
-            className={`text-sm sm:!text-[14px] font-bold ${
+            className={`text-sm sm:text-[14px]! font-bold ${
               isCurrentUser ? "text-blue-300" : "text-green-400"
             }`}
           >
@@ -495,7 +495,7 @@ export function Leaderboard({ currentUserId }: LeaderboardProps) {
   const renderPodiumView = () => (
     <div className="w-full flex flex-col gap-4">
       {/* Header content / context */}
-      <div className="text-center px-2 sm:px-4 pb-5 flex-shrink-0">
+      <div className="text-center px-2 sm:px-4 pb-5 shrink-0">
         <h3 className="text-lg sm:text-2xl font-semibold text-white">
           RaptorX Top Traders
         </h3>
@@ -513,22 +513,22 @@ export function Leaderboard({ currentUserId }: LeaderboardProps) {
 
       {/* Top 3 podium only */}
       {topThree.length > 0 && (
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           {/* Mobile layout: 1st on its own row, 2nd & 3rd below */}
           <div className="flex w-full flex-col gap-4 pt-4 pb-6 sm:hidden">
             {/* First place centered on its own line */}
             <div className="flex justify-center">
-              <div className="w-full max-w-[260px]">
+              <div className="w-full max-w-65">
                 <PodiumCard user={topThree[0]} position={1} />
               </div>
             </div>
 
             {/* Second & Third side by side */}
             <div className="flex w-full justify-between gap-3">
-              <div className="flex-1 max-w-[200px]">
+              <div className="flex-1 max-w-50">
                 <PodiumCard user={topThree[1] || topThree[0]} position={2} />
               </div>
-              <div className="flex-1 max-w-[200px]">
+              <div className="flex-1 max-w-50">
                 <PodiumCard
                   user={topThree[2] || topThree[topThree.length - 1]}
                   position={3}
@@ -540,15 +540,15 @@ export function Leaderboard({ currentUserId }: LeaderboardProps) {
           {/* Desktop layout: classic podium row */}
           <div className="hidden sm:flex w-full justify-center items-end gap-3 sm:gap-6 pt-4 pb-6">
             {/* 2nd */}
-            <div className="flex-1 max-w-[220px]">
+            <div className="flex-1 max-w-55">
               <PodiumCard user={topThree[1] || topThree[0]} position={2} />
             </div>
             {/* 1st - tallest in the center */}
-            <div className="flex-1 max-w-[260px]">
+            <div className="flex-1 max-w-65">
               <PodiumCard user={topThree[0]} position={1} />
             </div>
             {/* 3rd - lowest podium */}
-            <div className="flex-1 max-w-[220px]">
+            <div className="flex-1 max-w-55">
               <PodiumCard
                 user={topThree[2] || topThree[topThree.length - 1]}
                 position={3}
@@ -559,7 +559,7 @@ export function Leaderboard({ currentUserId }: LeaderboardProps) {
       )}
 
       {/* Show more link */}
-      <div className="flex justify-center pt-4 pb-2 flex-shrink-0">
+      <div className="flex justify-center pt-4 pb-2 shrink-0">
         <button
           type="button"
           onClick={() => setView("table")}

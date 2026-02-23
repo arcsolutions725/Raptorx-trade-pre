@@ -140,7 +140,7 @@ function RiskScoreDisplay({ score, level }: { score: number; level: string }) {
                 style={{ width: `${getProgressWidth(riskScore)}%` }}
               />
             </div>
-            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/10 to-transparent rounded-full pointer-events-none" />
+            <div className="absolute inset-0 bg-linear-to-r from-transparent via-white/10 to-transparent rounded-full pointer-events-none" />
           </div>
 
           <div className="flex justify-between text-xs text-gray-400">
@@ -376,7 +376,7 @@ function WarningsList({ warnings }: { warnings: string[] }) {
             className="flex items-start gap-3 p-3 bg-red-500/10 border border-red-500/20 rounded-lg animate-in slide-in-from-left duration-300"
             style={{ animationDelay: `${index * 100}ms` }}
           >
-            <div className="w-2 h-2 bg-red-500 rounded-full mt-2 flex-shrink-0" />
+            <div className="w-2 h-2 bg-red-500 rounded-full mt-2 shrink-0" />
             <span className="text-red-300 text-sm">{warning}</span>
           </div>
         ))}
@@ -408,7 +408,7 @@ function SafetyIndicatorsList({ indicators }: { indicators: string[] }) {
             className="flex items-start gap-3 p-3 bg-green-500/10 border border-green-500/20 rounded-lg animate-in slide-in-from-right duration-300"
             style={{ animationDelay: `${index * 100}ms` }}
           >
-            <div className="w-2 h-2 bg-green-500 rounded-full mt-2 flex-shrink-0" />
+            <div className="w-2 h-2 bg-green-500 rounded-full mt-2 shrink-0" />
             <span className="text-green-300 text-sm">{indicator}</span>
           </div>
         ))}
@@ -705,7 +705,7 @@ export function BirdeyeSafetyAnalyticsComponent({
 
       <div className="border-b border-gray-700 pb-6">
         <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-r from-red-500/10 to-red-600/10 p-4 rounded-lg border border-red-500/20">
+          <div className="bg-linear-to-r from-red-500/10 to-red-600/10 p-4 rounded-lg border border-red-500/20">
             <div className="text-sm text-red-400 font-medium mb-1">
               Risk Score
             </div>
@@ -713,7 +713,7 @@ export function BirdeyeSafetyAnalyticsComponent({
               {data.riskScore}/100
             </div>
           </div>
-          <div className="bg-gradient-to-r from-orange-500/10 to-orange-600/10 p-4 rounded-lg border border-orange-500/20">
+          <div className="bg-linear-to-r from-orange-500/10 to-orange-600/10 p-4 rounded-lg border border-orange-500/20">
             <div className="text-sm text-orange-400 font-medium mb-1">
               Warnings
             </div>
@@ -721,7 +721,7 @@ export function BirdeyeSafetyAnalyticsComponent({
               {data.warnings.length}
             </div>
           </div>
-          <div className="bg-gradient-to-r from-green-500/10 to-green-600/10 p-4 rounded-lg border border-green-500/20">
+          <div className="bg-linear-to-r from-green-500/10 to-green-600/10 p-4 rounded-lg border border-green-500/20">
             <div className="text-sm text-green-400 font-medium mb-1">
               Safety Features
             </div>
@@ -729,7 +729,7 @@ export function BirdeyeSafetyAnalyticsComponent({
               {data.safetyIndicators.length}
             </div>
           </div>
-          <div className="bg-gradient-to-r from-blue-500/10 to-blue-600/10 p-4 rounded-lg border border-blue-500/20">
+          <div className="bg-linear-to-r from-blue-500/10 to-blue-600/10 p-4 rounded-lg border border-blue-500/20">
             <div className="text-sm text-blue-400 font-medium mb-1">
               LP Holders
             </div>

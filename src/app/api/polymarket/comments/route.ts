@@ -73,7 +73,6 @@ export async function GET(request: NextRequest) {
     });
 
     const url = `https://gamma-api.polymarket.com/comments?${params.toString()}`;
-    console.log("Fetching Polymarket comments:", url);
 
     const response = await fetch(url, {
       method: "GET",

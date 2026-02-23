@@ -6,15 +6,11 @@ export async function GET() {
     // Use demo API for categories
     const baseUrl = "https://demo-api.kalshi.co/v1";
 
-    console.log("Fetching categories from:", `${baseUrl}/search/tags_by_categories`);
-
     const response = await axios.get(`${baseUrl}/search/tags_by_categories`, {
       headers: {
         "Content-Type": "application/json",
       },
     });
-
-    console.log("Categories response:", JSON.stringify(response.data, null, 2));
 
     // Validate response structure
     if (!response.data || typeof response.data !== "object") {
@@ -24,14 +20,17 @@ export async function GET() {
 
     // Ensure tags_by_categories exists
     if (!response.data.tags_by_categories) {
-      console.warn("Response missing tags_by_categories, returning empty object");
+      console.warn(
+        "Response missing tags_by_categories, returning empty object",
+      );
       return NextResponse.json(
         { tags_by_categories: {} },
         {
           headers: {
-            "Cache-Control": "public, s-maxage=3600, stale-while-revalidate=86400",
+            "Cache-Control":
+              "public, s-maxage=3600, stale-while-revalidate=86400",
           },
-        }
+        },
       );
     }
 
@@ -42,7 +41,7 @@ export async function GET() {
     });
   } catch (error) {
     console.error("Kalshi API error:", error);
-    
+
     if (axios.isAxiosError(error)) {
       console.error("Axios error details:", {
         status: error.response?.status,
@@ -50,12 +49,13 @@ export async function GET() {
         data: error.response?.data,
       });
     }
-    
-    const errorMessage = error instanceof Error ? error.message : "Failed to fetch categories";
-    
+
+    const errorMessage =
+      error instanceof Error ? error.message : "Failed to fetch categories";
+
     return NextResponse.json(
       { error: errorMessage, tags_by_categories: {} },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

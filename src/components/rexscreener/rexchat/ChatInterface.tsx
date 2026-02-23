@@ -101,6 +101,7 @@ export default function ChatInterface({
   const taRef = useRef<HTMLTextAreaElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
+  const hadStreamingRef = useRef(false);
 
   // Check if user is near bottom of scroll container
   const checkIfNearBottom = useCallback(() => {
@@ -132,11 +133,18 @@ export default function ChatInterface({
   }, [handleScroll]);
 
   useEffect(() => {
-    // Only auto-scroll when initiated by the user sending a query AND user is near bottom
+    // Only auto-scroll when user sent a message and is near bottom — do not scroll during or after AI answer generation
     if (!shouldAutoScroll) return;
     if (!shouldAutoScrollRef.current) return;
+    if (streamingContent) {
+      hadStreamingRef.current = true;
+      return;
+    }
+    if (hadStreamingRef.current) {
+      hadStreamingRef.current = false;
+      return;
+    }
 
-    // Use requestAnimationFrame for better performance
     const rafId = requestAnimationFrame(() => {
       endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
     });
@@ -153,37 +161,7 @@ export default function ChatInterface({
     setShouldAutoScroll(false);
   }, [reportId]);
 
-  // Auto-scroll to bottom when answer generation finishes
-  useEffect(() => {
-    // When sending becomes false and streamingContent is empty, streaming has finished
-    // Also check if we have messages to ensure the message was saved
-    if (
-      !sending &&
-      !streamingContent &&
-      shouldAutoScroll &&
-      reportData?.conversation?.messages?.length
-    ) {
-      // Force scroll to bottom to show the complete generated answer
-      // Use a small delay to ensure DOM has updated
-      let rafId: number | null = null;
-      const timeoutId = setTimeout(() => {
-        rafId = requestAnimationFrame(() => {
-          endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-        });
-      }, 100);
-      return () => {
-        clearTimeout(timeoutId);
-        if (rafId !== null) {
-          cancelAnimationFrame(rafId);
-        }
-      };
-    }
-  }, [
-    sending,
-    streamingContent,
-    shouldAutoScroll,
-    reportData?.conversation?.messages?.length,
-  ]);
+  // Do not auto-scroll when answer generation finishes — let the user scroll manually
 
   useEffect(() => {
     if (taRef.current) {
@@ -223,18 +201,14 @@ export default function ChatInterface({
 
       if (storedHolderData) {
         setHolderAnalytics(storedHolderData);
-        // console.log("Loaded stored holder analytics:", storedHolderData);
       } else {
         setHolderAnalytics(null);
-        // console.log("No stored holder analytics available");
       }
 
       if (storedSecurityData) {
         setSecurityAnalytics(storedSecurityData);
-        // console.log("Loaded stored security analytics:", storedSecurityData);
       } else {
         setSecurityAnalytics(null);
-        // console.log("No stored security analytics available");
       }
 
       setAnalyticsLoading(false);
@@ -487,7 +461,7 @@ export default function ChatInterface({
               >
                 <div className="flex items-start gap-2 sm:gap-3 md:gap-4">
                   {/* Avatar - responsive sizing */}
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-blue-500 rounded-full flex items-center justify-center flex-shrink-0 overflow-hidden">
+                  <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-blue-500 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
                     {profileImage ? (
                       <Image
                         src={profileImage}
@@ -516,7 +490,7 @@ export default function ChatInterface({
                             </span>
                             {isVerified && (
                               <span
-                                className="text-blue-400 flex-shrink-0"
+                                className="text-blue-400 shrink-0"
                                 title={`Verified ${verifiedType || "account"}`}
                               >
                                 {verifiedType === "Blue" ? "🔹" : "✓"}
@@ -530,7 +504,7 @@ export default function ChatInterface({
                                 <span className="text-white/30 hidden sm:inline">
                                   ·
                                 </span>
-                                <span className="text-white/50 text-xs sm:text-sm flex-shrink-0">
+                                <span className="text-white/50 text-xs sm:text-sm shrink-0">
                                   {formatTimestamp(tweet.createdAt)}
                                 </span>
                               </>
@@ -540,7 +514,7 @@ export default function ChatInterface({
                           {/* Secondary info line - stacks on mobile */}
                           <div className="flex items-center gap-2 sm:gap-3 mt-0.5 sm:mt-1 text-xs sm:text-sm text-white/50 flex-wrap">
                             {followers > 0 && (
-                              <span className="flex-shrink-0">
+                              <span className="shrink-0">
                                 {formatNumber(followers)} followers
                               </span>
                             )}
@@ -561,7 +535,7 @@ export default function ChatInterface({
                             href={tweet.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 text-xs sm:text-sm transition-colors flex-shrink-0 self-start mt-1 sm:mt-0"
+                            className="text-blue-400 hover:text-blue-300 text-xs sm:text-sm transition-colors shrink-0 self-start mt-1 sm:mt-0"
                           >
                             <span className="hidden sm:inline">
                               View on X →
@@ -656,26 +630,26 @@ export default function ChatInterface({
                     {/* Engagement metrics - improved mobile grid */}
                     <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm text-white/60 pt-2 sm:pt-3 border-t border-white/10">
                       <div className="flex items-center gap-1 min-w-0">
-                        <span className="flex-shrink-0">💬</span>
+                        <span className="shrink-0">💬</span>
                         <span className="truncate">
                           {formatNumber(tweet.replyCount || 0)}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 min-w-0">
-                        <span className="flex-shrink-0">🔄</span>
+                        <span className="shrink-0">🔄</span>
                         <span className="truncate">
                           {formatNumber(tweet.retweetCount || 0)}
                         </span>
                       </div>
                       <div className="flex items-center gap-1 min-w-0">
-                        <span className="flex-shrink-0">❤️</span>
+                        <span className="shrink-0">❤️</span>
                         <span className="truncate">
                           {formatNumber(tweet.likeCount || 0)}
                         </span>
                       </div>
                       {tweet.viewCount && (
                         <div className="flex items-center gap-1 min-w-0">
-                          <span className="flex-shrink-0">👁️</span>
+                          <span className="shrink-0">👁️</span>
                           <span className="truncate">
                             {formatNumber(tweet.viewCount)}
                           </span>
@@ -683,7 +657,7 @@ export default function ChatInterface({
                       )}
                       {tweet.quoteCount && tweet.quoteCount > 0 && (
                         <div className="flex items-center gap-1 min-w-0">
-                          <span className="flex-shrink-0">💭</span>
+                          <span className="shrink-0">💭</span>
                           <span className="truncate">
                             {formatNumber(tweet.quoteCount)}
                           </span>
@@ -691,7 +665,7 @@ export default function ChatInterface({
                       )}
                       {tweet.bookmarkCount && tweet.bookmarkCount > 0 && (
                         <div className="flex items-center gap-1 min-w-0">
-                          <span className="flex-shrink-0">🔖</span>
+                          <span className="shrink-0">🔖</span>
                           <span className="truncate">
                             {formatNumber(tweet.bookmarkCount)}
                           </span>
@@ -706,7 +680,7 @@ export default function ChatInterface({
                           <span className="truncate">via {tweet.source}</span>
                         )}
                         {tweet.lang && tweet.lang !== "en" && (
-                          <span className="flex-shrink-0">
+                          <span className="shrink-0">
                             lang: {tweet.lang}
                           </span>
                         )}
@@ -896,14 +870,14 @@ export default function ChatInterface({
         aria-label={title}
       >
         {isRegenerating && countdown !== null ? (
-          <div className="flex items-center justify-center w-[50px] h-[50px]">
+          <div className="flex items-center justify-center w-12.5 h-12.5">
             <div className="text-[#FFD700] font-bold text-lg animate-pulse">
               {countdown}s
             </div>
           </div>
         ) : hasRegenerated ? (
           <div className="flex items-center justify-center rounded-sm bg-[#FFD700] px-2 py-1">
-            <span className="text-black !font-bold text-xs">Regenerated!</span>
+            <span className="text-black font-bold! text-xs">Regenerated!</span>
           </div>
         ) : (
           <RotateCcw className="w-6 h-6 text-white hover:text-[#FFD700] transition-colors" />
@@ -953,8 +927,9 @@ export default function ChatInterface({
       setSending(true);
       setStreamingContent("");
       setShouldAutoScroll(true);
-      // Reset auto-scroll flag when sending a new message
+      // Reset auto-scroll flag when sending a new message (user scrolls manually when AI answers)
       shouldAutoScrollRef.current = true;
+      hadStreamingRef.current = false;
       // Scroll immediately to show the newly sent message area
       endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
 
@@ -1040,7 +1015,7 @@ export default function ChatInterface({
 
   return (
     <div
-      className="flex-1 min-w-0 flex flex-col h-full w-full max-w-[1440px] mx-auto overflow-x-hidden min-h-0"
+      className="flex-1 min-w-0 flex flex-col h-full w-full max-w-360 mx-auto overflow-x-hidden min-h-0"
       style={{
         maxHeight: "100dvh", // Use dynamic viewport height for mobile
       }}
@@ -1155,7 +1130,7 @@ export default function ChatInterface({
             />
           </div>
 
-          <div className="text-white/90 text-xl whitespace-pre-wrap break-words overflow-x-hidden pt-4">
+          <div className="text-white/90 text-xl whitespace-pre-wrap wrap-break-word overflow-x-hidden pt-4">
             {formatStructuredReport(reportData.content)}
           </div>
         </div>
@@ -1170,7 +1145,7 @@ export default function ChatInterface({
                   : "flex justify-end items-end"
               }`}
             >
-              <div className="max-w-full p-4 rounded-lg break-words">
+              <div className="max-w-full p-4 rounded-lg wrap-break-word">
                 <div className="flex items-center gap-2 mb-2">
                   {m.role === "user" ? (
                     <div className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-500">
@@ -1187,7 +1162,7 @@ export default function ChatInterface({
                     </div>
                   )}
                 </div>
-                <div className="text-white/90 break-words">
+                <div className="text-white/90 wrap-break-word">
                   {formatMessage(m.content)}
                 </div>
               </div>
@@ -1197,7 +1172,7 @@ export default function ChatInterface({
 
         {streamingContent && (
           <div className="mb-4 flex justify-end">
-            <div className="p-4 rounded-lg max-w-full break-words">
+            <div className="p-4 rounded-lg max-w-full wrap-break-word">
               <div className="flex items-center">
                 <Image
                   src="/images/assistant_banner.png"
@@ -1206,7 +1181,7 @@ export default function ChatInterface({
                   height={80}
                 />
               </div>
-              <div className="text-white/90 break-words">
+              <div className="text-white/90 wrap-break-word">
                 {formatMessage(streamingContent)}
                 <span className="inline-block w-2 h-4 bg-white/60 animate-pulse ml-1" />
               </div>
@@ -1218,7 +1193,7 @@ export default function ChatInterface({
       </div>
 
       <div
-        className="px-4 sm:px-8 w-full max-w-[1440px] mx-auto flex-shrink-0 pb-2 sm:pb-2"
+        className="px-4 sm:px-8 w-full max-w-360 mx-auto shrink-0 pb-2 sm:pb-2"
         style={{
           paddingBottom: "0.5rem", // Consistent padding on mobile
           position: "sticky",
@@ -1235,7 +1210,7 @@ export default function ChatInterface({
             onKeyDown={onKeyDown}
             placeholder="Ask any follow-up questions!"
             disabled={sending}
-            className="w-full max-w-full bg-[#262626] border-[0.5px] border-[#3C3C3C] text-[#BEBEBE] placeholder-[#BEBEBE] rounded-[8px] pl-4 pr-20 py-2.5 resize-none outline-none disabled:opacity-50 min-h-[50px] max-h-[200px] break-words text-[14px]"
+            className="w-full max-w-full bg-[#262626] border-[0.5px] border-[#3C3C3C] text-[#BEBEBE] placeholder-[#BEBEBE] rounded-lg pl-4 pr-20 py-2.5 resize-none outline-none disabled:opacity-50 min-h-[50px] max-h-[200px] break-words text-[14px]"
             rows={2}
             aria-label="Message input"
           />

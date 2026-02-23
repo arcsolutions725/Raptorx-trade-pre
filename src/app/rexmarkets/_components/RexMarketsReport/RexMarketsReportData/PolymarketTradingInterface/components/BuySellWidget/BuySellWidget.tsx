@@ -21,7 +21,10 @@ import { formatPrice } from "@/utils/polymarketTrading";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
 import LoginModal from "@/components/ui/modal/LoginModal";
-import { showSuccessNotification } from "@/components/ui/notification";
+import {
+  showSuccessNotification,
+  showErrorNotification,
+} from "@/components/ui/notification";
 
 type BuySellWidgetProps = {
   currentYesPrice: number;
@@ -75,14 +78,9 @@ export default function BuySellWidget({
   const [size, setSize] = useState(""); // Size in shares (for sell) or amount in dollars (for buy)
   const [orderType, setOrderType] = useState<"market" | "limit">("market");
   const [limitPrice, setLimitPrice] = useState(""); // Limit price in cents (1-99)
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
   const [isInitializing, setIsInitializing] = useState(false);
   const [showLoginModal, setShowLoginModal] = useState(false);
-  
-  // Refs to track timers for auto-hide
-  const errorTimerRef = useRef<NodeJS.Timeout | null>(null);
-  const successTimerRef = useRef<NodeJS.Timeout | null>(null);
+
   const lastErrorRef = useRef<string | null>(null);
 
   // Authentication hooks
@@ -115,69 +113,23 @@ export default function BuySellWidget({
     safeAddress as string | undefined
   );
 
-  // Sync orderError from hook to local error state for auto-hide
+  // Show order errors as notifications
   useEffect(() => {
     if (orderError) {
-      setError(orderError.message || "An error occurred");
+      showErrorNotification(
+        "Order failed",
+        orderError.message || "An error occurred",
+      );
     }
   }, [orderError]);
 
-  // Clear success/error messages after a delay
-  useEffect(() => {
-    // Clear any existing timer
-    if (successTimerRef.current) {
-      clearTimeout(successTimerRef.current);
-      successTimerRef.current = null;
-    }
-    
-    if (success) {
-      successTimerRef.current = setTimeout(() => {
-        setSuccess(null);
-        successTimerRef.current = null;
-      }, 5000);
-    }
-    
-    return () => {
-      if (successTimerRef.current) {
-        clearTimeout(successTimerRef.current);
-        successTimerRef.current = null;
-      }
-    };
-  }, [success]);
-
-  useEffect(() => {
-    // Clear any existing timer
-    if (errorTimerRef.current) {
-      clearTimeout(errorTimerRef.current);
-      errorTimerRef.current = null;
-    }
-    
-    if (error) {
-      errorTimerRef.current = setTimeout(() => {
-        setError(null);
-        lastErrorRef.current = null;
-        errorTimerRef.current = null;
-      }, 5000);
-    } else {
-      lastErrorRef.current = null;
-    }
-    
-    return () => {
-      if (errorTimerRef.current) {
-        clearTimeout(errorTimerRef.current);
-        errorTimerRef.current = null;
-      }
-    };
-  }, [error]);
-
-  // Display session errors when they occur
+  // Show session errors as notifications (dedupe to avoid repeated toasts)
   useEffect(() => {
     if (sessionError) {
       const errorMessage = sessionError.message;
-      // Only set error if it's different from the last error to avoid resetting timer
       if (lastErrorRef.current !== errorMessage) {
         lastErrorRef.current = errorMessage;
-        setError(errorMessage);
+        showErrorNotification("Error", errorMessage);
       }
     } else {
       lastErrorRef.current = null;
@@ -380,25 +332,39 @@ export default function BuySellWidget({
 
   const handleOutcomeSelect = (outcome: "Yes" | "No") => {
     setSelectedOutcome(outcome);
-    setError(null);
   };
 
   const handleSizeChange = (value: string) => {
     if (isValidDecimalInput(value)) {
       setSize(value);
-      setError(null);
     }
   };
 
   const handleLimitPriceChange = (value: string) => {
     if (isValidCentsInput(value)) {
       setLimitPrice(value);
-      setError(null);
     }
   };
 
+  // 25%, 50%, 75%, Max: for buy use % of USDC balance ($), for sell use % of available shares
+  const handlePercentClick = useCallback(
+    (percent: 25 | 50 | 75 | 100) => {
+      const pct = percent / 100;
+      if (activeTab === "buy") {
+        const walletDollars = usdcBalance ?? 0;
+        const amount = Math.max(0, pct * walletDollars);
+        setSize(amount.toFixed(2));
+      } else {
+        const maxShares = availableShares;
+        const shares = Math.max(0, pct * maxShares);
+        setSize(shares >= 0 ? String(Math.round(shares * 100) / 100) : "0");
+      }
+    },
+    [activeTab, usdcBalance, availableShares],
+  );
+
   const handleTrade = useCallback(async () => {
-    // Check authentication first
+    // Check authentication first - show LoginModal (Privy option)
     if (!authenticated) {
       setShowLoginModal(true);
       return;
@@ -409,13 +375,14 @@ export default function BuySellWidget({
     // Let initializeTradingSession handle wallet connection check internally
     if (!isTradingSessionComplete) {
       setIsInitializing(true);
-      setError(null);
-      setSuccess(null);
 
       try {
         await initializeTradingSession();
         setIsInitializing(false);
-        setSuccess("Trading session initialized successfully!");
+        showSuccessNotification(
+          "Trading session initialized",
+          "Trading session initialized successfully!",
+        );
         // Don't continue to place order - let user click again after initialization
         return;
       } catch (err) {
@@ -423,7 +390,7 @@ export default function BuySellWidget({
           err instanceof Error
             ? err.message
             : "Failed to initialize trading session";
-        setError(errorMsg);
+        showErrorNotification("Initialization failed", errorMsg);
         setIsInitializing(false);
         return;
       }
@@ -433,7 +400,7 @@ export default function BuySellWidget({
     const inputValue = parseFloat(size) || 0;
 
     if (!selectedOutcome) {
-      setError("Please select an outcome");
+      showErrorNotification("Error", "Please select an outcome");
       return;
     }
 
@@ -457,7 +424,7 @@ export default function BuySellWidget({
       }
 
       if (effectivePrice <= 0) {
-        setError("Invalid price. Please try again.");
+        showErrorNotification("Error", "Invalid price. Please try again.");
         return;
       }
 
@@ -465,21 +432,28 @@ export default function BuySellWidget({
       sizeNum = inputValue / effectivePrice;
 
       if (!isValidSize(sizeNum)) {
-        setError(`Amount must result in shares greater than ${MIN_ORDER_SIZE}`);
+        showErrorNotification(
+          "Error",
+          `Amount must result in shares greater than ${MIN_ORDER_SIZE}`,
+        );
         return;
       }
     } else {
       // For sell orders, inputValue is already in shares
       sizeNum = inputValue;
       if (!isValidSize(sizeNum)) {
-        setError(`Size must be greater than ${MIN_ORDER_SIZE}`);
+        showErrorNotification(
+          "Error",
+          `Size must be greater than ${MIN_ORDER_SIZE}`,
+        );
         return;
       }
 
       // Validate that user has enough shares to sell
       if (availableShares > 0 && sizeNum > availableShares) {
-        setError(
-          `Insufficient shares. Available: ${formatShares(availableShares)}`
+        showErrorNotification(
+          "Insufficient shares",
+          `Available: ${formatShares(availableShares)}`,
         );
         return;
       }
@@ -487,41 +461,54 @@ export default function BuySellWidget({
 
     if (orderType === "limit") {
       if (!limitPrice) {
-        setError("Limit price is required");
+        showErrorNotification("Error", "Limit price is required");
         return;
       }
 
       const cents = parseInt(limitPrice);
       if (!isValidPriceCents(cents)) {
-        setError("Price must be between 1 and 99 (0.01 to 0.99)");
+        showErrorNotification(
+          "Error",
+          "Price must be between 1 and 99 (0.01 to 0.99)",
+        );
         return;
       }
     }
 
     // Additional checks before placing order
     if (!eoaAddress) {
-      setError("Please connect your wallet first");
+      showErrorNotification("Error", "Please connect your wallet first");
       return;
     }
 
     if (isGeoblocked) {
-      setError("Trading is not available in your region");
+      showErrorNotification(
+        "Error",
+        "Trading is not available in your region",
+      );
       return;
     }
 
     if (!clobClient) {
-      setError("Trading client not available. Please try again.");
+      showErrorNotification(
+        "Error",
+        "Trading client not available. Please try again.",
+      );
       return;
     }
 
     const tokenId = getTokenId(selectedOutcome);
     if (!tokenId) {
       if (selectedOutcome === "No" && !selectedMarketData?.clob_no_token_id) {
-        setError(
-          "No token ID not available for this market. Please try selecting a different market or outcome."
+        showErrorNotification(
+          "Error",
+          "No token ID not available for this market. Please try selecting a different market or outcome.",
         );
       } else {
-        setError("Could not determine token ID for selected market");
+        showErrorNotification(
+          "Error",
+          "Could not determine token ID for selected market",
+        );
       }
       return;
     }
@@ -553,14 +540,12 @@ export default function BuySellWidget({
 
     // For buying, we need to check if user has enough USDC
     if (activeTab === "buy" && usdcBalance < totalCost) {
-      setError(
-        `Insufficient USDC balance. Available: $${formattedUsdcBalance}`
+      showErrorNotification(
+        "Insufficient USDC",
+        `Available: $${formattedUsdcBalance}`,
       );
       return;
     }
-
-    setError(null);
-    setSuccess(null);
 
     try {
       // For sell orders, use position's negRisk if available
@@ -598,14 +583,12 @@ export default function BuySellWidget({
       const result = await submitOrder(orderParams);
 
       if (result.success) {
-        setSuccess("Order submitted successfully.");
         setSize(""); // Clear size after successful order
         setLimitPrice(""); // Clear limit price
 
-        // Show toast notification with order ID
         showSuccessNotification(
           "Order Submitted Successfully.",
-          `Your Order Id: ${result.orderId}`
+          `Your Order Id: ${result.orderId}`,
         );
 
         // Call the parent callbacks for UI updates
@@ -618,7 +601,7 @@ export default function BuySellWidget({
     } catch (err) {
       const errorMsg =
         err instanceof Error ? err.message : "Failed to submit order";
-      setError(errorMsg);
+      showErrorNotification("Order failed", errorMsg);
       console.error("Trade error:", err);
     }
   }, [
@@ -786,13 +769,15 @@ export default function BuySellWidget({
             Sell
           </button>
         </div>
-        <div className="w-32">
+        <div className="min-w-[140px] max-w-[200px] flex-1">
           <Select
             value={selectedMarketValue}
             onChange={handleMarketChange}
             options={marketOptions}
             placeholder="Market"
             className="w-full"
+            searchable
+            searchPlaceholder="Search options..."
           />
         </div>
       </div>
@@ -866,10 +851,7 @@ export default function BuySellWidget({
         <label className="block text-xs text-white/60 mb-2">Order Type</label>
         <div className="flex gap-2">
           <button
-            onClick={() => {
-              setOrderType("market");
-              setError(null);
-            }}
+            onClick={() => setOrderType("market")}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
               orderType === "market"
                 ? "bg-[#ffc000] text-black"
@@ -879,10 +861,7 @@ export default function BuySellWidget({
             Market
           </button>
           <button
-            onClick={() => {
-              setOrderType("limit");
-              setError(null);
-            }}
+            onClick={() => setOrderType("limit")}
             className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
               orderType === "limit"
                 ? "bg-[#ffc000] text-black"
@@ -912,16 +891,38 @@ export default function BuySellWidget({
             <label className="block text-sm text-white/80">
               {activeTab === "buy" ? "Amount" : "Size (shares)"}
             </label>
-            {activeTab === "sell" && isTradingSessionComplete && (
-              <span className="text-sm text-white/80">
-                {selectedOutcome ? (
-                  <>Available shares: {formatShares(availableShares)}</>
-                ) : (
-                  <>
-                    Available: Yes {formatShares(availableSharesYes)}, No {formatShares(availableSharesNo)}
-                  </>
-                )}
-              </span>
+            {isTradingSessionComplete && (
+              <div className="flex flex-col items-start">
+                <span className="text-sm text-white/80">
+                  {activeTab === "buy" ? (
+                    <>Available: {formatCurrency(usdcBalance ?? 0)}</>
+                  ) : selectedOutcome ? (
+                    <>Available shares: {formatShares(availableShares)}</>
+                  ) : (
+                    <>
+                      Available: Yes {formatShares(availableSharesYes)}, No {formatShares(availableSharesNo)}
+                    </>
+                  )}
+                </span>
+                <div className="flex gap-1 mt-1.5">
+                  {([25, 50, 75, 100] as const).map((pct) => (
+                    <button
+                      key={pct}
+                      type="button"
+                      onClick={() => handlePercentClick(pct)}
+                      disabled={
+                        isSubmitting ||
+                        (activeTab === "buy"
+                          ? (usdcBalance ?? 0) <= 0
+                          : availableShares <= 0)
+                      }
+                      className="py-1 px-2 rounded border border-green-500/50 bg-white/5 text-white/90 text-[10px] font-medium hover:bg-white/10 hover:border-green-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white/5 transition-colors"
+                    >
+                      {pct === 100 ? "Max" : `${pct}%`}
+                    </button>
+                  ))}
+                </div>
+              </div>
             )}
           </div>
           <div className="relative">
@@ -1103,22 +1104,6 @@ export default function BuySellWidget({
       </div>
 
       {/* Error/Success Messages */}
-      {error && (
-        <div className="px-4 py-2 border-t border-white/10">
-          <div className="text-sm text-red-400 bg-red-500/10 border border-red-500/20 rounded px-3 py-2">
-            {error}
-          </div>
-        </div>
-      )}
-
-      {success && (
-        <div className="px-4 py-2 border-t border-white/10">
-          <div className="text-sm text-green-400 bg-green-500/10 border border-green-500/20 rounded px-3 py-2">
-            {success}
-          </div>
-        </div>
-      )}
-
       {/* Profit/Loss Display - Only show on Sell tab when user has a position */}
       {activeTab === "sell" &&
         isTradingSessionComplete &&
@@ -1186,7 +1171,6 @@ export default function BuySellWidget({
         </button>
       </div>
 
-      {/* Login Modal */}
       <LoginModal
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}

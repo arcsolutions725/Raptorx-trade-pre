@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useQueries } from "@tanstack/react-query";
 import {
   LineChart,
@@ -13,6 +13,7 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { getPolymarketInterval } from "@/utils/polymarketTrading";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type MarketWithClobToken = {
   clobTokenId: string;
@@ -56,6 +57,8 @@ type CustomTooltipProps = {
   label?: number | string;
   marketKeys: MarketKey[];
   chartData: ChartDataPoint[];
+  /** Only show tooltip rows for these (visible) markets; hidden lines are excluded */
+  visibleMarketKeys: MarketKey[];
 };
 
 const CustomTooltip = ({
@@ -63,6 +66,7 @@ const CustomTooltip = ({
   payload,
   marketKeys,
   chartData,
+  visibleMarketKeys,
 }: CustomTooltipProps) => {
   if (
     !active ||
@@ -89,8 +93,11 @@ const CustomTooltip = ({
     second: "2-digit",
   });
 
-  // For each market, find the closest data point
-  const marketData = marketKeys.map((market) => {
+  // Only show data for visible markets (hidden lines are excluded from tooltip)
+  const marketKeysToShow = visibleMarketKeys.length > 0 ? visibleMarketKeys : marketKeys;
+
+  // For each visible market, find the closest data point
+  const marketData = marketKeysToShow.map((market) => {
     // Find all data points that have data for this market
     const pointsWithData = chartData
       .map((point, index) => ({
@@ -402,6 +409,21 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
     });
   }, [marketsWithValidData]);
 
+  // Legend checkboxes: hidden = unchecked (line hidden). Default all visible.
+  const [hiddenMarketKeys, setHiddenMarketKeys] = useState<Set<string>>(new Set());
+  const visibleMarketKeys = useMemo(
+    () => marketKeys.filter((m) => !hiddenMarketKeys.has(m.key)),
+    [marketKeys, hiddenMarketKeys]
+  );
+  const toggleMarketVisibility = useCallback((key: string) => {
+    setHiddenMarketKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
   // Get last price value for each market to display in legend
   const lastPrices = useMemo(() => {
     if (!chartDataFormatted || chartDataFormatted.length === 0) {
@@ -425,6 +447,37 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
     
     return prices;
   }, [chartDataFormatted, marketKeys]);
+
+  // Y-axis domain: expand to data range using 5% steps (0, 5, 10, …, 95, 100)
+  const yDomain = useMemo((): [number, number] => {
+    if (!chartDataFormatted?.length || !visibleMarketKeys.length) return [0, 100];
+    let min = Infinity;
+    let max = -Infinity;
+    for (const point of chartDataFormatted) {
+      for (const market of visibleMarketKeys) {
+        const v = point[market.key];
+        if (typeof v === "number" && !isNaN(v)) {
+          min = Math.min(min, v);
+          max = Math.max(max, v);
+        }
+      }
+    }
+    if (min === Infinity || max === -Infinity) return [0, 100];
+    const step = 5;
+    const low = Math.max(0, Math.floor(min / step) * step);
+    let high = Math.min(100, Math.ceil(max / step) * step);
+    if (low >= high) high = Math.min(100, low + step);
+    return [low, high];
+  }, [chartDataFormatted, visibleMarketKeys]);
+
+  // Y-axis ticks at 5% steps within domain (85, 90, 95, …)
+  const yTicks = useMemo(() => {
+    const [low, high] = yDomain;
+    const step = 5;
+    const ticks: number[] = [];
+    for (let v = low; v <= high; v += step) ticks.push(v);
+    return ticks;
+  }, [yDomain]);
 
   // Get last data point time for each market to show markers
   // Each market may have its last data point at different times
@@ -506,8 +559,8 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
   }
 
   return (
-    <div className="flex flex-col h-full w-full">
-      <div className="flex-1 min-h-0">
+    <div className="flex flex-col h-full min-h-[280px] w-full">
+      <div className="flex-1 min-h-0 w-full">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={chartDataFormatted}
@@ -533,7 +586,8 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
             <YAxis
               stroke="#ffffff40"
               tick={{ fill: "#ffffff60", fontSize: 11 }}
-              domain={[0, 100]}
+              domain={yDomain}
+              ticks={yTicks}
               allowDataOverflow={false}
               tickFormatter={(value) => {
                 // Ensure value is a number and format as percentage
@@ -548,24 +602,42 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
                   {...props}
                   marketKeys={marketKeys}
                   chartData={chartDataFormatted}
+                  visibleMarketKeys={visibleMarketKeys}
                 />
               )}
             />
             <Legend
               wrapperStyle={{ color: "#fff", fontSize: "12px" }}
-              iconType="line"
-              formatter={(value: string, entry: any) => {
-                const market = marketKeys.find((m) => m.title === value);
-                if (market) {
-                  const lastPrice = lastPrices.get(market.key);
-                  if (lastPrice !== undefined) {
-                    return `${value} ${lastPrice.toFixed(1)}%`;
-                  }
-                }
-                return value;
-              }}
+              content={() => (
+                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2" style={{ color: "#fff", fontSize: "12px" }}>
+                  {marketKeys.map((market) => {
+                    const visible = !hiddenMarketKeys.has(market.key);
+                    const lastPrice = lastPrices.get(market.key);
+                    return (
+                      <div
+                        key={market.key}
+                        className="flex items-center gap-2 select-none"
+                      >
+                        <Checkbox
+                          checked={visible}
+                          onChange={() => toggleMarketVisibility(market.key)}
+                          size="sm"
+                        />
+                        <span
+                          className="inline-block w-2 h-2 rounded-sm shrink-0"
+                          style={{ backgroundColor: market.color }}
+                        />
+                        <span className="text-white/90">
+                          {market.title} {lastPrice !== undefined ? `${lastPrice.toFixed(1)}%` : ""}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             />
             {marketKeys.map((market) => {
+              if (hiddenMarketKeys.has(market.key)) return null;
               // Check if this market has data in the chart
               const hasData = chartDataFormatted.some((point) => {
                 const value = point[market.key];

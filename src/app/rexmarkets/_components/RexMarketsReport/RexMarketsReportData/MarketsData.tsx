@@ -2,6 +2,7 @@
 
 import Image from "next/image";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
+import { ChevronDown, ChevronRight } from "lucide-react";
 import {
   useMarketDetails,
   useMarketSummary,
@@ -55,10 +56,12 @@ export default function MarketsData({
   const { dataSource } = useDataSource();
   const { marketDetails, isLoading: isLoadingDetails } = useMarketDetails(
     eventTicker || null,
-    eventId || null
+    eventId || null,
   );
 
   const [imageError, setImageError] = useState(false);
+  const [probabilityTableExpanded, setProbabilityTableExpanded] = useState(true);
+  const [probabilityChartExpanded, setProbabilityChartExpanded] = useState(true);
 
   // Chat state
   const [messages, setMessages] = useState<MarketChatMessage[]>([]);
@@ -69,6 +72,7 @@ export default function MarketsData({
   const endRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
+  const hadStreamingRef = useRef(false);
 
   // Reset image error when market details change
   useEffect(() => {
@@ -110,10 +114,17 @@ export default function MarketsData({
     shouldAutoScrollRef.current = checkIfAtBottom();
   }, [checkIfAtBottom]);
 
-  // Auto-scroll when new messages arrive, but only if user is at bottom
+  // Do not auto-scroll when the AI answer is generating or just finished — user scrolls manually
   useEffect(() => {
+    if (streamingContent) {
+      hadStreamingRef.current = true;
+      return;
+    }
+    if (hadStreamingRef.current) {
+      hadStreamingRef.current = false;
+      return;
+    }
     if (shouldAutoScrollRef.current) {
-      // Use setTimeout to ensure DOM is updated
       setTimeout(() => {
         endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
       }, 0);
@@ -126,18 +137,18 @@ export default function MarketsData({
       taRef.current.style.height = "auto";
       taRef.current.style.height = `${Math.min(
         taRef.current.scrollHeight,
-        MAX_H
+        MAX_H,
       )}px`;
     }
   }, [inputMessage]);
 
   const { summary, isGenerating: isGeneratingSummary } = useMarketSummary(
     marketTitle || marketDetails?.title || null,
-    marketDetails
+    marketDetails,
   );
   const { insights, isGenerating: isGeneratingInsights } = useMarketInsights(
     marketTitle || marketDetails?.title || null,
-    marketDetails?.markets || null
+    marketDetails?.markets || null,
   );
 
   // Chat message sending
@@ -148,8 +159,9 @@ export default function MarketsData({
     try {
       setIsSending(true);
       setStreamingContent("");
-      // Reset auto-scroll when sending a new message
+      // Reset auto-scroll when sending a new message (user scrolls manually when AI answers)
       shouldAutoScrollRef.current = true;
+      hadStreamingRef.current = false;
 
       // Add user message
       const userMessage: MarketChatMessage = {
@@ -232,7 +244,7 @@ export default function MarketsData({
         handleSend();
       }
     },
-    [handleSend]
+    [handleSend],
   );
 
   const formatMessage = (content: string) =>
@@ -388,7 +400,7 @@ export default function MarketsData({
                   onError={() => {
                     console.error(
                       "Image failed to load:",
-                      marketDetails.symbol_image_url
+                      marketDetails.symbol_image_url,
                     );
                     setImageError(true);
                   }}
@@ -400,10 +412,7 @@ export default function MarketsData({
                 <h1 className="text-2xl font-bold text-[#ffc000] break-words flex items-center gap-2">
                   {marketTitle}
                   {externalLinkUrl && (
-                    <a
-                      href={externalLinkUrl}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    <button
                       className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md font-semibold text-xs transition-all duration-200 hover:scale-105 shadow-md ${
                         detectedSource === "kalshi"
                           ? "bg-gradient-to-r from-[#09C285] to-[#07A875] hover:from-[#007A5E] hover:to-[#006B52] text-white border border-[#0AE09A]/20"
@@ -439,7 +448,7 @@ export default function MarketsData({
                           </span>
                         </>
                       )}
-                    </a>
+                    </button>
                   )}
                 </h1>
               </div>
@@ -464,9 +473,29 @@ export default function MarketsData({
           </div>
         </div>
 
-        {/* Content Section */}
-        <div className="flex-shrink-0">
-          <div className="pb-6">
+        {/* Probability Table (collapsible) */}
+        <div className="flex-shrink-0 pb-6">
+          <button
+            type="button"
+            onClick={() => setProbabilityTableExpanded((prev) => !prev)}
+            className="flex w-full items-center gap-2 py-3 text-left font-semibold text-white hover:text-[#ffc000] transition-colors"
+            aria-expanded={probabilityTableExpanded}
+            aria-label={
+              probabilityTableExpanded
+                ? "Collapse probability table"
+                : "Expand probability table"
+            }
+          >
+            {probabilityTableExpanded ? (
+              <ChevronDown className="h-5 w-5 flex-shrink-0" />
+            ) : (
+              <ChevronRight className="h-5 w-5 flex-shrink-0" />
+            )}
+            <span>
+              Market Data <span className="text-[#ffc000]">Table</span>
+            </span>
+          </button>
+          {probabilityTableExpanded && (
             <div className="overflow-hidden">
               <div className="overflow-x-auto max-w-full">
                 <table className="w-full text-sm min-w-[800px]">
@@ -553,18 +582,45 @@ export default function MarketsData({
                 </table>
               </div>
             </div>
-          </div>
-
-          {/* Probability Chart Section */}
-          {marketDetails?.markets && marketDetails.markets.length > 0 && (
-            <div className="pb-6">
-              <ProbabilityChart
-                markets={marketDetails.markets}
-                totalVolume={totalVolume || marketDetails.total_volume}
-              />
-            </div>
           )}
+        </div>
 
+        {/* Probability Chart (collapsible) */}
+        {marketDetails?.markets && marketDetails.markets.length > 0 && (
+          <div className="flex-shrink-0 pb-6">
+            <button
+              type="button"
+              onClick={() => setProbabilityChartExpanded((prev) => !prev)}
+              className="flex w-full items-center gap-2 py-3 text-left font-semibold text-white hover:text-[#ffc000] transition-colors"
+              aria-expanded={probabilityChartExpanded}
+              aria-label={
+                probabilityChartExpanded
+                  ? "Collapse probability chart"
+                  : "Expand probability chart"
+              }
+            >
+              {probabilityChartExpanded ? (
+                <ChevronDown className="h-5 w-5 flex-shrink-0" />
+              ) : (
+                <ChevronRight className="h-5 w-5 flex-shrink-0" />
+              )}
+              <span>
+                Market Data <span className="text-[#ffc000]">Chart</span>
+              </span>
+            </button>
+            {probabilityChartExpanded && (
+              <div>
+                <ProbabilityChart
+                  markets={marketDetails.markets}
+                  totalVolume={totalVolume || marketDetails.total_volume}
+                />
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Content Section - AI Insights and below */}
+        <div className="flex-shrink-0">
           {/* AI Insights Section */}
           <div className="pb-6">
             <div className="">
@@ -679,47 +735,6 @@ export default function MarketsData({
               </div>
             </div>
           )}
-
-          {/* External Link Button at Bottom */}
-          {externalLinkUrl && (
-            <div className="pb-6 flex justify-center">
-              <a
-                href={externalLinkUrl}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={`flex items-center gap-1.5 px-4 py-2 rounded-md font-semibold text-xs transition-all duration-200 hover:scale-105 shadow-md ${
-                  detectedSource === "kalshi"
-                    ? "bg-gradient-to-r from-[#09C285] to-[#07A875] hover:from-[#007A5E] hover:to-[#006B52] text-white border border-[#0AE09A]/20"
-                    : "bg-gradient-to-r from-[#265CFF] to-[#1E4DD9] hover:from-[#1A4BCC] hover:to-[#1539A8] text-white border border-[#4A7AFF]/20"
-                }`}
-                aria-label={`View on ${
-                  detectedSource === "kalshi" ? "Kalshi" : "Polymarket"
-                }`}
-                title={`View on ${
-                  detectedSource === "kalshi" ? "Kalshi" : "Polymarket"
-                }`}
-              >
-                {detectedSource === "kalshi" ? (
-                  <>
-                    <span className="text-white font-bold text-base">K</span>
-                    <span className="font-medium">View on Kalshi</span>
-                  </>
-                ) : (
-                  <>
-                    <Image
-                      src="/images/polymarket.png"
-                      alt="Polymarket"
-                      width={14}
-                      height={14}
-                      className="w-[14px] h-[14px]"
-                    />
-                    <span className="font-medium">View on Polymarket</span>
-                  </>
-                )}
-              </a>
-            </div>
-          )}
-
           <div ref={endRef} />
         </div>
       </div>

@@ -1,44 +1,26 @@
 "use client";
 
-import { toast } from "react-toastify";
+import { toast } from "sonner";
+
+export { NotificationToaster } from "./NotificationToaster";
 
 export interface NotificationOptions {
-  position?: "top-left" | "top-center" | "top-right" | "bottom-left" | "bottom-center" | "bottom-right";
-  autoClose?: number | false;
-  hideProgressBar?: boolean;
-  closeOnClick?: boolean;
-  pauseOnHover?: boolean;
-  draggable?: boolean;
+  duration?: number;
+  description?: string;
 }
-
-const defaultOptions: NotificationOptions = {
-  position: "top-center",
-  autoClose: 5000,
-  hideProgressBar: false,
-  closeOnClick: true,
-  pauseOnHover: true,
-  draggable: true,
-};
 
 /**
  * Show a success notification with title and message
  */
 export function showSuccessNotification(
   title: string,
-  message: string,
+  message?: string,
   options?: NotificationOptions
 ) {
-  const mergedOptions = { ...defaultOptions, ...options };
-  
-  toast.success(
-    <div>
-      <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
-        {title}
-      </div>
-      <div>{message}</div>
-    </div>,
-    mergedOptions
-  );
+  toast.success(title, {
+    description: message,
+    duration: options?.duration ?? 5000,
+  });
 }
 
 /**
@@ -46,20 +28,13 @@ export function showSuccessNotification(
  */
 export function showErrorNotification(
   title: string,
-  message: string,
+  message?: string,
   options?: NotificationOptions
 ) {
-  const mergedOptions = { ...defaultOptions, ...options };
-  
-  toast.error(
-    <div>
-      <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
-        {title}
-      </div>
-      <div>{message}</div>
-    </div>,
-    mergedOptions
-  );
+  toast.error(title, {
+    description: message,
+    duration: options?.duration ?? 5000,
+  });
 }
 
 /**
@@ -67,20 +42,13 @@ export function showErrorNotification(
  */
 export function showInfoNotification(
   title: string,
-  message: string,
+  message?: string,
   options?: NotificationOptions
 ) {
-  const mergedOptions = { ...defaultOptions, ...options };
-  
-  toast.info(
-    <div>
-      <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
-        {title}
-      </div>
-      <div>{message}</div>
-    </div>,
-    mergedOptions
-  );
+  toast.info(title, {
+    description: message,
+    duration: options?.duration ?? 5000,
+  });
 }
 
 /**
@@ -88,19 +56,12 @@ export function showInfoNotification(
  */
 export function showWarningNotification(
   title: string,
-  message: string,
+  message?: string,
   options?: NotificationOptions
 ) {
-  const mergedOptions = { ...defaultOptions, ...options };
-  
-  toast.warning(
-    <div>
-      <div style={{ fontWeight: "bold", marginBottom: "4px" }}>
-        {title}
-      </div>
-      <div>{message}</div>
-    </div>,
-    mergedOptions
-  );
+  toast.warning(title, {
+    description: message,
+    duration: options?.duration ?? 5000,
+  });
 }
 

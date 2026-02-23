@@ -5,6 +5,9 @@ import { usePrivy } from "@privy-io/react-auth";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
 import Image from "next/image";
 
+// Show Phantom login option alongside Privy (hidden for now – Privy only)
+const SHOW_PHANTOM_LOGIN = true;
+
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -112,11 +115,11 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
           {/* Logo */}
           <div className="flex justify-center pt-8 pb-12">
             <Image
-              src={"/images/trending-logo.png"}
+              src={"/images/raptorx.png"}
               alt="RaptorX Logo"
               width={80}
               height={80}
-              className="w-[60px] h-[60px] sm:w-[70px] sm:h-[70px]"
+              className="w-[52px] h-[44px] sm:w-[71px] sm:h-[60px] md:w-[73px] md:h-[62px]"
             />
           </div>
 
@@ -151,50 +154,54 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
                 )}
               </button>
 
-              <button
-                onClick={() => handlePhantomConnect("google")}
-                disabled={phantomLoading || isConnecting}
-                className={`w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg transition-all duration-300 border ${
-                  phantomLoading || isConnecting
-                    ? "border-white/10 text-gray-400 cursor-not-allowed"
-                    : "border-white/20 hover:border-[#ffc000] text-white hover:text-[#ffc000]"
-                }`}
-              >
-                <Image
-                  src={"/images/phantom.png"}
-                  alt="Phantom"
-                  width={24}
-                  height={24}
-                  className="w-6 h-6"
-                />
-                <span
-                  className={`font-semibold text-sm ${
-                    phantomLoading || isConnecting ? "text-gray-400" : ""
+              {SHOW_PHANTOM_LOGIN && (
+                <button
+                  onClick={() => handlePhantomConnect("google")}
+                  disabled={phantomLoading || isConnecting}
+                  className={`w-full flex items-center justify-center gap-3 px-4 py-3 rounded-lg transition-all duration-300 border ${
+                    phantomLoading || isConnecting
+                      ? "border-white/10 text-gray-400 cursor-not-allowed"
+                      : "border-white/20 hover:border-[#ffc000] text-white hover:text-[#ffc000]"
                   }`}
                 >
-                  Phantom Connect
-                </span>
-                {phantomLoading && (
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-                )}
-              </button>
+                  <Image
+                    src={"/images/phantom.png"}
+                    alt="Phantom"
+                    width={24}
+                    height={24}
+                    className="w-6 h-6"
+                  />
+                  <span
+                    className={`font-semibold text-sm ${
+                      phantomLoading || isConnecting ? "text-gray-400" : ""
+                    }`}
+                  >
+                    Phantom Connect
+                  </span>
+                  {phantomLoading && (
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
+                  )}
+                </button>
+              )}
             </div>
 
-            <div className="pt-2 border-t-1 border-white/10">
-              <button
-                onClick={() => handlePhantomConnect()}
-                disabled={phantomLoading || isConnecting}
-                className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg transition-all duration-300 ${
-                  phantomLoading || isConnecting
-                    ? "text-gray-400 cursor-not-allowed"
-                    : "hover:border-[#ffc000]/50 text-white/80 hover:text-white"
-                }`}
-              >
-                <span className="text-xs font-medium">
-                  Or choose from all options
-                </span>
-              </button>
-            </div>
+            {SHOW_PHANTOM_LOGIN && (
+              <div className="pt-2 border-t-1 border-white/10">
+                <button
+                  onClick={() => handlePhantomConnect()}
+                  disabled={phantomLoading || isConnecting}
+                  className={`w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg transition-all duration-300 ${
+                    phantomLoading || isConnecting
+                      ? "text-gray-400 cursor-not-allowed"
+                      : "hover:border-[#ffc000]/50 text-white/80 hover:text-white"
+                  }`}
+                >
+                  <span className="text-xs font-medium">
+                    Or choose from all options
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

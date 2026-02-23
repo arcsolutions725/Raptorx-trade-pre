@@ -37,7 +37,6 @@ type User = {
 
 interface Props {
   generatedReport?: { id: string } | null;
-  // Technical indicator inputs (from Dexscreener view)
   selectedToken?: TrendingToken | null;
   tokenAddress?: string | null;
   isViewingChart?: boolean;
@@ -334,7 +333,7 @@ export function GenerateRexscreenerReport({
         <div className="absolute top-2 right-2 z-50">
           <button
             onClick={onClose}
-            className="flex items-center justify-center w-[40px] h-[40px] bg-[#3C3C3C] rounded-[8px] cursor-pointer hover:bg-[#4C4C4C] transition-colors"
+            className="flex items-center justify-center w-10 h-10 bg-[#3C3C3C] rounded-lg cursor-pointer hover:bg-[#4C4C4C] transition-colors"
             aria-label="Close sidebar"
           >
             <X width={18} height={18} />
@@ -418,7 +417,7 @@ export function GenerateRexscreenerReport({
                   ? "max-h-0 opacity-0"
                   : !swapMinimized
                   ? "max-h-[60vh] sm:max-h-[60vh] md:max-h-[60vh] opacity-100"
-                  : "max-h-[100dvh] opacity-100"
+                  : "max-h-dvh opacity-100"
               }`}
             >
               <div className="relative w-full bg-black">
@@ -428,14 +427,14 @@ export function GenerateRexscreenerReport({
                       {onClose && (
                         <button
                           onClick={onClose}
-                          className="flex items-center justify-center gap-1 z-51 w-[40px] h-[40px] bg-[#3C3C3C] rounded-[8px] cursor-pointer text-[14px]"
+                          className="flex items-center justify-center gap-1 z-51 w-10 h-10 bg-[#3C3C3C] rounded-lg cursor-pointer text-[14px]"
                           aria-label="Close sidebar"
                         >
                           <X width={18} height={18} />
                         </button>
                       )}
                       <div className="flex flex-col items-start ">
-                        <h6 className="!text-[12px] !font-normal text-[#F2F2F2]">
+                        <h6 className="text-[12px]! font-normal! text-[#F2F2F2]">
                           Rex Pilot
                         </h6>
                         <p className="text-[12px] font-normal text-[#7A7A7A]">
@@ -475,14 +474,14 @@ export function GenerateRexscreenerReport({
                         alt="Beta version"
                         width={28}
                         height={28}
-                        className="pb-5 ml-[-32px]"
+                        className="pb-5 -ml-8"
                       />
                     </div>
                     <div className="flex flex-col gap-8 items-center justify-center">
-                      <h1 className="max-w-[600px] w-full !text-[18px] !font-normal text-[#F2F2F2] text-center">
+                      <h1 className="max-w-150 w-full text-[18px]! font-normal! text-[#F2F2F2] text-center">
                         Rex Pilot. Your AI Pilot for everything crypto.
                       </h1>
-                      <h4 className="max-w-[600px] w-full font-light !text-[16px] text-center text_white">
+                      <h4 className="max-w-150 w-full font-light text-[16px]! text-center text_white">
                         Click <span className="text-[#00b050]">Generate</span>{" "}
                         to generate Alpha reports for any coin on Solana & BNB!
                       </h4>
@@ -490,7 +489,7 @@ export function GenerateRexscreenerReport({
                     {serverReports.length > 0 && (
                       <button
                         onClick={() => setShowHistory(true)}
-                        className="px-4 sm:px-6 py-2 sm:py-3 bg-[#ffc000] text-black rounded-lg !font-semibold text-xs sm:text-[14px] hover:bg-[#00b050] transition w-full sm:w-auto"
+                        className="px-4 sm:px-6 py-2 sm:py-3 bg-[#ffc000] text-black rounded-lg font-semibold! text-xs sm:text-[14px] hover:bg-[#00b050] transition w-full sm:w-auto"
                       >
                         View Report History ({serverReports.length})
                       </button>
@@ -541,15 +540,15 @@ export function GenerateRexscreenerReport({
                         alt="Beta version"
                         width={28}
                         height={28}
-                        className="pb-5 ml-[-32px]"
+                        className="pb-5 -ml-8"
                       />
                     </div>
                     <div className="flex flex-col gap-10 items-center justify-center">
                       <div className="flex flex-col gap-8">
-                        <h1 className="max-w-[600px] w-full !text-[18px] !font-normal text-[#F2F2F2] text-center">
+                        <h1 className="max-w-150 w-full text-[18px]! font-normal! text-[#F2F2F2] text-center">
                           Rex Pilot. Your AI Pilot for everything crypto.
                         </h1>
-                        <h4 className="max-w-[600px] w_full !text-[18px] !font-normal text-[#F2F2F2] text-center">
+                        <h4 className="max-w-150 w_full text-[18px]! font-normal! text-[#F2F2F2] text-center">
                           Click <span className="text-[#00b050]">Generate</span>{" "}
                           to generate Alpha reports for any coin on Solana & BNB!
                         </h4>
@@ -557,7 +556,7 @@ export function GenerateRexscreenerReport({
                       {serverReports.length > 0 && (
                         <button
                           onClick={() => setShowHistory(true)}
-                          className="px-4 sm:px-6 py-2 sm:py-3 bg-[#ffc000] text-black rounded-lg !font-semibold text-xs sm:text-[14px] hover:bg-[#00b050] transition w-full sm:w-auto"
+                          className="px-4 sm:px-6 py-2 sm:py-3 bg-[#ffc000] text-black rounded-lg font-semibold! text-xs sm:text-[14px] hover:bg-[#00b050] transition w-full sm:w-auto"
                         >
                           View Report History ({serverReports.length})
                         </button>
@@ -592,7 +591,7 @@ export function GenerateRexscreenerReport({
                             alt="report history"
                             width={140}
                             height={80}
-                            className="w-[100px] h-[40px] sm:w-[80px] sm:h-[34px] md:w-[100px] md:h-[40px]"
+                            className="w-25 h-10 sm:w-20 sm:h-8.5 md:w-25 md:h-10"
                           />
                         </button>
                       )}
@@ -755,13 +754,13 @@ export function GenerateRexscreenerReport({
               )}
             </div>
 
-            <div className="w-full border-t border-[#ffc000] bg-black relative z-40 flex-shrink-0">
+            <div className="w-full border-t border-[#ffc000] bg-black relative z-40 shrink-0">
               <div className="flex items-center justify-between">
                 <div className="w-full flex items-center justify-center">
                   {!swapMinimized && (
-                    <div className="w-full flex justify-between items-center bg-[#141414] px-5 py-3 flex-shrink-0">
+                    <div className="w-full flex justify-between items-center bg-[#141414] px-5 py-3 shrink-0">
                       <div className="flex flex-col items-start ">
-                        <h6 className="!text-[12px] !font-normal text-[#F2F2F2]">
+                        <h6 className="text-[12px]! font-normal! text-[#F2F2F2]">
                           Exchange Tokens Instantly
                         </h6>
                         <p className="text-[12px] font-normal text-[#7A7A7A]">
@@ -779,7 +778,7 @@ export function GenerateRexscreenerReport({
                     </div>
                   )}
                   {swapMinimized && (
-                    <div className="px-3 py-2 flex-shrink-0">
+                    <div className="px-3 py-2 shrink-0">
                       <button
                         onClick={() => {
                           setSwapMinimized(false);
@@ -806,12 +805,12 @@ export function GenerateRexscreenerReport({
               <div
                 className={`overflow-y-auto overflow-x-hidden mt-4 custom-sidebar-scrollbar transition-[max-height] duration-300 ease-in-out ${
                   swapMinimized
-                    ? "max-h-0 h-0 !mt-0 pointer-events-none"
+                    ? "max-h-0 h-0 mt-0! pointer-events-none"
                     : contentMinimized
                     ? "mt-0 max-h-[calc(100vh-120px)] sm:max-h-[calc(100vh-120px)]"
                     : selectedReportId
-                    ? "mt-0 max-h-[50vh] min-h-[300px] sm:max-h-[40vh] sm:min-h-[250px] md:max-h-[40vh]"
-                    : "mt-0 max-h-[40vh] min-h-[300px] sm:min-h-[250px]"
+                    ? "mt-0 max-h-[50vh] min-h-75 sm:max-h-[40vh] sm:min-h-62.5 md:max-h-[40vh]"
+                    : "mt-0 max-h-[40vh] min-h-75 sm:min-h-62.5"
                 }`}
                 aria-hidden={swapMinimized}
                 style={{ 
@@ -861,14 +860,14 @@ export function GenerateRexscreenerReport({
                   alt="Beta version"
                   width={28}
                   height={28}
-                  className="pb-5 ml-[-32px]"
+                  className="pb-5 -ml-8"
                 />
               </div>
               <div className="flex flex-col gap-20 items-center justify-center">
-                <h1 className="max-w-[600px] w-full !text-[18px] !font-normal text-[#F2F2F2] text-center">
+                <h1 className="max-w-150 w-full text-[18px]! font-normal! text-[#F2F2F2] text-center">
                   Rex Pilot. Your AI Pilot for everything crypto.
                 </h1>
-                <h4 className="max-w-[600px] w-full !text-[18px] !font-normal text-[#F2F2F2] text-center">
+                <h4 className="max-w-150 w-full text-[18px]! font-normal! text-[#F2F2F2] text-center">
                   Click <span className="text-[#00b050]">Generate</span> to
                   generate Alpha reports for any coin on Solana & BNB!
                 </h4>

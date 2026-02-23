@@ -9,7 +9,7 @@ import { usePolymarketDepositAddresses } from "@/hooks/usePolymarketDepositAddre
 import useSafeDeployment from "@/hooks/useSafeDeployment";
 
 type User = {
-  id: string; // cuid
+  id: string;
   username: string;
   email: string | null;
   privyId: string;
@@ -70,7 +70,7 @@ export default function AccountModal({
 
   const handleCopyAddress = (
     address: string,
-    type: "solana" | "ethereum" | "evm" | "svm" | "btc"
+    type: "solana" | "ethereum" | "evm" | "svm" | "btc",
   ) => {
     if (!address) return;
     copy(address);
@@ -125,7 +125,7 @@ export default function AccountModal({
       <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
         <div
           ref={modalRef}
-          className="w-[500px] max-w-[90%] bg-[#0D0D0D] rounded-xl shadow-2xl border border-white/10 pointer-events-auto max-h-[80vh] overflow-y-auto custom-sidebar-scrollbar"
+          className="w-125 max-w-[90%] bg-[#0D0D0D] rounded-xl shadow-2xl border border-white/10 pointer-events-auto max-h-[80vh] overflow-y-auto custom-sidebar-scrollbar"
         >
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-white/10">
@@ -218,7 +218,7 @@ export default function AccountModal({
                         </div>
                         <div className="flex justify-between items-center gap-2">
                           <span className="text-gray-400">Solana Wallet:</span>
-                          <div className="flex items-center gap-2 max-w-[220px]">
+                          <div className="flex items-center gap-2 max-w-55">
                             <span className="text-white text-right">
                               {currentUser.solanaWallet
                                 ? truncateAddress(currentUser.solanaWallet)
@@ -229,10 +229,10 @@ export default function AccountModal({
                                 onClick={() =>
                                   handleCopyAddress(
                                     currentUser.solanaWallet!,
-                                    "solana"
+                                    "solana",
                                   )
                                 }
-                                className="p-1 hover:bg-white/10 rounded transition-colors flex-shrink-0"
+                                className="p-1 hover:bg-white/10 rounded transition-colors shrink-0"
                                 title="Copy address"
                                 aria-label="Copy Solana wallet address"
                               >
@@ -247,7 +247,7 @@ export default function AccountModal({
                         </div>
                         <div className="flex justify-between items-center gap-2">
                           <span className="text-gray-400">BNB Wallet:</span>
-                          <div className="flex items-center gap-2 max-w-[220px]">
+                          <div className="flex items-center gap-2 max-w-55">
                             <span className="text-white text-right">
                               {currentUser.ethereumWallet
                                 ? truncateAddress(currentUser.ethereumWallet)
@@ -258,10 +258,10 @@ export default function AccountModal({
                                 onClick={() =>
                                   handleCopyAddress(
                                     currentUser.ethereumWallet!,
-                                    "ethereum"
+                                    "ethereum",
                                   )
                                 }
-                                className="p-1 hover:bg-white/10 rounded transition-colors flex-shrink-0"
+                                className="p-1 hover:bg-white/10 rounded transition-colors shrink-0"
                                 title="Copy address"
                                 aria-label="Copy Ethereum wallet address"
                               >
@@ -284,7 +284,7 @@ export default function AccountModal({
                           <span className="text-gray-400">Member Since:</span>
                           <span className="text-white">
                             {new Date(
-                              currentUser.createdAt
+                              currentUser.createdAt,
                             ).toLocaleDateString()}
                           </span>
                         </div>
@@ -292,7 +292,7 @@ export default function AccountModal({
                     </div>
 
                     {/* Deposit Addresses Section */}
-                    {derivedSafeAddressFromEoa && (
+                    {/* {derivedSafeAddressFromEoa && (
                       <div className="bg-white/5 rounded-lg p-4">
                         <h4 className="text-white font-semibold mb-3">
                           Deposit Addresses
@@ -312,7 +312,6 @@ export default function AccountModal({
                           </div>
                         ) : depositAddressesData?.address ? (
                           <div className="space-y-3">
-                            {/* EVM Address */}
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center justify-between">
                                 <span className="text-gray-400 text-xs">
@@ -340,7 +339,6 @@ export default function AccountModal({
                               </div>
                             </div>
 
-                            {/* Solana Address */}
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center justify-between">
                                 <span className="text-gray-400 text-xs">
@@ -368,7 +366,6 @@ export default function AccountModal({
                               </div>
                             </div>
 
-                            {/* Bitcoin Address */}
                             <div className="flex flex-col gap-1">
                               <div className="flex items-center justify-between">
                                 <span className="text-gray-400 text-xs">
@@ -408,7 +405,7 @@ export default function AccountModal({
                           </div>
                         )}
                       </div>
-                    )}
+                    )} */}
                   </div>
                 )}
 

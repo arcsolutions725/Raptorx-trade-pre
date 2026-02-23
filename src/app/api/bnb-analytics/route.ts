@@ -9,16 +9,11 @@ export async function GET(request: Request) {
     if (!contractAddress) {
       return NextResponse.json(
         { success: false, error: "Contract address is required" },
-        { status: 400 }
+        { status: 400 },
       );
     }
 
-    console.log("Fetching BNB holder analytics for:", contractAddress);
-
-    // Call the analytics function with server-side access to environment variables
     const result = await getBNBHolderAnalytics(contractAddress);
-
-    console.log("BNB analytics result:", result);
 
     return NextResponse.json(result);
   } catch (error) {
@@ -28,7 +23,7 @@ export async function GET(request: Request) {
         success: false,
         error: "Internal server error fetching BNB analytics",
       },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

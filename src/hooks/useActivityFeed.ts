@@ -24,7 +24,7 @@ export function useActivityFeed({
         filterType: "CASH",
         filterAmount: priceFilter,
       });
-      
+
       // Use market filter if specific market is selected, otherwise use eventId or conditionId
       if (marketFilter !== "all" && marketFilter) {
         params.append("market", marketFilter);
@@ -33,7 +33,7 @@ export function useActivityFeed({
       } else if (conditionId) {
         params.append("market", conditionId);
       }
-      
+
       const res = await fetch(`/api/polymarket/activity?${params.toString()}`);
       if (!res.ok) {
         const errorText = await res.text();
@@ -41,11 +41,9 @@ export function useActivityFeed({
         throw new Error(`Failed to fetch activity: ${res.status} ${errorText}`);
       }
       const data = await res.json();
-      // console.log("Activity data received:", data);
       return data;
     },
-    enabled: !!(marketFilter !== "all" ? marketFilter : (conditionId || eventId)),
+    enabled: !!(marketFilter !== "all" ? marketFilter : conditionId || eventId),
     refetchInterval: 30000, // Refetch every 30 seconds
   });
 }
-

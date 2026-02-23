@@ -232,10 +232,22 @@ export default function MarketDataTable({
     dataSource === "polymarket" || dataSource === "all"
   );
 
-  // Merge markets when in "all" mode
+  // Merge markets when in "all" mode, or add source identifier when in single-source mode
   const mergedMarkets = useMemo(() => {
     if (!isAllMode) {
-      return dataSource === "polymarket" ? polymarketMarkets.markets : kalshiMarkets.markets;
+      // Add source identifier even in single-source mode for proper routing
+      if (dataSource === "polymarket") {
+        return polymarketMarkets.markets.map((market: any) => ({
+          ...market,
+          _source: "polymarket" as const,
+        }));
+      } else {
+        // dataSource === "kalshi"
+        return kalshiMarkets.markets.map((market: any) => ({
+          ...market,
+          _source: "kalshi" as const,
+        }));
+      }
     }
     
     // Combine markets from both sources and add source identifier
@@ -474,6 +486,7 @@ export default function MarketDataTable({
     [setPageIndex]
   );
 
+  // Need to fix in here
   const handleMarketClick = useCallback(
     (m: { event_ticker?: string; ticker?: string; slug?: string; id?: string; title: string; volume?: number; volume24hr?: number; _source?: "kalshi" | "polymarket" }) => {
       const ticker = m.event_ticker || m.ticker || "";
@@ -484,14 +497,19 @@ export default function MarketDataTable({
       // Check if this is a Polymarket market
       const marketSource = m._source || dataSource;
       const isPolymarket = marketSource === "polymarket" || (dataSource === "all" && eventId);
+      const isKalshi = marketSource === "kalshi" || (dataSource === "all" && !eventId && ticker);
       
       if (isPolymarket && (slug || ticker)) {
         // For Polymarket: navigate to dedicated route using slug (preferred) or ticker as fallback
         // Don't open sidebar - it will be shown on the event page instead
         const routeParam = slug || ticker;
         router.push(`/rexmarkets/polymarket/${routeParam}`);
+      } else if (isKalshi && ticker) {
+        // For Kalshi: navigate to dedicated route using event_ticker
+        // Don't open sidebar - it will be shown on the event page instead
+        router.push(`/rexmarkets/kalshi/${ticker}`);
       } else {
-        // For Kalshi: use original behavior (just open sidebar)
+        // Fallback: use original behavior (just open sidebar)
         if (onMarketSelected) {
           onMarketSelected(ticker, m.title, volume, eventId);
         }
@@ -500,8 +518,8 @@ export default function MarketDataTable({
     [onMarketSelected, dataSource, router]
   );
 
-  // Handle market selection from URL parameters (e.g., from PolymarketInfoModal)
-  // Redirect to new route structure for Polymarket markets
+  // Handle market selection from URL parameters (e.g., from MarketInfoModal)
+  // Redirect to new route structure for Polymarket and Kalshi markets
   const searchParams = useSearchParams();
   useEffect(() => {
     const eventTicker = searchParams.get("event_ticker");
@@ -515,8 +533,14 @@ export default function MarketDataTable({
       return;
     }
     
-    // For non-Polymarket markets, handle normally
-    if (eventTicker && marketTitle && source !== "polymarket") {
+    if (eventTicker && source === "kalshi") {
+      // Redirect Kalshi markets to new route structure
+      router.replace(`/rexmarkets/kalshi/${eventTicker}`);
+      return;
+    }
+    
+    // For non-Polymarket and non-Kalshi markets, handle normally
+    if (eventTicker && marketTitle && source !== "polymarket" && source !== "kalshi") {
       // Check if URL params represent a different market than currently selected
       const isDifferentMarket = selectedForChart 
         ? (selectedForChart.eventTicker !== eventTicker || 

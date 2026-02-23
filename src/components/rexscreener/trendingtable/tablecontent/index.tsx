@@ -115,7 +115,7 @@ function RowsPerPageSelect({
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onKeyDownButton}
-        className="flex items-center justify-between gap-2 w-[80px] sm:w-[112px] px-3 py-1.5 rounded-md border border-white/20 bg-black/30 hover:bg-white/10 transition text-white"
+        className="flex items-center justify-between gap-2 w-20 sm:w-28 px-3 py-1.5 rounded-md border border-white/20 bg-black/30 hover:bg-white/10 transition text-white"
       >
         <span className="text-sm">{value}</span>
         <ChevronDown
@@ -130,7 +130,7 @@ function RowsPerPageSelect({
           tabIndex={-1}
           aria-activedescendant={`rpp-opt-${activeIndex}`}
           onKeyDown={onKeyDownList}
-          className={`absolute z-50 ${popPos} left-0 w-[160px] max-h-60 overflow-auto rounded-lg border border-white/15 bg-[#0A0A0A]/95 backdrop-blur supports-[backdrop-filter]:bg-[#0A0A0A]/70 shadow-2xl`}
+          className={`absolute z-50 ${popPos} left-0 w-40 max-h-60 overflow-auto rounded-lg border border-white/15 bg-[#0A0A0A]/95 backdrop-blur supports-backdrop-filter:bg-[#0A0A0A]/70 shadow-2xl`}
         >
           {options.map((opt, idx) => {
             const selected = opt === value;
@@ -457,7 +457,7 @@ export function TrendingTableContent({
   return (
     <div className="w-full flex flex-col gap-3">
       <div className="px-4 py-3 flex flex-col sm:flex-row items-start justify-center sm:justify-between gap-5 sm:gap-10">
-        <div className="flex-shrink-0">
+        <div className="shrink-0">
           <ChainButtons
             selectedChain={selectedChain}
             onChainChange={(chain) => {
@@ -468,7 +468,7 @@ export function TrendingTableContent({
         </div>
 
         <div className="w-full sm:flex-1 flex justify-center sm:justify-end">
-          <div className="w-full max-w-full sm:max-w-[300px]">
+          <div className="w-full max-w-full sm:max-w-75">
             <TokenSearchBar
               onSearch={handleSearch}
               onClear={handleClearSearch}
@@ -514,7 +514,7 @@ export function TrendingTableContent({
         {/* Always-visible top scrollbar */}
         <div
           ref={topScrollRef}
-          className={`sticky top-0 z-10 custom-hscroll-top bg-black/0 h-[16px] overflow-x-auto overflow-y-hidden ${
+          className={`sticky top-0 z-10 custom-hscroll-top bg-black/0 h-4 overflow-x-auto overflow-y-hidden ${
             ready ? "" : "pointer-events-none opacity-80"
           }`}
           onScroll={onTopScroll}

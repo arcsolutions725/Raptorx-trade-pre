@@ -47,7 +47,7 @@ export function RexChat({
   };
 
   return (
-    <div className="flex h-full w-full max-w-[1440px] mx-auto overflow-x-hidden min-h-0">
+    <div className="flex h-full w-full max-w-360 mx-auto overflow-x-hidden min-h-0">
       {isSidebarOpen && (
         <ChatSidebar
           userId={userId}

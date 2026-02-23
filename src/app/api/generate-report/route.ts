@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdminEmail } from "@/lib/auth/isAdmin";
 import { getTokenData } from "@/lib/api/tokenData";
 import { getTweetsSearch } from "@/lib/api/tweet";
-import { detectChain } from "@/lib/utils/detectChain";
+import { detectChain } from "@/utils/detectChain";
 import { getBNBHolderAnalytics } from "@/lib/api/bnbAnalytics";
 import { getBirdeyeSecurityAnalyticsWithMetadata } from "@/lib/api/birdeyeSecurtiy";
 
@@ -184,6 +184,7 @@ export async function POST(request: NextRequest) {
       projectName,
       storeToSystem, // admin-only path
       overwrite, // admin confirm
+      forceRefresh = false,
     } = await request.json();
 
     if (!contractAddress || !ticker) {
@@ -202,7 +203,7 @@ export async function POST(request: NextRequest) {
     const tkr = normTicker(ticker);
 
     // ---------- FAST-PATH for normal users: reuse SystemReport if exists ----------
-    if (!storeToSystem) {
+    if (!storeToSystem && !forceRefresh) {
       const userReport = await prisma.report.findFirst({
         where: {
           contractAddress: { equals: addr, mode: "insensitive" },
@@ -583,11 +584,14 @@ ${JSON.stringify(securityAnalytics, null, 2)}`
       tokenData,
       tweets: tweetsData,
       tweetsAnalyzed: (tweetsData as any).data?.length || 0,
+      holderAnalytics: holderAnalytics || null,
+      securityAnalytics: securityAnalytics || null,
       metadata: {
         contractAddress: addr,
         ticker: tkr,
         projectName: projectName || null,
         generatedAt: new Date().toISOString(),
+        chain: detectedChain,
         dataSourcesUsed: {
           dexScreener: !!(tokenData as any).dexData,
           coinGecko: !!(tokenData as any).coingeckoData,

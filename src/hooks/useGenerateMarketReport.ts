@@ -6,7 +6,6 @@ import type { PolymarketMarket } from "./usePolymarketMarkets";
 import { ReportCache } from "@/lib/storage/reportCache";
 import { useQueryClient } from "@tanstack/react-query";
 import { reportGenStore } from "@/lib/storage/reportGenStore";
-import { transformSeriesTitleToUrl } from "@/lib/utils/format";
 
 export type MarketReport = {
   id: string;

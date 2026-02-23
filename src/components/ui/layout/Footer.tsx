@@ -60,7 +60,7 @@ export default function Footer() {
         try {
           const res = await fetch(
             "/api/kalshi/markets?limit=15&status=open,unopened",
-            { cache: "no-store" }
+            { cache: "no-store" },
           );
           if (res.ok) {
             const data = await res.json();
@@ -93,14 +93,14 @@ export default function Footer() {
 
   return (
     <footer className="fixed bottom-0 left-0 right-0 w-full bg-[#141414] border-t-[0.5px] border-[#B58405]">
-      <div className="w-full flex flex-col gap-2 sm:gap-0 sm:flex-row justify-center sm:justify-between items-center px-[12px] sm:px-5 py-2">
+      <div className="w-full flex flex-col gap-2 sm:gap-0 sm:flex-row justify-center sm:justify-between items-center px-3 sm:px-5 py-2">
         <div className="flex items-center justify-center gap-2 sm:gap-4 sm:flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-shrink-0">
+          <div className="flex items-center gap-2 shrink-0">
             <div className="w-2 h-2 bg-[#00B050] rounded-full live-dot-pulse" />
             <span className="text-white text-[12px] font-normal">Live</span>
           </div>
 
-          <div className="flex-1 flex items-center min-w-0 overflow-hidden relative h-[40px]">
+          <div className="flex-1 flex items-center min-w-0 overflow-hidden relative h-10">
             {duplicatedItems.length > 0 ? (
               <div className="flex items-center gap-3 sm:gap-4 animate-scroll-infinite whitespace-nowrap">
                 {duplicatedItems.map((item, index) => (
@@ -110,11 +110,11 @@ export default function Footer() {
                         ? (item as PredictionMarket).ticker
                         : (item as CryptoToken).id
                     }-${index}`}
-                    className="flex-shrink-0 flex items-center gap-2 sm:gap-3 min-w-0"
+                    className="shrink-0 flex items-center gap-2 sm:gap-3 min-w-0"
                   >
                     {isRexMarketsPage ? (
                       <div className="flex flex-col min-w-0">
-                        <span className="text-white text-sm font-normal truncate max-w-[150px] sm:max-w-[200px]">
+                        <span className="text-white text-sm font-normal truncate max-w-37.5 sm:max-w-50">
                           {(item as PredictionMarket).title}
                         </span>
                         <div className="flex gap-2 text-sm">
@@ -156,7 +156,7 @@ export default function Footer() {
                             {
                               minimumFractionDigits: 2,
                               maximumFractionDigits: 2,
-                            }
+                            },
                           )}
                         </span>
                         <div className="flex items-center gap-1">
@@ -179,7 +179,7 @@ export default function Footer() {
                               <span className="text-red-500 text-sm font-normal">
                                 {Math.abs(
                                   (item as CryptoToken)
-                                    .price_change_percentage_24h
+                                    .price_change_percentage_24h,
                                 ).toFixed(2)}
                                 %
                               </span>

@@ -36,9 +36,9 @@ export function LeaderboardModal({
         </button>
 
         {/* Header */}
-        <div className="flex items-center justify-between p-3 sm:p-6 pr-12 sm:pr-16 border-b border-gray-700 flex-shrink-0">
+        <div className="flex items-center justify-between p-3 sm:p-6 pr-12 sm:pr-16 border-b border-gray-700 shrink-0">
           <div>
-            <h2 className="!text-lg sm:!text-2xl font-bold text-white">
+            <h2 className="text-lg! sm:text-2xl! font-bold text-white">
               RaptorX Leaderboard
             </h2>
           </div>

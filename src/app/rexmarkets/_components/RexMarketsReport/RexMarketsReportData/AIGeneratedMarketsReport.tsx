@@ -171,8 +171,6 @@ export default function AIGeneratedMarketsReport({
   const endRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
-  const prevStreamingContentRef = useRef("");
-  const prevIsSendingRef = useRef(false);
 
   const { data: selectedReportData } = useReportWithConversation(
     userId || undefined,
@@ -225,49 +223,8 @@ export default function AIGeneratedMarketsReport({
     }
   }, [checkIfNearBottom]);
 
-  // Auto-scroll when streaming content updates, but only if user is near bottom
-  useEffect(() => {
-    if (!shouldAutoScrollRef.current || !streamingContent) return;
-
-    // Use requestAnimationFrame for better performance
-    const rafId = requestAnimationFrame(() => {
-      endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    });
-
-    return () => cancelAnimationFrame(rafId);
-  }, [streamingContent]);
-
-  // Auto-scroll when new messages arrive
-  useEffect(() => {
-    if (messages.length === 0) return;
-
-    // Always scroll to bottom when a new message is added
-    const rafId = requestAnimationFrame(() => {
-      endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-      shouldAutoScrollRef.current = true;
-    });
-
-    return () => cancelAnimationFrame(rafId);
-  }, [messages.length]);
-
-  // Auto-scroll to bottom when streaming finishes
-  useEffect(() => {
-    const wasStreaming = prevStreamingContentRef.current.length > 0;
-    const finishedStreaming = wasStreaming && streamingContent.length === 0;
-    const wasSending = prevIsSendingRef.current;
-    const finishedSending = wasSending && !isSending;
-
-    if (finishedStreaming || finishedSending) {
-      // Streaming or sending just finished, scroll to bottom
-      setTimeout(() => {
-        endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-        shouldAutoScrollRef.current = true;
-      }, 100);
-    }
-
-    prevStreamingContentRef.current = streamingContent;
-    prevIsSendingRef.current = isSending;
-  }, [streamingContent, isSending]);
+  // Do not auto-scroll when the answer is generated — let the user scroll manually
+  // (streaming, new messages, and streaming-finished scroll effects removed for better UX)
 
   // Scroll to top when a new report is generated
   useEffect(() => {

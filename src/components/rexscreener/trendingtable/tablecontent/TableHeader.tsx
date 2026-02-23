@@ -27,7 +27,7 @@ export function TableHeader({
   };
 
   return (
-    <div className="sticky top-0 z-20 grid [grid-template-columns:minmax(300px,1.5fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] sm:[grid-template-columns:minmax(400px,2fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] bg-black text-white font-semibold shadow-sm">
+    <div className="sticky top-0 z-20 grid grid-cols-[minmax(300px,1.5fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] sm:grid-cols-[minmax(400px,2fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] bg-black text-white font-semibold shadow-sm">
       {/* Token — sticky only on sm+ */}
       <div 
         className="sm:sticky sm:left-0 sm:z-30 flex items-center px-3 py-2 whitespace-nowrap truncate bg-black sm:shadow-[2px_0_4px_rgba(0,0,0,0.3)] sm:isolation-auto"
@@ -38,7 +38,7 @@ export function TableHeader({
 
       {/* Mcap — sticky only on sm+ */}
       <div 
-        className="sm:sticky sm:left-[400px] sm:z-30 flex items-center justify-center px-3 py-2 whitespace-nowrap truncate bg-black sm:shadow-[2px_0_4px_rgba(0,0,0,0.3)] sm:isolation-auto"
+        className="sm:sticky sm:left-100 sm:z-30 flex items-center justify-center px-3 py-2 whitespace-nowrap truncate bg-black sm:shadow-[2px_0_4px_rgba(0,0,0,0.3)] sm:isolation-auto"
         style={{ isolation: 'isolate' } as React.CSSProperties}
       >
         <button
@@ -52,7 +52,7 @@ export function TableHeader({
 
       {/* AI Report — sticky only on sm+ */}
       <div 
-        className="sm:sticky sm:left-[540px] sm:z-30 flex items-center justify-center px-3 py-2 whitespace-nowrap truncate bg-black sm:shadow-[2px_0_4px_rgba(0,0,0,0.3)] sm:isolation-auto"
+        className="sm:sticky sm:left-135 sm:z-30 flex items-center justify-center px-3 py-2 whitespace-nowrap truncate bg-black sm:shadow-[2px_0_4px_rgba(0,0,0,0.3)] sm:isolation-auto"
         style={{ isolation: 'isolate' } as React.CSSProperties}
       >
         <span className="text-[12px] text-white/60 font-normal">AI Report</span>

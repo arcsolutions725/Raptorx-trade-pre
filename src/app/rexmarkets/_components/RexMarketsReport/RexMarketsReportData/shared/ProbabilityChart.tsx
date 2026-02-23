@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import {
   LineChart,
   Line,
@@ -9,9 +9,11 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
+  Legend,
   ResponsiveContainer,
 } from "recharts";
 import type { MarketOutcome } from "@/hooks/useMarketDetails";
+import { Checkbox } from "@/components/ui/checkbox";
 
 type ProbabilityChartProps = {
   markets: MarketOutcome[];
@@ -79,20 +81,74 @@ export default function ProbabilityChart({
   totalVolume,
 }: ProbabilityChartProps) {
   const [timeRange, setTimeRange] = useState<"1D" | "1W" | "1M" | "ALL">("ALL");
-  
-  // Get top 4 markets by probability for the chart
+  const [hiddenMarketKeys, setHiddenMarketKeys] = useState<Set<string>>(new Set());
+
+  const toggleMarketVisibility = useCallback((key: string) => {
+    setHiddenMarketKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
+
+  // Get top 4 markets by probability for the chart (same as PriceChart)
   const topMarkets = useMemo(() => {
     return [...markets]
       .sort((a, b) => b.probability - a.probability)
       .slice(0, 4);
   }, [markets]);
-  
+
+  const marketKeys = useMemo(
+    () =>
+      topMarkets.map((m, idx) => ({
+        key: m.ticker,
+        title: m.subtitle,
+        color: COLORS[idx % COLORS.length],
+      })),
+    [topMarkets],
+  );
+
+  const visibleMarketKeys = useMemo(
+    () => marketKeys.filter((m) => !hiddenMarketKeys.has(m.key)),
+    [marketKeys, hiddenMarketKeys],
+  );
+
   // Generate chart data based on time range
   const chartData = useMemo(() => {
     const days = timeRange === "1D" ? 1 : timeRange === "1W" ? 7 : timeRange === "1M" ? 30 : 90;
     return generateMockHistoricalData(topMarkets, days);
   }, [topMarkets, timeRange]);
-  
+
+  // Y-axis: always fit to visible data range (same as PriceChart)
+  const yDomain = useMemo((): [number, number] => {
+    if (!chartData.length || visibleMarketKeys.length === 0) return [0, 1];
+    let min = 1;
+    let max = 0;
+    for (const point of chartData) {
+      for (const market of visibleMarketKeys) {
+        const v = point[market.title] as number | undefined;
+        if (typeof v === "number" && !isNaN(v)) {
+          min = Math.min(min, v);
+          max = Math.max(max, v);
+        }
+      }
+    }
+    if (min >= max) return [0, 1];
+    const step = 0.05;
+    const low = Math.max(0, Math.floor(min / step) * step);
+    const high = Math.min(1, Math.ceil(max / step) * step);
+    return [low, high === low ? Math.min(1, low + step) : high];
+  }, [chartData, visibleMarketKeys]);
+
+  const yTicks = useMemo(() => {
+    const [low, high] = yDomain;
+    const step = 0.05;
+    const ticks: number[] = [];
+    for (let v = low; v <= high; v += step) ticks.push(v);
+    return ticks;
+  }, [yDomain]);
+
   // Format volume for display
   const formattedVolume = useMemo(() => {
     if (!totalVolume) return "$0";
@@ -104,38 +160,17 @@ export default function ProbabilityChart({
     }
     return `$${totalVolume.toLocaleString()}`;
   }, [totalVolume]);
-  
+
   if (!markets || markets.length === 0) {
     return null;
   }
-  
+
   return (
     <div className="w-full ">
-      {/* Header with legend and volume */}
+      {/* Header: volume and time range (same as PriceChart) */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-        {/* Legend */}
-        <div className="flex flex-wrap items-center gap-4">
-          {topMarkets.map((market, idx) => (
-            <div key={market.ticker} className="flex items-center gap-2">
-              <div
-                className="w-3 h-3 rounded-full"
-                style={{ backgroundColor: COLORS[idx % COLORS.length] }}
-              />
-              <span className="text-white text-sm font-medium">
-                {market.subtitle}
-              </span>
-              <span className="text-[#ffc000] text-sm font-semibold">
-                {(market.probability * 100).toFixed(0)}%
-              </span>
-            </div>
-          ))}
-        </div>
-        
-        {/* Volume and time range controls */}
         <div className="flex items-center gap-4">
-          <div className="text-white/80 text-sm">
-            {formattedVolume}
-          </div>
+          <div className="text-white/80 text-sm">{formattedVolume}</div>
           <div className="flex items-center gap-1 bg-white/10 rounded p-1">
             {(["1D", "1W", "1M", "ALL"] as const).map((range) => (
               <button
@@ -153,7 +188,7 @@ export default function ProbabilityChart({
           </div>
         </div>
       </div>
-      
+
       {/* Chart */}
       <div className="w-full h-[400px]">
         <ResponsiveContainer width="100%" height="100%">
@@ -171,8 +206,9 @@ export default function ProbabilityChart({
             <YAxis
               stroke="#ffffff60"
               tick={{ fill: "#ffffff80", fontSize: 12 }}
-              domain={[0, 1]}
-              tickFormatter={(value) => `${(value * 100).toFixed(0)}%`}
+              domain={yDomain}
+              ticks={yTicks}
+              tickFormatter={(value) => `${(Number(value) * 100).toFixed(0)}%`}
             />
             <Tooltip
               contentStyle={{
@@ -187,17 +223,54 @@ export default function ProbabilityChart({
               ]}
               labelStyle={{ color: "#ffc000" }}
             />
-            {topMarkets.map((market, idx) => (
-              <Line
-                key={market.ticker}
-                type="monotone"
-                dataKey={market.subtitle}
-                stroke={COLORS[idx % COLORS.length]}
-                strokeWidth={2.5}
-                dot={false}
-                activeDot={{ r: 4, fill: COLORS[idx % COLORS.length] }}
-              />
-            ))}
+            <Legend
+              wrapperStyle={{ color: "#fff", fontSize: "12px" }}
+              content={() => (
+                <div
+                  className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2"
+                  style={{ color: "#fff", fontSize: "12px" }}
+                >
+                  {marketKeys.map((market) => {
+                    const visible = !hiddenMarketKeys.has(market.key);
+                    const prob = topMarkets.find((m) => m.ticker === market.key)?.probability;
+                    return (
+                      <div
+                        key={market.key}
+                        className="flex items-center gap-2 select-none"
+                      >
+                        <Checkbox
+                          checked={visible}
+                          onChange={() => toggleMarketVisibility(market.key)}
+                          size="sm"
+                        />
+                        <span
+                          className="inline-block w-2 h-2 rounded-sm shrink-0"
+                          style={{ backgroundColor: market.color }}
+                        />
+                        <span className="text-white/90">
+                          {market.title}{" "}
+                          {prob !== undefined ? `${(prob * 100).toFixed(1)}%` : ""}
+                        </span>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            />
+            {topMarkets.map((market, idx) => {
+              if (hiddenMarketKeys.has(market.ticker)) return null;
+              return (
+                <Line
+                  key={market.ticker}
+                  type="monotone"
+                  dataKey={market.subtitle}
+                  stroke={COLORS[idx % COLORS.length]}
+                  strokeWidth={2.5}
+                  dot={false}
+                  activeDot={{ r: 4, fill: COLORS[idx % COLORS.length] }}
+                />
+              );
+            })}
           </LineChart>
         </ResponsiveContainer>
       </div>

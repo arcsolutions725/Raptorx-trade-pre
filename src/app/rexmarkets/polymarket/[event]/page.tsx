@@ -226,14 +226,14 @@ function PolymarketEventPageContent() {
           style={{
             WebkitOverflowScrolling: 'touch',
             touchAction: 'pan-y',
-            maxHeight: '100dvh', // Use dynamic viewport height for mobile
+            maxHeight: '100dvh',
           }}
         >
           <div className="h-full overflow-y-auto overflow-x-hidden bg-[#141414] custom-sidebar-scrollbar" style={{
             WebkitOverflowScrolling: 'touch',
             touchAction: 'pan-y',
             overscrollBehavior: 'contain',
-            maxHeight: '100dvh', // Use dynamic viewport height for mobile
+            maxHeight: '100dvh',
           }}>
             <RexMarketsReport
               generatedReport={generatedReport}

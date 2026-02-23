@@ -179,13 +179,11 @@ export async function GET(request: NextRequest) {
 
     // Transform the response
     const seriesList = data.current_page || [];
-    console.log(`Received ${seriesList.length} series from API for category: ${category || "all"}`);
     
     const markets = seriesList
       .map(transformSeriesToMarket)
       .filter((m: any) => m !== null); // Filter out null entries
     
-    console.log(`Transformed to ${markets.length} markets (filtered ${seriesList.length - markets.length} null entries)`);
 
     // Return in the expected format
     return NextResponse.json({

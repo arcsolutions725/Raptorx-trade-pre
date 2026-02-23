@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { isAdminEmail } from "@/lib/auth/isAdmin";
 import { getTokenData } from "@/lib/api/tokenData";
 import { getTweetsSearch } from "@/lib/api/tweet";
-import { detectChain } from "@/lib/utils/detectChain";
+import { detectChain } from "@/utils/detectChain";
 import { getBNBHolderAnalytics } from "@/lib/api/bnbAnalytics";
 import { getBirdeyeSecurityAnalyticsWithMetadata } from "@/lib/api/birdeyeSecurtiy";
 

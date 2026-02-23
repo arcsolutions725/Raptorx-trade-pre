@@ -58,11 +58,11 @@ export default function AuthCallbackPage() {
         {/* Logo */}
         <div className="flex justify-center mb-8">
           <Image
-            src={"/images/trending-logo.png"}
+            src={"/images/raptorx.png"}
             alt="RaptorX Logo"
             width={80}
             height={80}
-            className="w-[60px] h-[60px] sm:w-[70px] sm:h-[70px]"
+            className="w-[71px] h-[60px] sm:w-[83px] sm:h-[70px]"
           />
         </div>
 
@@ -77,19 +77,18 @@ export default function AuthCallbackPage() {
             {isSyncing
               ? "Setting up your account..."
               : isRedirecting
-              ? "Redirecting..."
-              : "Processing authentication..."}
+                ? "Redirecting..."
+                : "Processing authentication..."}
           </h1>
           <p className="text-white/70 text-base">
             {isSyncing
               ? "Please wait while we sync your account information"
               : isRedirecting
-              ? "Taking you to the main page"
-              : "Please wait while we verify your connection"}
+                ? "Taking you to the main page"
+                : "Please wait while we verify your connection"}
           </p>
         </div>
       </div>
     </div>
   );
 }
-

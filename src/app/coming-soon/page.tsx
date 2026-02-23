@@ -40,11 +40,11 @@ export default function ComingSoonPage() {
 
         <div className="flex items-end">
           <Image
-            src="/images/trending-logo.png"
+            src="/images/raptorx.png"
             alt="RaptorX Logo"
             width={120}
             height={120}
-            className="w-[50px] h-[50px] xs:w-[60px] xs:h-[60px] sm:w-[80px] sm:h-[80px]"
+            className="w-13 h-11 sm:w-17.75 sm:h-15 md:w-18.25 md:h-15.5"
             priority
           />
         </div>
@@ -57,7 +57,7 @@ export default function ComingSoonPage() {
           alt="Beta version"
           width={140}
           height={140}
-          className="w-[364px] min-h-[67px]"
+          className="w-91 min-h-16.75"
         />
       </div>
 

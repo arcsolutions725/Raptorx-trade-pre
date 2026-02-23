@@ -46,17 +46,6 @@ export default function useUserApiCredentials() {
         );
       }
 
-      if (process.env.NODE_ENV !== "production") {
-        console.log(
-          "[useUserApiCredentials] Creating ClobClient for L1 authentication",
-          {
-            address: eoaAddress,
-            host: CLOB_API_URL,
-            chainId: POLYGON_CHAIN_ID,
-          }
-        );
-      }
-
       // Create ClobClient with signer for L1 authentication
       // The ClobClient will automatically generate L1 auth headers (POLY_ADDRESS, POLY_SIGNATURE, etc.)
       // when calling deriveApiKey() or createApiKey()
@@ -73,9 +62,6 @@ export default function useUserApiCredentials() {
       );
 
       try {
-        if (process.env.NODE_ENV !== "production") {
-          console.log("[useUserApiCredentials] Attempting to derive API key...");
-        }
         // Try to derive existing credentials first (uses nonce 0 by default)
         const derivedCreds = await tempClient.deriveApiKey().catch((err) => {
           if (process.env.NODE_ENV !== "production") {
@@ -92,24 +78,10 @@ export default function useUserApiCredentials() {
           derivedCreds?.secret &&
           derivedCreds?.passphrase
         ) {
-          if (process.env.NODE_ENV !== "production") {
-            console.log(
-              "[useUserApiCredentials] Successfully derived existing API credentials"
-            );
-          }
           return derivedCreds;
         }
 
-        // Derive failed or returned invalid data - create new credentials
-        if (process.env.NODE_ENV !== "production") {
-          console.log("[useUserApiCredentials] Creating new API key...");
-        }
         const newCreds = await tempClient.createApiKey();
-        if (process.env.NODE_ENV !== "production") {
-          console.log(
-            "[useUserApiCredentials] Successfully created new API credentials"
-          );
-        }
         return newCreds;
       } catch (err: any) {
         if (process.env.NODE_ENV !== "production") {

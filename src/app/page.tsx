@@ -138,6 +138,8 @@ export default function Home() {
   const handleReportGenerated = useCallback((report: Report) => {
     setGeneratedReport(report);
     setShowReportSidebar(true);
+    // Auto-open swap widget so user can trade the token on the right
+    setForceShowExchange(true);
   }, []);
 
   const handleTokenSelect = useCallback(
@@ -148,8 +150,11 @@ export default function Home() {
       // Open the AI panel when viewing chart, close when not viewing
       if (viewing) {
         setShowReportSidebar(true);
+        // Auto-open swap widget with this coin so user can trade on the right
+        setForceShowExchange(true);
       } else {
         setShowReportSidebar(false);
+        setForceShowExchange(false);
       }
     },
     []

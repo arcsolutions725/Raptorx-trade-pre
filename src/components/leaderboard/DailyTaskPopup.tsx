@@ -150,9 +150,9 @@ export function DailyTasksPopup({
                 {/* Task 1: Generate Reports */}
                 <div className="flex items-center gap-3 mb-3">
                   {tasks.reportsCompleted >= tasks.reportsRequired ? (
-                    <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+                    <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
                   ) : (
-                    <Circle className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                    <Circle className="w-5 h-5 text-gray-500 shrink-0" />
                   )}
                   <div className="flex-1">
                     <p className="text-white text-sm">Generate 3 reports</p>
@@ -171,9 +171,9 @@ export function DailyTasksPopup({
                 {/* Task 2: Follow-up Queries */}
                 <div className="flex items-center gap-3">
                   {tasks.queriesCompleted >= tasks.queriesRequired ? (
-                    <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
+                    <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
                   ) : (
-                    <Circle className="w-5 h-5 text-gray-500 flex-shrink-0" />
+                    <Circle className="w-5 h-5 text-gray-500 shrink-0" />
                   )}
                   <div className="flex-1">
                     <p className="text-white text-sm">
@@ -194,7 +194,7 @@ export function DailyTasksPopup({
 
               {/* Mission Completion */}
               {tasks.isCompleted && (
-                <div className="bg-gradient-to-r from-green-600 to-emerald-600 rounded-lg p-4">
+                <div className="bg-linear-to-r from-green-600 to-emerald-600 rounded-lg p-4">
                   <div className="text-center text-white">
                     <CheckCircle className="w-8 h-8 mx-auto mb-2" />
                     <h4 className="font-bold">Mission Completed!</h4>

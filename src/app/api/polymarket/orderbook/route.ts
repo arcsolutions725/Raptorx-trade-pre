@@ -30,8 +30,6 @@ export async function GET(request: NextRequest) {
       tokenId
     )}`;
 
-    console.log("url: ", url);
-
     // Get API credentials and create authenticated headers
     try {
       getPolymarketCredentials();
@@ -48,13 +46,6 @@ export async function GET(request: NextRequest) {
     }
 
     const headers = createSimplePolymarketHeaders();
-
-    console.log(
-      "Fetching Polymarket order book:",
-      url,
-      "with token ID:",
-      tokenId
-    );
 
     const response = await fetch(url, {
       method: "GET",
@@ -126,11 +117,6 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
 
-    console.log(
-      "Polymarket order book raw data:",
-      JSON.stringify(data).substring(0, 1000)
-    );
-
     // Transform the order book data to match TradeFox format
     // Polymarket CLOB API returns bids (buy orders) and asks (sell orders)
     // The API response structure can be:
@@ -158,8 +144,6 @@ export async function GET(request: NextRequest) {
       bids = Array.isArray(data.book.bids) ? data.book.bids : [];
       asks = Array.isArray(data.book.asks) ? data.book.asks : [];
     }
-
-    console.log(`Found ${bids.length} bids and ${asks.length} asks`);
 
     // Sort bids descending (highest price first) and asks ascending (lowest price first)
     // Polymarket prices are in decimal format (0-1), so we keep them as-is
@@ -250,10 +234,6 @@ export async function GET(request: NextRequest) {
           !isNaN(ask.price) && !isNaN(ask.size) && ask.price > 0 && ask.size > 0
       )
       .sort((a, b) => a.price - b.price);
-
-    console.log(
-      `Processed ${sortedBids.length} valid bids and ${sortedAsks.length} valid asks`
-    );
 
     // Calculate spread
     const bestBid = sortedBids[0];

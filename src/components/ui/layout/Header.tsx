@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
@@ -8,10 +8,12 @@ import { useRouter, usePathname } from "next/navigation";
 import AccountModal from "@/components/ui/modal/AccountModal";
 import LoginModal from "@/components/ui/modal/LoginModal";
 import DepositWithdrawModal from "@/components/ui/modal/DepositWithdrawModal";
-import PolymarketInfoModal from "@/components/ui/modal/PolymarketInfoModal";
+import MarketInfoModal from "@/components/ui/modal/MarketInfoModal";
 import { User, X } from "lucide-react";
 import { useTopbar } from "@/contexts/TopbarContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
+import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
+import { useEthereumWalletAddress } from "@/hooks/useEthereumWalletAddress";
 
 type User = {
   id: string;
@@ -31,6 +33,7 @@ interface RexHeaderProps {
   onLogout?: () => void;
   title?: string;
   description?: string;
+  mobileMenuButton?: React.ReactNode;
 }
 
 export default function RexHeader({
@@ -40,11 +43,13 @@ export default function RexHeader({
   onLogout: externalOnLogout,
   title,
   description,
+  mobileMenuButton,
 }: RexHeaderProps) {
   const {
     authenticated: privyAuthenticated,
     ready,
     user: privyUser,
+    login: privyLogin,
     logout: privyLogout,
   } = usePrivy();
   const {
@@ -54,8 +59,13 @@ export default function RexHeader({
   } = usePhantomConnect();
   const router = useRouter();
   const pathname = usePathname();
-  const isRexMarketsPage = pathname === "/rexmarkets" || pathname.startsWith("/rexmarkets/");
+  const isRexMarketsPage =
+    pathname === "/rexmarkets" || pathname.startsWith("/rexmarkets/");
+  const isClawV5Page =
+    pathname === "/claw-v5" || pathname.startsWith("/claw-v5/");
   const { dataSource, setDataSource } = useDataSource();
+  const { solanaAddress } = useSolanaWalletAddress();
+  const { ethereumAddress } = useEthereumWalletAddress();
 
   // Combined authentication state
   const authenticated = privyAuthenticated || phantomAuthenticated;
@@ -63,12 +73,19 @@ export default function RexHeader({
 
   // Set title and description based on current page if not provided
   const displayTitle =
-    title || (isRexMarketsPage ? "Rex Markets" : "Market Overview");
+    title ||
+    (isClawV5Page
+      ? "Claw AI 5.0"
+      : isRexMarketsPage
+        ? "Rex Markets"
+        : "Market Overview");
   const displayDescription =
     description ||
-    (isRexMarketsPage
-      ? "Prediction Intelligence by your side."
-      : "Real-time insights powered by RaptorX AI and live market data.");
+    (isClawV5Page
+      ? "AI-powered chat assistant."
+      : isRexMarketsPage
+        ? "Prediction Intelligence by your side."
+        : "Real-time insights powered by RaptorX AI and live market data.");
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
@@ -135,6 +152,8 @@ export default function RexHeader({
         body: JSON.stringify({
           ...(privyId ? { privyId } : { phantomId }),
           email,
+          ...(solanaAddress ? { solanaWallet: solanaAddress } : {}),
+          ...(ethereumAddress ? { ethereumWallet: ethereumAddress } : {}),
         }),
         cache: "no-store",
       });
@@ -155,11 +174,28 @@ export default function RexHeader({
     phantomUser?.id,
     phantomUser?.email,
     privyUser,
+    solanaAddress,
+    ethereumAddress,
   ]);
 
   useEffect(() => {
     fetchUser();
   }, [fetchUser]);
+
+  // When Solana or Ethereum address becomes available (e.g. after Privy linkedAccounts load), refetch so we persist to DB
+  const prevSolanaRef = useRef<string | null>(null);
+  const prevEthereumRef = useRef<string | null>(null);
+  useEffect(() => {
+    const solanaNew =
+      authenticated && solanaAddress && solanaAddress !== prevSolanaRef.current;
+    const ethereumNew =
+      authenticated &&
+      ethereumAddress &&
+      ethereumAddress !== prevEthereumRef.current;
+    if (solanaNew) prevSolanaRef.current = solanaAddress;
+    if (ethereumNew) prevEthereumRef.current = ethereumAddress;
+    if (solanaNew || ethereumNew) fetchUser();
+  }, [authenticated, solanaAddress, ethereumAddress, fetchUser]);
 
   useEffect(() => {
     if (showAccountModal) {
@@ -171,7 +207,7 @@ export default function RexHeader({
   // Using client-side only approach to avoid Suspense boundary requirement
   useEffect(() => {
     if (typeof window === "undefined") return;
-    
+
     if (isRexMarketsPage) {
       const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.get("openPolymarketModal") === "true") {
@@ -190,7 +226,7 @@ export default function RexHeader({
       if (typeof window !== "undefined") {
         localStorage.clear();
       }
-      
+
       // Logout from the appropriate provider
       if (privyAuthenticated) {
         await privyLogout();
@@ -203,7 +239,7 @@ export default function RexHeader({
       if (externalOnLogout) {
         externalOnLogout();
       }
-      
+
       // Redirect to main page after logout
       router.push("/");
     } finally {
@@ -227,7 +263,7 @@ export default function RexHeader({
       <div className="w-full flex flex-col z-20">
         {/* Topbar */}
         {showTopbar && (
-          <div className="w-full flex items-center px-[12px] sm:px-5 py-2 bg-gradient-to-b from-[#002008] to-[#00761E] relative">
+          <div className="w-full flex items-center px-3 sm:px-5 py-2 bg-linear-to-b from-[#002008] to-[#00761E] relative">
             <div className="flex items-center gap-2 mx-auto">
               {/* <Info className="w-4 h-4 text-white" /> */}
               <span className="text-white text-sm font-normal">
@@ -236,7 +272,7 @@ export default function RexHeader({
             </div>
             <button
               onClick={() => setShowTopbar(false)}
-              className="absolute right-[12px] sm:right-5 p-1 hover:bg-white/10 rounded transition"
+              className="absolute right-3 sm:right-5 p-1 hover:bg-white/10 rounded transition"
               aria-label="Close topbar"
             >
               <X className="w-4 h-4 text-white" />
@@ -244,77 +280,152 @@ export default function RexHeader({
           </div>
         )}
 
-        <div className="w-full flex justify-between items-center px-[12px] sm:px-5 py-[10px] bg-[#141414] border-b-[0.5px] border-[#B58405]">
-          <div className="flex items-end flex-shrink-0">
+        <div className="w-full flex justify-between items-center px-3 sm:px-5 py-2.5 bg-[#141414] border-b-[0.5px] border-[#B58405]">
+          <div className="flex items-end shrink-0">
             <Image
-              src={"/images/trending-logo.png"}
+              src={"/images/raptorx.png"}
               alt="RaptorX Logo"
               width={100}
               height={100}
-              className="w-[50px] h-[50px] sm:w-[60px] sm:h-[60px] md:w-[62px] md:h-[62px]"
+              className="w-13 h-11 sm:w-17.75 sm:h-15 md:w-18.25 md:h-15.5"
             />
           </div>
 
-          <div className="relative inline-flex items-center">
-            <div
-              className="relative flex items-center bg-white/12 p-0.5"
-              style={{ width: "223px", borderRadius: "12px" }}
-            >
-              <div
-                className="absolute top-1 bottom-1 bg-[#ffc000] shadow-md"
-                style={{
-                  left: isRexMarketsPage ? "122px" : "3px",
-                  width: isRexMarketsPage ? "98px" : "119px",
-                  height: "40px",
-                  borderRadius: "12px",
-                  border: "0.5px solid #B58405",
-                  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                  willChange: "left, width",
-                  boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
-                  transform: isRexMarketsPage
-                    ? "translateX(0)"
-                    : "translateX(0)",
-                }}
-              />
-
-              {/* Buttons Container */}
-              <div className="relative flex items-center justify-center w-full h-full py-0.5 px-0.5">
+          {/* Center navigation */}
+          <div className="flex-1 min-w-0 px-2 sm:px-4">
+            {/* Mobile: compact segmented control (no fixed widths) */}
+            <div className="sm:hidden w-full">
+              <div className="w-full max-w-65 mx-auto bg-white/12 p-1 rounded-xl flex items-center gap-1">
                 <button
                   onClick={() => {
-                    if (!isRexMarketsPage) return;
-                    router.push("/");
+                    if (isClawV5Page || isRexMarketsPage) router.push("/");
                   }}
-                  className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center ${
-                    !isRexMarketsPage
-                      ? "text-black font-semibold"
-                      : "text-white/70 hover:text-white/90"
+                  className={`flex-1 min-w-0 h-9 rounded-[10px] text-[11px] font-semibold transition-colors truncate ${
+                    !isRexMarketsPage && !isClawV5Page
+                      ? "bg-[#ffc000] text-black border border-[#B58405]"
+                      : "bg-transparent text-white/80"
                   }`}
-                  style={{
-                    width: "121px",
-                    height: "40px",
-                    borderRadius: "12px",
-                  }}
                 >
                   RexScreener
                 </button>
                 <button
                   onClick={() => {
-                    if (isRexMarketsPage) return;
-                    router.push("/rexmarkets");
+                    if (!isRexMarketsPage && !isClawV5Page)
+                      router.push("/rexmarkets");
                   }}
-                  className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center ${
-                    isRexMarketsPage
-                      ? "text-black font-semibold"
-                      : "text-white/70 hover:text-white/90"
+                  className={`flex-1 min-w-0 h-9 rounded-[10px] text-[11px] font-semibold transition-colors truncate ${
+                    isRexMarketsPage && !isClawV5Page
+                      ? "bg-[#ffc000] text-black border border-[#B58405]"
+                      : "bg-transparent text-white/80"
                   }`}
-                  style={{
-                    width: "100px",
-                    height: "40px",
-                    borderRadius: "12px",
-                  }}
                 >
-                  Rex Markets
+                  Markets
                 </button>
+                <button
+                  onClick={() => {
+                    if (!isClawV5Page) router.push("/claw-v5");
+                  }}
+                  className={`flex-1 min-w-0 h-9 rounded-[10px] text-[11px] font-semibold transition-colors truncate ${
+                    isClawV5Page
+                      ? "bg-[#ffc000] text-black border border-[#B58405]"
+                      : "bg-transparent text-white/80"
+                  }`}
+                >
+                  Claw AI 5.0
+                </button>
+              </div>
+            </div>
+
+            {/* Desktop/tablet: existing animated slider */}
+            <div className="hidden sm:flex justify-center">
+              <div className="relative inline-flex items-center">
+                <div
+                  className="relative flex items-center bg-white/12 p-0.5"
+                  style={{ width: "340px", borderRadius: "12px" }}
+                >
+                  <div
+                    className="absolute top-1 bottom-1 bg-[#ffc000] shadow-md"
+                    style={{
+                      left: isClawV5Page
+                        ? "225px"
+                        : isRexMarketsPage
+                          ? "124px"
+                          : "3px",
+                      width: isClawV5Page
+                        ? "110px"
+                        : isRexMarketsPage
+                          ? "100px"
+                          : "119px",
+                      height: "40px",
+                      borderRadius: "12px",
+                      border: "0.5px solid #B58405",
+                      transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                      willChange: "left, width",
+                      boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+                    }}
+                  />
+
+                  {/* Buttons Container */}
+                  <div className="relative flex items-center justify-center w-full h-full py-0.5 px-0.5">
+                    <button
+                      onClick={() => {
+                        if (isClawV5Page || isRexMarketsPage) {
+                          router.push("/");
+                        }
+                      }}
+                      className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center ${
+                        !isRexMarketsPage && !isClawV5Page
+                          ? "text-black font-semibold"
+                          : "text-white/70 hover:text-white/90"
+                      }`}
+                      style={{
+                        width: "121px",
+                        height: "40px",
+                        borderRadius: "12px",
+                      }}
+                    >
+                      RexScreener
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!isRexMarketsPage) {
+                          router.push("/rexmarkets");
+                        }
+                      }}
+                      className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center ${
+                        isRexMarketsPage && !isClawV5Page
+                          ? "text-black font-semibold"
+                          : "text-white/70 hover:text-white/90"
+                      }`}
+                      style={{
+                        width: "100px",
+                        height: "40px",
+                        borderRadius: "12px",
+                      }}
+                    >
+                      Rex Markets
+                    </button>
+                    <button
+                      onClick={() => {
+                        if (!isClawV5Page) {
+                          router.push("/claw-v5");
+                        }
+                      }}
+                      className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center ${
+                        isClawV5Page
+                          ? "text-black font-semibold"
+                          : "text-white/70 hover:text-white/90"
+                      }`}
+                      style={{
+                        width: "110px",
+                        height: "40px",
+                        borderRadius: "12px",
+                      }}
+                    >
+                      Claw AI 5.0
+                    </button>
+                  </div>
+                </div>
               </div>
             </div>
           </div>
@@ -337,7 +448,7 @@ export default function RexHeader({
             {!authenticated ? (
               <button
                 onClick={handleSignIn}
-                className="w-[60px] h-[40px] rounded-[12px] flex items-center justify-center bg-[#ffc000] text-black font-bold text-[14px] cursor-pointer transition hover:bg-[#ffd000]"
+                className="w-14 sm:w-15 h-10 rounded-xl flex items-center justify-center bg-[#ffc000] text-black font-bold text-[14px] cursor-pointer transition hover:bg-[#ffd000]"
               >
                 Login
               </button>
@@ -378,7 +489,7 @@ export default function RexHeader({
                         }}
                         className="w-full px-4 py-3 text-left text-white hover:bg-white/10 transition-colors text-sm font-medium border-t border-white/10"
                       >
-                        Polymarket Open Orders
+                        Open Orders
                       </button>
                     </div>
                   </>
@@ -388,138 +499,142 @@ export default function RexHeader({
           </div>
         </div>
 
-        <div className="w-full flex flex-row sm:flex-row justify-between items-center gap-1 sm:gap-4 pt-6 px-[12px] sm:px-5">
-          <div className="flex flex-col">
-            <h1 className="!text-[18px] !font-normal text-[#F2F2F2]">
-              {displayTitle}
-            </h1>
-            <p className="!text-[14px] !font-normal text-[#7A7A7A] max-w-[180px] sm:max-w-full">
-              {displayDescription}
-            </p>
-          </div>
+        {!isClawV5Page && (
+          <div className="w-full flex flex-row sm:flex-row justify-between items-center gap-1 sm:gap-4 pt-6 px-3 sm:px-5">
+            <div className="flex flex-col">
+              <h1 className="text-[18px]! font-normal! text-[#F2F2F2]">
+                {displayTitle}
+              </h1>
+              <p className="text-[14px]! font-normal! text-[#7A7A7A] max-w-45 sm:max-w-full">
+                {displayDescription}
+              </p>
+            </div>
 
-          {/* Right: Exchange Button & Report History Button */}
-          <div className="flex flex-row gap-1 sm:gap-3 items-center">
-            {isRexMarketsPage && (
-              <>
-                <div className="flex items-center gap-1 sm:gap-2">
-                  <button
-                    onClick={() => setDataSource("all")}
-                    className={`relative font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center px-3 sm:px-4 h-[40px] rounded-[12px] ${
-                      dataSource === "all"
-                        ? "bg-[#ffc000] text-black font-semibold"
-                        : "bg-white/12 text-white/70 hover:text-white/90"
-                    }`}
-                  >
-                    <span>All</span>
-                  </button>
-
-                  <div className="relative inline-flex items-center">
-                    <div
-                      className="relative flex items-center bg-white/12 p-0.5 w-[82px] sm:w-[185px]"
-                      style={{ borderRadius: "12px" }}
+            {/* Right: Exchange Button & Report History Button */}
+            <div className="flex flex-row gap-1 sm:gap-3 items-center">
+              {isRexMarketsPage && (
+                <>
+                  <div className="flex items-center gap-1 sm:gap-2">
+                    <button
+                      onClick={() => setDataSource("all")}
+                      className={`relative font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center px-3 sm:px-4 h-10 rounded-xl ${
+                        dataSource === "all"
+                          ? "bg-[#ffc000] text-black font-semibold"
+                          : "bg-white/12 text-white/70 hover:text-white/90"
+                      }`}
                     >
+                      <span>All</span>
+                    </button>
+
+                    <div className="relative inline-flex items-center">
                       <div
-                        className="absolute top-1 bottom-1 shadow-md"
-                        style={{
-                          left:
-                            dataSource === "polymarket"
-                              ? isMobile
-                                ? "41px"
-                                : "83px"
-                              : "1px",
-                          width: isMobile
-                            ? "40px"
-                            : dataSource === "polymarket"
-                            ? "100px"
-                            : "85px",
-                          height: "40px",
-                          borderRadius: "12px",
-                          transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                          willChange: "left, width",
-                          boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
-                          backgroundColor:
-                            dataSource === "polymarket" ? "#2C59F7" : "#17cb91",
-                          opacity: dataSource === "all" ? 0 : 1,
-                        }}
-                      />
-                      <div className="relative flex items-center justify-center w-full h-full py-0.5 px-0.5 gap-1 sm:gap-2">
-                        <button
-                          onClick={() => setDataSource("kalshi")}
-                          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-0 sm:gap-1.5 w-[40px] sm:w-[85px] ${
-                            dataSource === "kalshi"
-                              ? "text-black font-semibold"
-                              : "text-white/70 hover:text-white/90"
-                          }`}
+                        className="relative flex items-center bg-white/12 p-0.5 w-20.5 sm:w-46.25"
+                        style={{ borderRadius: "12px" }}
+                      >
+                        <div
+                          className="absolute top-1 bottom-1 shadow-md"
                           style={{
+                            left:
+                              dataSource === "polymarket"
+                                ? isMobile
+                                  ? "41px"
+                                  : "83px"
+                                : "1px",
+                            width: isMobile
+                              ? "40px"
+                              : dataSource === "polymarket"
+                                ? "100px"
+                                : "85px",
                             height: "40px",
                             borderRadius: "12px",
-                            paddingLeft: "4px",
-                            paddingRight: "4px",
+                            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
+                            willChange: "left, width",
+                            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
+                            backgroundColor:
+                              dataSource === "polymarket"
+                                ? "#2C59F7"
+                                : "#17cb91",
+                            opacity: dataSource === "all" ? 0 : 1,
                           }}
-                        >
-                          <span className="text-white font-bold text-lg">
-                            K
-                          </span>
-                          <span className="hidden sm:inline">Kalshi</span>
-                        </button>
-                        <button
-                          onClick={() => setDataSource("polymarket")}
-                          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-0 sm:gap-1.5 w-[40px] sm:w-[100px] ${
-                            dataSource === "polymarket"
-                              ? "text-white font-semibold"
-                              : "text-white/70 hover:text-white/90"
-                          }`}
-                          style={{
-                            height: "40px",
-                            borderRadius: "12px",
-                            paddingLeft: "4px",
-                            paddingRight: "4px",
-                          }}
-                        >
-                          <Image
-                            src="/images/polymarket.png"
-                            alt="Polymarket"
-                            width={16}
-                            height={16}
-                            className="w-4 h-4"
-                          />
-                          <span className="hidden sm:inline">Polymarket</span>
-                        </button>
+                        />
+                        <div className="relative flex items-center justify-center w-full h-full py-0.5 px-0.5 gap-1 sm:gap-2">
+                          <button
+                            onClick={() => setDataSource("kalshi")}
+                            className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-0 sm:gap-1.5 w-10 sm:w-21.25 ${
+                              dataSource === "kalshi"
+                                ? "text-black font-semibold"
+                                : "text-white/70 hover:text-white/90"
+                            }`}
+                            style={{
+                              height: "40px",
+                              borderRadius: "12px",
+                              paddingLeft: "4px",
+                              paddingRight: "4px",
+                            }}
+                          >
+                            <span className="text-white font-bold text-lg">
+                              K
+                            </span>
+                            <span className="hidden sm:inline">Kalshi</span>
+                          </button>
+                          <button
+                            onClick={() => setDataSource("polymarket")}
+                            className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-0 sm:gap-1.5 w-10 sm:w-25 ${
+                              dataSource === "polymarket"
+                                ? "text-white font-semibold"
+                                : "text-white/70 hover:text-white/90"
+                            }`}
+                            style={{
+                              height: "40px",
+                              borderRadius: "12px",
+                              paddingLeft: "4px",
+                              paddingRight: "4px",
+                            }}
+                          >
+                            <Image
+                              src="/images/polymarket.png"
+                              alt="Polymarket"
+                              width={16}
+                              height={16}
+                              className="w-4 h-4"
+                            />
+                            <span className="hidden sm:inline">Polymarket</span>
+                          </button>
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              </>
-            )}
-            {showExchangeButton && (
+                </>
+              )}
+              {showExchangeButton && (
+                <button
+                  className="cursor-pointer transition hover:scale-[1.05]"
+                  onClick={onExchangeClick}
+                >
+                  <Image
+                    src={"/images/exchange.png"}
+                    alt="Enter the exchange"
+                    width={140}
+                    height={80}
+                    className="w-25 h-10 sm:w-20 sm:h-8.5 md:w-25 md:h-10"
+                  />
+                </button>
+              )}
               <button
                 className="cursor-pointer transition hover:scale-[1.05]"
-                onClick={onExchangeClick}
+                onClick={handleHistoryClick}
               >
                 <Image
-                  src={"/images/exchange.png"}
-                  alt="Enter the exchange"
-                  width={140}
-                  height={80}
-                  className="w-[100px] h-[40px] sm:w-[80px] sm:h-[34px] md:w-[100px] md:h-[40px]"
+                  src={"/images/AI-pilot.png"}
+                  alt="report history"
+                  width={120}
+                  height={50}
+                  className="w-25 h-10.25 sm:w-20 sm:h-8.25 md:w-25 md:h-10"
                 />
               </button>
-            )}
-            <button
-              className="cursor-pointer transition hover:scale-[1.05]"
-              onClick={handleHistoryClick}
-            >
-              <Image
-                src={"/images/AI-pilot.png"}
-                alt="report history"
-                width={120}
-                height={50}
-                className="w-[100px] h-[41px] sm:w-[80px] sm:h-[33px] md:w-[100px] md:h-[40px]"
-              />
-            </button>
+            </div>
           </div>
-        </div>
+        )}
       </div>
 
       <AccountModal
@@ -539,9 +654,12 @@ export default function RexHeader({
       <DepositWithdrawModal
         isOpen={showDepositModal}
         onClose={() => setShowDepositModal(false)}
+        defaultPlatform={
+          pathname.startsWith("/rexmarkets/kalshi") ? "kalshi" : "polymarket"
+        }
       />
 
-      <PolymarketInfoModal
+      <MarketInfoModal
         isOpen={showPolymarketModal}
         onClose={() => setShowPolymarketModal(false)}
       />

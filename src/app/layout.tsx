@@ -9,8 +9,7 @@ import Providers from "@/components/providers/QueryProvider";
 import { TopbarProvider } from "@/contexts/TopbarContext";
 import { DataSourceProvider } from "@/contexts/DataSourceContext";
 
-import { ToastContainer } from "react-toastify";
-import "react-toastify/dist/ReactToastify.css";
+import { NotificationToaster } from "@/components/ui/notification";
 
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
@@ -148,7 +147,7 @@ export const metadata: Metadata = {
     locale: "en_US",
     images: [
       {
-        url: "/images/banner.png",
+        url: "/images/x_banner.png",
         width: 1200,
         height: 630,
         alt: "RaptorXchange - AI Crypto Trading Platform for Solana and BSC",
@@ -161,7 +160,7 @@ export const metadata: Metadata = {
     title: "RaptorX - The Intelligent Pro Terminal for Prediction Markets & Crypto",
     description:
       "We are the AI Bloomberg Terminal for Crypto & Prediction markets. Hunt intelligently, hunt with Raptor.",
-    images: ["/images/banner.png"],
+    images: ["/images/x_banner.png"],
     creator: "@huntonraptor",
     site: "@huntonraptor",
   },
@@ -314,7 +313,7 @@ export default function RootLayout({
               "Cross-chain swaps",
               "Market intelligence",
             ],
-            screenshot: "/images/banner.png",
+            screenshot: "/images/x_banner.png",
             url:
               (typeof window === "undefined"
                 ? (typeof process !== "undefined" &&
@@ -360,7 +359,7 @@ export default function RootLayout({
                   <SpeedInsights />
                   <Analytics />
                 </Providers>
-                <ToastContainer position="top-center" theme="dark" />
+                <NotificationToaster />
                 {/* <Footer /> */}
               </DataSourceProvider>
             </TopbarProvider>

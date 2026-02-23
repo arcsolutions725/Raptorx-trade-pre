@@ -294,6 +294,79 @@ a.chakra-link.custom-fcnbia {
   scrollbar-color: #ffc000 transparent;
 }
 
+/* Custom scrollbar for chat messages */
+.custom-chat-messages-scrollbar {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+}
+
+.custom-chat-messages-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-chat-messages-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-chat-messages-scrollbar::-webkit-scrollbar-thumb {
+  background-color: #3C3C3C;
+  border-radius: 4px;
+  border: 1px solid transparent;
+}
+
+.custom-chat-messages-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: #525252;
+}
+
+/* For Firefox */
+.custom-chat-messages-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #3C3C3C transparent;
+}
+
+/* Custom scrollbar for chat input (textarea) */
+.custom-chat-input-scrollbar {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  touch-action: pan-x pan-y;
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: #ffc000 transparent; /* Firefox */
+}
+
+.custom-chat-input-scrollbar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.custom-chat-input-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-chat-input-scrollbar::-webkit-scrollbar-thumb {
+  background-color: rgba(255, 192, 0, 0.75);
+  border-radius: 9999px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+.custom-chat-input-scrollbar::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(255, 192, 0, 0.95);
+}
+
+/* Typing indicator animation */
+@keyframes typing-bounce {
+  0%, 100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.typing-dot {
+  animation: typing-bounce 0.8s ease-in-out infinite;
+}
+
 /* Slide up animation for DEX panel */
 @keyframes slideUp {
   from {

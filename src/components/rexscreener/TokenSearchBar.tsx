@@ -130,7 +130,7 @@ export function TokenSearchBar({
             <button
               type="submit"
               disabled={!searchInput.trim()}
-              className="p-2 rounded-md bg-[#fff]/10 hover:bg-[#fff]/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              className="p-2 rounded-md bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
               title="Search"
             >
               <Search className="w-4 h-4 text-white" />

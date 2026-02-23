@@ -250,7 +250,7 @@ export default function DexscreenerView({
           <button
             type="button"
             onClick={onBack}
-            className="flex items-center justify-center gap-1 w-[40px] h-[40px] bg-[#3C3C3C] rounded-[8px] cursor-pointer text-[14px]"
+            className="flex items-center justify-center gap-1 w-10 h-10 bg-[#3C3C3C] rounded-lg cursor-pointer text-[14px]"
           >
             <ArrowLeft className="w-5 h-5" color="white" />
           </button>
@@ -281,8 +281,8 @@ export default function DexscreenerView({
               </div>
             </div>
           ) : hasGenerated ? (
-            <div className="flex items-center justify-center w-[86px] h-[32px] rounded-sm bg-[#FFD700]">
-              <span className="text-black !font-bold text-sm">Generated!</span>
+            <div className="flex items-center justify-center w-21.5 h-8 rounded-sm bg-[#FFD700]">
+              <span className="text-black font-bold! text-sm">Generated!</span>
             </div>
           ) : (
             <>
@@ -290,7 +290,7 @@ export default function DexscreenerView({
                 type="button"
                 onClick={!authenticated ? handleSignIn : onGenerateClick}
                 disabled={isGenerating || !ready}
-                className={`px-2 transition w-[83px] h-[40px] flex items-center justify-center !font-bold bg-[#000] !text-[14px] border border-[#6D4F03] rounded-[12px] text-[#F9B80C] ${
+                className={`px-2 transition w-20.75 h-10 flex items-center justify-center font-bold! bg-black text-[14px]! border border-[#6D4F03] rounded-xl text-[#F9B80C] ${
                   isGenerating || !ready
                     ? "opacity-60 cursor-wait"
                     : "cursor-pointer"
@@ -304,7 +304,7 @@ export default function DexscreenerView({
                 href={explorerUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="px-2 h-[40px] w-[40px] border-[0.5px] flex items-center justify-center gap-1.5 !font-medium !text-[14px] rounded-[8px] text-[#F9B80C] transition-colors cursor-pointer hover:text-[#6D4F03]"
+                className="px-2 h-10 w-10 border-[0.5px] flex items-center justify-center gap-1.5 font-medium! text-[14px]! rounded-lg text-[#F9B80C] transition-colors cursor-pointer hover:text-[#6D4F03]"
                 aria-label={`View on ${
                   chain === "bsc" ? "BSCScan" : "SolScan"
                 }`}

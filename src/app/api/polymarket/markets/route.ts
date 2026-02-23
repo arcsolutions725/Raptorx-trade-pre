@@ -28,7 +28,6 @@ export async function GET(request: NextRequest) {
       });
 
       const url = `${baseUrl}?${params.toString()}`;
-      console.log("Fetching Polymarket markets from search:", url);
 
       const response = await fetch(url, {
         method: "GET",
@@ -69,7 +68,6 @@ export async function GET(request: NextRequest) {
       }
 
       const url = `${baseUrl}?${params.toString()}`;
-      console.log("Fetching Polymarket markets from:", url);
 
       const response = await fetch(url, {
         method: "GET",

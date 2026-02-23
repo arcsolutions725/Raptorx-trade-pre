@@ -39,7 +39,6 @@ export async function GET(request: NextRequest) {
 
     const tradesUrl = `https://data-api.polymarket.com/trades?${params.toString()}`;
     
-    console.log("Fetching Polymarket trades/activity:", tradesUrl);
 
     const response = await fetch(tradesUrl, {
       method: "GET",
@@ -62,7 +61,6 @@ export async function GET(request: NextRequest) {
 
     const data = await response.json();
 
-    console.log("Polymarket trades data received:", Array.isArray(data) ? `${data.length} trades` : "non-array response");
 
     // The API returns an array of trade objects
     const trades = Array.isArray(data) ? data : [];

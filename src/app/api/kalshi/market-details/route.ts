@@ -16,11 +16,9 @@ export async function GET(request: NextRequest) {
     // Use the trade-api v2 events endpoint as per Kalshi API documentation
     // https://api.elections.kalshi.com/trade-api/v2/events/{event_ticker}
     const eventsUrl = `https://api.elections.kalshi.com/trade-api/v2/events/${eventTicker}`;
-    console.log("Fetching event data from Kalshi trade-api v2:", eventsUrl);
 
     // Fetch event metadata to get image_url
     const metadataUrl = `https://api.elections.kalshi.com/trade-api/v2/events/${eventTicker}/metadata`;
-    console.log("Fetching event metadata from Kalshi trade-api v2:", metadataUrl);
 
     // Fetch both event data and metadata in parallel
     const [eventsResponse, metadataResponse] = await Promise.all([
@@ -58,22 +56,10 @@ export async function GET(request: NextRequest) {
       try {
         const metadataData = await metadataResponse.json();
         imageUrl = metadataData.image_url;
-        console.log("Event metadata received:", {
-          hasImageUrl: !!imageUrl,
-          imageUrl: imageUrl,
-        });
       } catch (err) {
         console.warn("Failed to parse metadata response:", err);
       }
     }
-
-    console.log("Event data received:", {
-      hasEvent: !!eventsData.event,
-      hasMarkets: !!eventsData.markets,
-      marketsCount: eventsData.markets?.length || 0,
-      eventTicker: eventsData.event?.event_ticker,
-      hasMetadataImageUrl: !!imageUrl,
-    });
 
     return await processEventsData(eventsData, eventTicker, imageUrl);
   } catch (error) {
@@ -89,11 +75,11 @@ export async function GET(request: NextRequest) {
 }
 
 async function processEventsData(data: any, eventTicker: string, metadataImageUrl?: string) {
-  // Extract event and markets from the response
+  // Extract event and markets from the response; show only active markets (exclude finalized, etc.)
   const event = data.event || {};
-  const markets: any[] = Array.isArray(data.markets) ? data.markets : [];
-  
-  console.log(`Found ${markets.length} markets in event data`);
+  const allMarkets: any[] = Array.isArray(data.markets) ? data.markets : [];
+  const markets: any[] = allMarkets.filter((m: any) => (m.status || "").toLowerCase() === "active");
+
 
   // Transform each market to include all necessary fields
   const transformedMarkets = markets.map((market: any, index: number) => {
@@ -127,8 +113,18 @@ async function processEventsData(data: any, eventTicker: string, metadataImageUr
                          market.title || 
                          `Outcome ${index + 1}`;
     
+    // Try to get market_id from various possible fields
+    // Kalshi API might use different field names, so check multiple options
+    const marketId = market.market_id || 
+                     market.id || 
+                     market.market_ticker || 
+                     market.ticker || 
+                     null;
+    
+    
     return {
       ticker: market.ticker || `market-${index}`,
+      market_id: marketId, // Include market ID for price history API
       subtitle: candidateName,
       probability: probability,
       // Prices in dollars (0-1 range) for display
@@ -156,15 +152,6 @@ async function processEventsData(data: any, eventTicker: string, metadataImageUr
   // Calculate total volume from all markets
   const totalVolume = transformedMarkets.reduce((sum: number, m: any) => sum + (m.volume || 0), 0);
   const totalSeriesVolume = transformedMarkets.reduce((sum: number, m: any) => sum + (m.volume_24h || m.volume || 0), 0);
-
-  console.log("Final processed data:", {
-    series_ticker: event.series_ticker || eventTicker,
-    event_ticker: event.event_ticker || eventTicker,
-    title: event.title || "",
-    marketsCount: transformedMarkets.length,
-    total_volume: totalVolume,
-    total_series_volume: totalSeriesVolume,
-  });
 
   // Extract event-level date/time information
   const eventOpenTime = event.open_ts || markets[0]?.open_ts || null;

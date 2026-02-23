@@ -16,7 +16,6 @@ import { useGenerateMarketReport } from "@/hooks/useGenerateMarketReport";
 import { useReportGenStatus } from "@/lib/storage/reportGenStore";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePolymarketComments } from "@/hooks/usePolymarketComments";
-import Image from "next/image";
 
 const INTERVALS = ["1H", "6H", "1D", "1W", "1M", "ALL"];
 
@@ -381,8 +380,8 @@ export default function PolymarketTradingInterface({
           {/* Top Section - Chart and Order Book */}
           {/* Desktop: Side by side, Mobile: Stacked vertically */}
           <div className="flex flex-col lg:flex-row border-b border-white/10 flex-shrink-0">
-            {/* Chart - Full width on mobile, flex-1 on desktop */}
-            <div className="flex-1 flex flex-col min-w-0 w-full lg:w-auto lg:max-h-[400px]">
+            {/* Chart - Full width on mobile with explicit min-height so it doesn't collapse, flex-1 on desktop */}
+            <div className="flex-1 flex flex-col min-w-0 w-full min-h-[400px] lg:w-auto lg:min-h-[520px]">
               {/* Chart Controls */}
               <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-white/10">
                 <div className="flex items-center gap-2 overflow-x-auto">
@@ -405,8 +404,8 @@ export default function PolymarketTradingInterface({
                 </div>
               </div>
 
-              {/* Chart */}
-              <div className="flex-1 min-h-[350px] lg:min-h-0 lg:max-h-[368px] relative bg-[#0a0a0a]">
+              {/* Chart - explicit height on mobile so Recharts ResponsiveContainer can measure; flex on desktop */}
+              <div className="h-[350px] lg:h-auto lg:flex-1 lg:min-h-[450px] relative bg-[#0a0a0a]">
                 <PriceChart
                   markets={marketsWithClobTokenIds}
                   interval={selectedInterval}
@@ -414,8 +413,8 @@ export default function PolymarketTradingInterface({
               </div>
             </div>
 
-            {/* Order Book - Full width on mobile, fixed width on desktop */}
-            <div className="w-full lg:w-[400px] flex-shrink-0 border-t lg:border-t-0 lg:border-l border-white/10 flex flex-col lg:max-h-[400px]">
+            {/* Mobile: Order Book stacked under chart */}
+            <div className="lg:hidden w-full flex-shrink-0 border-t border-white/10 flex flex-col">
               {/* Market Tabs - Show when there are more than 2 markets */}
               {marketsForOrderBook.length > 2 && (
                 <div className="flex-shrink-0 border-b border-white/10 px-4 py-2">
@@ -436,7 +435,7 @@ export default function PolymarketTradingInterface({
                   </div>
                 </div>
               )}
-              <div className="flex-1 min-h-[350px] lg:min-h-0 overflow-hidden">
+              <div className="min-h-[350px] overflow-hidden">
                 <OrderBook
                   clobTokenId={selectedMarketClobTokenId}
                   yesPrice={currentYesPrice}
@@ -445,6 +444,22 @@ export default function PolymarketTradingInterface({
                   selectedOutcome={selectedOrderBookOutcome}
                 />
               </div>
+            </div>
+
+            {/* Desktop: Buy/Sell next to chart */}
+            <div className="hidden lg:block w-[350px] flex-shrink-0 border-l border-white/10">
+              <BuySellWidget
+                currentYesPrice={currentYesPrice}
+                currentNoPrice={currentNoPrice}
+                onBuyClick={handleBuyClick}
+                onSellClick={handleSellClick}
+                symbolImageUrl={marketDetails.symbol_image_url || undefined}
+                marketTitle={marketTitle || undefined}
+                availableMarkets={availableMarkets}
+                marketsForOrderBook={marketsForOrderBook}
+                selectedMarketIndex={selectedMarketIndex}
+                onMarketIndexChange={setSelectedMarketIndex}
+              />
             </div>
           </div>
 
@@ -533,20 +548,37 @@ export default function PolymarketTradingInterface({
                 </div>
               </div>
 
-              {/* Buy/Sell Widget - Hidden on mobile, shown on desktop */}
-              <div className="hidden lg:block w-[350px] flex-shrink-0">
-                <BuySellWidget
-                  currentYesPrice={currentYesPrice}
-                  currentNoPrice={currentNoPrice}
-                  onBuyClick={handleBuyClick}
-                  onSellClick={handleSellClick}
-                  symbolImageUrl={marketDetails.symbol_image_url || undefined}
-                  marketTitle={marketTitle || undefined}
-                  availableMarkets={availableMarkets}
-                  marketsForOrderBook={marketsForOrderBook}
-                  selectedMarketIndex={selectedMarketIndex}
-                  onMarketIndexChange={setSelectedMarketIndex}
-                />
+              {/* Desktop: Order Book moved here (swap with Buy/Sell) */}
+              <div className="hidden lg:flex w-[400px] flex-shrink-0 border-l border-white/10 flex-col min-h-0">
+                {/* Market Tabs - Show when there are more than 2 markets */}
+                {marketsForOrderBook.length > 2 && (
+                  <div className="flex-shrink-0 border-b border-white/10 px-4 py-2">
+                    <div className="flex items-center gap-1 overflow-x-auto custom-select-scrollbar">
+                      {marketsForOrderBook.map((market, index) => (
+                        <button
+                          key={market.clobTokenId}
+                          onClick={() => setSelectedMarketIndex(index)}
+                          className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
+                            selectedMarketIndex === index
+                              ? "text-[#ffc000] border-b-2 border-[#ffc000]"
+                              : "text-white/60 hover:text-white/80"
+                          }`}
+                        >
+                          {market.marketTitle}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+                <div className="flex-1 min-h-0 overflow-hidden">
+                  <OrderBook
+                    clobTokenId={selectedMarketClobTokenId}
+                    yesPrice={currentYesPrice}
+                    noPrice={currentNoPrice}
+                    onBuyClick={handleOrderBookBuyClick}
+                    selectedOutcome={selectedOrderBookOutcome}
+                  />
+                </div>
               </div>
             </div>
           </div>

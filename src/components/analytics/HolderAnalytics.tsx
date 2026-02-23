@@ -65,7 +65,7 @@ function HolderDistributionChart({ data }: { data: HolderAnalytics }) {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-4 h-4 bg-gradient-to-r from-red-500 to-red-600 rounded"></div>
+            <div className="w-4 h-4 bg-linear-to-r from-red-500 to-red-600 rounded"></div>
             <span className="text-white/90">Whales (&gt;1%)</span>
           </div>
           <span className="text-white font-mono">{whaleHolders}</span>
@@ -77,7 +77,7 @@ function HolderDistributionChart({ data }: { data: HolderAnalytics }) {
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-4 h-4 bg-gradient-to-r from-yellow-500 to-yellow-600 rounded"></div>
+            <div className="w-4 h-4 bg-linear-to-r from-yellow-500 to-yellow-600 rounded"></div>
             <span className="text-white/90">Medium (0.1%-1%)</span>
           </div>
           <span className="text-white font-mono">{mediumHolders}</span>
@@ -89,7 +89,7 @@ function HolderDistributionChart({ data }: { data: HolderAnalytics }) {
 
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-4 h-4 bg-gradient-to-r from-green-500 to-green-600 rounded"></div>
+            <div className="w-4 h-4 bg-linear-to-r from-green-500 to-green-600 rounded"></div>
             <span className="text-white/90">Small (&lt;0.1%)</span>
           </div>
           <span className="text-white font-mono">{smallHolders}</span>
@@ -216,12 +216,12 @@ function TopHoldersTable({ data }: { data: HolderAnalytics }) {
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold ${
                     index === 0
-                      ? "bg-gradient-to-r from-yellow-500 to-yellow-600"
+                      ? "bg-linear-to-r from-yellow-500 to-yellow-600"
                       : index === 1
-                      ? "bg-gradient-to-r from-gray-400 to-gray-500"
+                      ? "bg-linear-to-r from-gray-400 to-gray-500"
                       : index === 2
-                      ? "bg-gradient-to-r from-orange-500 to-orange-600"
-                      : "bg-gradient-to-r from-blue-500 to-blue-600"
+                      ? "bg-linear-to-r from-orange-500 to-orange-600"
+                      : "bg-linear-to-r from-blue-500 to-blue-600"
                   }`}
                 >
                   {index + 1}

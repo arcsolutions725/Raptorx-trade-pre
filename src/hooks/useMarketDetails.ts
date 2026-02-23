@@ -3,6 +3,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
+import { usePathname } from "next/navigation";
 import { useDataSource } from "@/contexts/DataSourceContext";
 
 export type MarketOutcome = {
@@ -10,7 +11,7 @@ export type MarketOutcome = {
   condition_id?: string; // Condition ID for Polymarket CLOB API (token ID)
   clob_token_id?: string; // First CLOB token ID (Yes token) for prices-history API
   clob_no_token_id?: string; // Second CLOB token ID (No token) for trading
-  market_id?: string; // Market ID for Polymarket holders API
+  market_id?: string; // Market ID for Polymarket holders API or Kalshi price history API
   subtitle: string;
   groupItemTitle?: string; // Group item title for Polymarket markets
   probability: number;
@@ -50,17 +51,40 @@ export type MarketDetails = {
 
 export function useMarketDetails(eventTicker: string | null, eventId?: string | null, slug?: string | null) {
   const { dataSource } = useDataSource();
+  const pathname = usePathname();
   
   const query = useQuery({
-    queryKey: ["market-details", eventTicker, eventId, slug, dataSource],
+    queryKey: ["market-details", eventTicker, eventId, slug, dataSource, pathname],
     queryFn: async () => {
       if (!eventTicker && !slug) return null;
 
-      // Determine which API endpoint to use based on dataSource
+      // Detect route inside queryFn to use current pathname value
+      // Check pathname directly to ensure we use the most up-to-date value
+      const currentPathname = typeof window !== "undefined" ? window.location.pathname : pathname;
+      const isKalshiRoute = currentPathname?.startsWith("/rexmarkets/kalshi/");
+      const isPolymarketRoute = currentPathname?.startsWith("/rexmarkets/polymarket/");
+
+      // Determine which API endpoint to use
       let apiPath: string;
       
+      // If we're on a Kalshi route, always use Kalshi API (highest priority)
+      if (isKalshiRoute && eventTicker) {
+        apiPath = `/api/kalshi/market-details?event_ticker=${encodeURIComponent(eventTicker)}`;
+      }
+      // If we're on a Polymarket route, always use Polymarket API
+      else if (isPolymarketRoute) {
+        if (slug) {
+          apiPath = `/api/polymarket/market-details?slug=${encodeURIComponent(slug)}`;
+        } else if (eventId) {
+          apiPath = `/api/polymarket/market-details?event_id=${encodeURIComponent(eventId)}`;
+        } else if (eventTicker) {
+          apiPath = `/api/polymarket/market-details?event_ticker=${encodeURIComponent(eventTicker)}`;
+        } else {
+          return null;
+        }
+      }
       // If slug is provided, always use Polymarket API (slug is Polymarket-specific)
-      if (slug) {
+      else if (slug) {
         apiPath = `/api/polymarket/market-details?slug=${encodeURIComponent(slug)}`;
       } else if (dataSource === "polymarket") {
         // For Polymarket, prioritize event_id, then ticker

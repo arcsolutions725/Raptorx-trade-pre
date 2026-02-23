@@ -1,7 +1,7 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
-import { ChevronDown, Check } from "lucide-react";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { ChevronDown, Check, Search } from "lucide-react";
 import clsx from "clsx";
 
 export interface SelectOption {
@@ -17,6 +17,18 @@ export interface SelectProps {
   className?: string;
   disabled?: boolean;
   direction?: "up" | "down";
+  searchable?: boolean;
+  searchPlaceholder?: string;
+}
+
+function filterOptions(options: SelectOption[], query: string): SelectOption[] {
+  if (!query.trim()) return options;
+  const q = query.trim().toLowerCase();
+  return options.filter(
+    (opt) =>
+      opt.label.toLowerCase().includes(q) ||
+      opt.value.toLowerCase().includes(q),
+  );
 }
 
 export function Select({
@@ -27,20 +39,52 @@ export function Select({
   className = "",
   disabled = false,
   direction = "down",
+  searchable = false,
+  searchPlaceholder = "Search options...",
 }: SelectProps) {
   const [isOpen, setIsOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(
-    Math.max(0, options.findIndex((opt) => opt.value === value))
-  );
+  const [searchQuery, setSearchQuery] = useState("");
   const selectRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredOptions = useMemo(
+    () => filterOptions(options, searchQuery),
+    [options, searchQuery],
+  );
 
   const selectedOption = options.find((opt) => opt.value === value);
+  const [activeIndex, setActiveIndex] = useState(
+    Math.max(
+      0,
+      filteredOptions.findIndex((opt) => opt.value === value),
+    ),
+  );
+
+  useEffect(() => {
+    if (isOpen) {
+      setSearchQuery("");
+      if (searchable) {
+        requestAnimationFrame(() => searchInputRef.current?.focus());
+      } else {
+        requestAnimationFrame(() => listRef.current?.focus());
+      }
+    }
+  }, [isOpen, searchable]);
+
+  useEffect(() => {
+    const idx = filteredOptions.findIndex((opt) => opt.value === value);
+    if (idx >= 0) setActiveIndex(idx);
+    else setActiveIndex(0);
+  }, [value, filteredOptions]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
-      if (selectRef.current && !selectRef.current.contains(event.target as Node)) {
+      if (
+        selectRef.current &&
+        !selectRef.current.contains(event.target as Node)
+      ) {
         setIsOpen(false);
       }
     };
@@ -54,16 +98,13 @@ export function Select({
     };
   }, [isOpen]);
 
-  // Ensure activeIndex follows current value
-  useEffect(() => {
-    const idx = options.findIndex((opt) => opt.value === value);
-    if (idx >= 0) setActiveIndex(idx);
-  }, [value, options]);
-
-  // Close dropdown on escape key
   useEffect(() => {
     const handleEscape = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && isOpen) {
+      if (event.key !== "Escape" || !isOpen) return;
+      if (searchable && searchQuery) {
+        setSearchQuery("");
+        searchInputRef.current?.focus();
+      } else {
         setIsOpen(false);
       }
     };
@@ -72,15 +113,16 @@ export function Select({
     return () => {
       document.removeEventListener("keydown", handleEscape);
     };
-  }, [isOpen]);
+  }, [isOpen, searchable, searchQuery]);
 
   const handleSelect = (optionValue: string) => {
     onChange(optionValue);
+    setSearchQuery("");
     setIsOpen(false);
   };
 
   const commit = (idx: number) => {
-    const selected = options[idx];
+    const selected = filteredOptions[idx];
     if (selected) handleSelect(selected.value);
   };
 
@@ -88,19 +130,28 @@ export function Select({
     if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
       e.preventDefault();
       setIsOpen(true);
-      requestAnimationFrame(() => listRef.current?.focus());
+      if (searchable) {
+        requestAnimationFrame(() => searchInputRef.current?.focus());
+      } else {
+        requestAnimationFrame(() => listRef.current?.focus());
+      }
     }
   };
 
   const onKeyDownList = (e: React.KeyboardEvent<HTMLUListElement>) => {
     if (e.key === "Escape") {
       e.preventDefault();
-      setIsOpen(false);
+      if (searchable && searchQuery) {
+        setSearchQuery("");
+        searchInputRef.current?.focus();
+      } else {
+        setIsOpen(false);
+      }
       return;
     }
     if (e.key === "ArrowDown") {
       e.preventDefault();
-      setActiveIndex((i) => Math.min(options.length - 1, i + 1));
+      setActiveIndex((i) => Math.min(filteredOptions.length - 1, i + 1));
       return;
     }
     if (e.key === "ArrowUp") {
@@ -109,6 +160,31 @@ export function Select({
       return;
     }
     if (e.key === "Enter") {
+      e.preventDefault();
+      if (filteredOptions.length > 0) commit(activeIndex);
+      return;
+    }
+  };
+
+  const onKeyDownSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === "Escape") {
+      e.preventDefault();
+      if (searchQuery) {
+        setSearchQuery("");
+      } else {
+        setIsOpen(false);
+      }
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      listRef.current?.focus();
+      setActiveIndex((i) =>
+        Math.min(filteredOptions.length - 1, Math.max(0, i)),
+      );
+      return;
+    }
+    if (e.key === "Enter" && filteredOptions.length > 0) {
       e.preventDefault();
       commit(activeIndex);
       return;
@@ -119,16 +195,15 @@ export function Select({
 
   return (
     <div ref={selectRef} className={clsx("relative", className)}>
-      {/* Select Button */}
       <button
         type="button"
         onClick={() => !disabled && setIsOpen(!isOpen)}
         onKeyDown={onKeyDownButton}
         disabled={disabled}
         className={clsx(
-          "flex items-center justify-between gap-2 w-full px-3 py-1.5 rounded-md border border-white/20 bg-black/30 hover:bg-white/10 transition text-white",
+          "flex items-center justify-between gap-2 w-full px-3 py-1.5 rounded-md border border-white/20 bg-black/30 transition text-white",
           disabled && "opacity-50 cursor-not-allowed",
-          !disabled && "cursor-pointer"
+          !disabled && "cursor-pointer",
         )}
         aria-haspopup="listbox"
         aria-expanded={isOpen}
@@ -139,56 +214,88 @@ export function Select({
         </span>
         <ChevronDown
           className={clsx(
-            "size-4 opacity-80 transition flex-shrink-0",
-            isOpen && "rotate-180"
+            "size-4 opacity-80 transition shrink-0",
+            isOpen && "rotate-180",
           )}
         />
       </button>
 
-      {/* Dropdown Menu */}
       {isOpen && (
-        <ul
-          ref={listRef}
-          role="listbox"
-          tabIndex={-1}
-          aria-activedescendant={`select-opt-${activeIndex}`}
-          onKeyDown={onKeyDownList}
+        <div
           className={clsx(
             "absolute z-50",
             popPos,
-            "left-0 w-full min-w-[160px] max-h-60 overflow-auto rounded-lg border border-white/15 bg-[#0A0A0A]/95 backdrop-blur supports-[backdrop-filter]:bg-[#0A0A0A]/70 shadow-2xl custom-select-scrollbar"
+            "left-0 w-full min-w-50 max-w-[min(100vw,320px)] rounded-lg border border-white/15 bg-[#0A0A0A] overflow-hidden",
           )}
         >
-          {options.map((option, idx) => {
-            const selected = option.value === value;
-            const active = idx === activeIndex;
-            return (
-              <li
-                key={option.value}
-                id={`select-opt-${idx}`}
-                role="option"
-                aria-selected={selected}
-                onMouseEnter={() => setActiveIndex(idx)}
-                onClick={() => commit(idx)}
-                className={clsx(
-                  "flex items-center justify-between gap-3 cursor-pointer px-3 py-2 text-sm",
-                  active && "bg-white/10",
-                  selected ? "text-[#FFD700]" : "text-white/90",
-                  "hover:bg-white/10"
-                )}
-              >
-                <span className="truncate">{option.label}</span>
-                {selected ? (
-                  <Check className="size-4 flex-shrink-0" />
-                ) : (
-                  <span className="size-4 flex-shrink-0" />
-                )}
+          {searchable && (
+            <div className="p-2 border-b border-white/10 sticky top-0 bg-[#0A0A0A]/95">
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded-md bg-white/5 border border-white/10">
+                <Search className="size-4 text-white/50 shrink-0" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={onKeyDownSearch}
+                  placeholder={searchPlaceholder}
+                  className="flex-1 min-w-0 bg-transparent text-sm text-white placeholder:text-white/40 outline-none"
+                  aria-label="Search options"
+                />
+              </div>
+            </div>
+          )}
+          <ul
+            ref={listRef}
+            role="listbox"
+            tabIndex={-1}
+            aria-activedescendant={
+              filteredOptions[activeIndex]
+                ? `select-opt-${filteredOptions[activeIndex].value}`
+                : undefined
+            }
+            onKeyDown={onKeyDownList}
+            className={clsx(
+              "max-h-60 overflow-auto custom-select-scrollbar",
+              searchable && "max-h-52",
+            )}
+          >
+            {filteredOptions.length === 0 ? (
+              <li className="px-3 py-4 text-sm text-white/50 text-center">
+                No options match &quot;{searchQuery}&quot;
               </li>
-            );
-          })}
-        </ul>
+            ) : (
+              filteredOptions.map((option, idx) => {
+                const selected = option.value === value;
+                const active = idx === activeIndex;
+                return (
+                  <li
+                    key={option.value}
+                    id={`select-opt-${option.value}`}
+                    role="option"
+                    aria-selected={selected}
+                    onMouseEnter={() => setActiveIndex(idx)}
+                    onClick={() => commit(idx)}
+                    className={clsx(
+                      "flex items-center justify-between gap-3 cursor-pointer px-3 py-2 text-sm",
+                      active && "bg-white/10",
+                      selected ? "text-[#FFD700]" : "text-white/90",
+                      "hover:bg-white/10",
+                    )}
+                  >
+                    <span className="truncate">{option.label}</span>
+                    {selected ? (
+                      <Check className="size-4 shrink-0" />
+                    ) : (
+                      <span className="size-4 shrink-0" />
+                    )}
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </div>
       )}
     </div>
   );
 }
-

@@ -429,9 +429,6 @@ export async function getBNBHolderAnalytics(
   error?: string;
 }> {
   try {
-    console.log(
-      `Fetching comprehensive analytics for token: ${contractAddress}`
-    );
 
     // Import Birdeye security functions
     const { getBirdeyeSecurityAnalyticsWithMetadata } = await import(
@@ -449,12 +446,6 @@ export async function getBNBHolderAnalytics(
           process.env.BIRDEYE_API_KEY
         ),
       ]);
-
-    // console.log("Results received:", {
-    //   totalHolders: totalHoldersResult.success,
-    //   holders: holdersResult.success,
-    //   security: securityResult.success,
-    // });
 
     if (!totalHoldersResult.success) {
       return {
@@ -531,13 +522,6 @@ export async function getBNBHolderAnalytics(
     if (tokenInfo) {
       analytics.tokenInfo = tokenInfo;
     }
-
-    // console.log("Analytics completed successfully:", {
-    //   totalHolders: analytics.totalHolders,
-    //   hasSecurityData: !!analytics.security,
-    //   hasTokenInfo: !!analytics.tokenInfo,
-    //   riskLevel: analytics.security?.riskLevel,
-    // });
 
     return {
       success: true,

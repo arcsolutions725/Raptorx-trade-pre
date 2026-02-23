@@ -22,7 +22,6 @@ export async function POST(request: NextRequest) {
     }
 
     const url = "https://bridge.polymarket.com/deposit";
-    console.log("Fetching Polymarket deposit addresses for:", address);
 
     const response = await fetch(url, {
       method: "POST",

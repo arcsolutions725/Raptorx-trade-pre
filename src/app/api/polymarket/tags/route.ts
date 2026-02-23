@@ -15,8 +15,6 @@ export async function GET(request: NextRequest) {
     // Fetch tags from Polymarket filteredBySlug endpoint
     const url = `https://polymarket.com/api/tags/filteredBySlug?tag=${encodeURIComponent(tagSlug)}&status=active`;
 
-    console.log("Fetching Polymarket tags from:", url);
-
     const response = await fetch(url, {
       method: "GET",
       headers: {
@@ -34,8 +32,6 @@ export async function GET(request: NextRequest) {
     }
 
     const tags = await response.json();
-
-    console.log("Tags response:", tags);
 
     // Transform Polymarket tags to array of tag objects with label and slug
     // The API returns an array of tag objects with properties like label, slug, etc.

@@ -20,21 +20,14 @@ export async function GET(request: NextRequest) {
 
     if (!clobTokenId) {
       return NextResponse.json(
-        { error: "clob_token_id parameter is required (or condition_id/market_id for legacy support)" },
-        { status: 400 }
+        {
+          error:
+            "clob_token_id parameter is required (or condition_id/market_id for legacy support)",
+        },
+        { status: 400 },
       );
     }
 
-    console.log("Using CLOB token ID (condition_id) for prices-history:", clobTokenId);
-
-    // Build URL for prices-history endpoint
-    // Fidelity mapping based on interval:
-    // ALL: startTs + fidelity=720 (no interval param)
-    // 1M: interval=1m + fidelity=180
-    // 1W: interval=1w + fidelity=30
-    // 1D: interval=1d + fidelity=5
-    // 6H: interval=6h + fidelity=1
-    // 1H: interval=1h + fidelity=1
     const pricesHistoryParams = new URLSearchParams({
       market: clobTokenId, // CLOB token ID (condition_id)
     });
@@ -52,14 +45,14 @@ export async function GET(request: NextRequest) {
     if (!interval || interval.toLowerCase() === "all") {
       // Use a start timestamp to get historical data
       // The user's example shows startTs=1754414893, using current timestamp or a reasonable default
-      const startTs = Math.floor(Date.now() / 1000) - (365 * 24 * 60 * 60); // 1 year ago
+      const startTs = Math.floor(Date.now() / 1000) - 365 * 24 * 60 * 60; // 1 year ago
       pricesHistoryParams.append("startTs", startTs.toString());
       pricesHistoryParams.append("fidelity", "720");
     } else {
       // For other intervals, convert to lowercase and include interval with appropriate fidelity
       const polymarketInterval = interval.toLowerCase();
       pricesHistoryParams.append("interval", polymarketInterval);
-      
+
       // Get fidelity from map, default to "1" if not found
       const fidelity = fidelityMap[polymarketInterval] || "1";
       pricesHistoryParams.append("fidelity", fidelity);
@@ -67,15 +60,11 @@ export async function GET(request: NextRequest) {
 
     const pricesHistoryUrl = `https://clob.polymarket.com/prices-history?${pricesHistoryParams.toString()}`;
 
-    console.log("pricesHistoryUrl:", pricesHistoryUrl);
-
     // The prices-history endpoint is public and doesn't require authentication
     // Use minimal headers
     const headers: Record<string, string> = {
       "Content-Type": "application/json",
     };
-
-    console.log("Fetching Polymarket historical data:", pricesHistoryUrl);
 
     const response = await fetch(pricesHistoryUrl, {
       method: "GET",
@@ -102,34 +91,24 @@ export async function GET(request: NextRequest) {
               "Please verify that POLYMARKET_API_KEY (and optionally POLYMARKET_API_SECRET, POLYMARKET_API_PASS_PHARSE) are correctly set in your environment variables and are valid.",
             status: 401,
           },
-          { status: 401 }
+          { status: 401 },
         );
       }
 
       throw new Error(
-        `Polymarket prices-history API returned ${response.status}: ${errorText}`
+        `Polymarket prices-history API returned ${response.status}: ${errorText}`,
       );
     }
 
     const data = await response.json();
 
-    console.log(
-      "Polymarket API response received, data keys:",
-      Object.keys(data)
-    );
-    console.log("History array length:", data.history?.length || 0);
-
-    // The prices-history endpoint returns data in format: {"history":[{"t":timestamp,"p":price}]}
-    // Handle the response format
     let history: any[] = [];
 
     if (data.history && Array.isArray(data.history)) {
       history = data.history;
-      console.log("Using history array, length:", history.length);
     } else if (Array.isArray(data)) {
       // Fallback: if data is directly an array
       history = data;
-      console.log("Using direct array, length:", history.length);
     } else {
       console.warn("Unexpected data format:", data);
     }
@@ -205,11 +184,9 @@ export async function GET(request: NextRequest) {
       })
       .filter(
         (item: any) =>
-          item !== null && !isNaN(item?.time) && !isNaN(item?.close)
+          item !== null && !isNaN(item?.time) && !isNaN(item?.close),
       )
       .sort((a: any, b: any) => (a?.time || 0) - (b?.time || 0));
-
-    console.log("Transformed data points:", transformed.length);
 
     return NextResponse.json(
       {
@@ -225,14 +202,14 @@ export async function GET(request: NextRequest) {
         headers: {
           "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
         },
-      }
+      },
     );
   } catch (err: any) {
     console.error("Polymarket historical data error:", err);
     const msg = err instanceof Error ? err.message : "Unknown error";
     return NextResponse.json(
       { error: "Failed to fetch Polymarket historical data", details: msg },
-      { status: 500 }
+      { status: 500 },
     );
   }
 }

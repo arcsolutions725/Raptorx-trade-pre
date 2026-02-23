@@ -256,7 +256,6 @@ export async function POST(request: NextRequest) {
           ...(ethereumWallet ? { ethereumWallet } : {}),
         },
       });
-      console.log("User created successfully:", existing.id);
     } catch (err) {
       const isP2002 =
         (err as Prisma.PrismaClientKnownRequestError)?.code === "P2002";

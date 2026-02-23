@@ -119,7 +119,7 @@ export default function OrderBook({
   };
 
   return (
-    <div className="w-full flex-shrink-0 border-l border-white/10 flex flex-col h-full min-h-0">
+    <div className="w-full flex-shrink-0 flex flex-col h-full min-h-0">
       <div className="flex-shrink-0 px-4 py-3 border-b border-white/10">
         {/* Outcome Buttons Header */}
         <div className="flex gap-2">
