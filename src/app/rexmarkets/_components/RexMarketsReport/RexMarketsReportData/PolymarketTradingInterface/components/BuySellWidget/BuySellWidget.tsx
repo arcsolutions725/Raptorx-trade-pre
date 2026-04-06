@@ -713,8 +713,8 @@ export default function BuySellWidget({
 
   return (
     <div className="flex flex-col border border-white/10 rounded-lg overflow-hidden">
-      {/* Profile Section */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
+      {/* Profile Section - pr-12 on mobile for modal close button; title max-w on mobile */}
+      <div className="flex items-center gap-3 px-4 py-3 pr-12 lg:pr-4 border-b border-white/10">
         {symbolImageUrl ? (
           <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
             <Image
@@ -731,7 +731,7 @@ export default function BuySellWidget({
             <span className="text-white/60 text-xs">?</span>
           </div>
         )}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 max-w-[65%] lg:max-w-none">
           <div className="text-sm font-medium text-white truncate">
             {marketTitle || "Market"}
           </div>

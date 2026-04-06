@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
         username: user.username,
         points: user.points,
         rank,
-        badge: getBadgeForPoints(user.points), // ← CHANGED
+        badge: getBadgeForPoints(user.points),
       };
     });
 

@@ -135,23 +135,38 @@ export default function Home() {
     fetchUser();
   }, [ready, authenticated, privyUser?.id, phantomUser?.id, userEmail, referralCode, privyAuthenticated, phantomAuthenticated]);
 
-  const handleReportGenerated = useCallback((report: Report) => {
-    setGeneratedReport(report);
-    setShowReportSidebar(true);
-    // Auto-open swap widget so user can trade the token on the right
-    setForceShowExchange(true);
-  }, []);
+  const handleReportGenerated = useCallback(
+    (report: Report, token?: TrendingToken | null) => {
+      setGeneratedReport(report);
+      setShowReportSidebar(true);
+      setForceShowExchange(true);
+      // When generating from table row, open chart in left panel and set token for swap widget
+      if (token) {
+        setSelectedToken(token);
+        setSelectedTokenAddress(token?.tokenAddress ?? null);
+        setIsViewingChart(true);
+      }
+    },
+    []
+  );
 
   const handleTokenSelect = useCallback(
     (token: TrendingToken | null, address: string | null, viewing: boolean) => {
       setSelectedToken(token);
       setSelectedTokenAddress(address);
       setIsViewingChart(viewing);
-      // Open the AI panel when viewing chart, close when not viewing
       if (viewing) {
-        setShowReportSidebar(true);
-        // Auto-open swap widget with this coin so user can trade on the right
-        setForceShowExchange(true);
+        // On mobile, keep sidebar closed so the chart (DexscreenerView) shows full screen.
+        // On desktop (lg+), show sidebar side-by-side with chart.
+        const isMobile =
+          typeof window !== "undefined" && window.innerWidth < 1024;
+        if (!isMobile) {
+          setShowReportSidebar(true);
+          setForceShowExchange(true);
+        } else {
+          setShowReportSidebar(false);
+          setForceShowExchange(false);
+        }
       } else {
         setShowReportSidebar(false);
         setForceShowExchange(false);
@@ -254,6 +269,8 @@ export default function Home() {
               isAdmin={isAdmin}
               onTokenSelect={handleTokenSelect}
               onChainChange={setSelectedChain}
+              externalTokenForChart={selectedToken}
+              externalViewingChart={isViewingChart}
             />
           </div>
           <Footer />
@@ -313,7 +330,7 @@ export default function Home() {
         >
           <button
             onClick={openDailyTasksPopup}
-            className="text-white font-semibold shadow-lg transition-all duration-200 cursor-pointer"
+            className="text-white font-semibold shadow-lg transition-all duration-200 cursor-pointer shrink-0"
             aria-label="Open Daily Tasks"
             title="Daily Missions"
           >
@@ -322,12 +339,13 @@ export default function Home() {
               alt="Daily Missions"
               width={105}
               height={51}
+              className="w-[88px] h-11 sm:w-[105px] sm:h-[51px] object-contain"
             />
           </button>
 
           <button
             onClick={openLeaderboard}
-            className="text-white font-semibold shadow-lg transition-all duration-200 cursor-pointer"
+            className="text-white font-semibold shadow-lg transition-all duration-200 cursor-pointer shrink-0"
             aria-label="Open Leaderboard"
             title="Global Leaderboard"
           >
@@ -336,6 +354,7 @@ export default function Home() {
               alt="Leaderboard"
               width={105}
               height={51}
+              className="w-[88px] h-11 sm:w-[105px] sm:h-[51px] object-contain"
             />
           </button>
         </div>

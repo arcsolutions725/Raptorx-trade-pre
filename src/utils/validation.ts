@@ -1,4 +1,6 @@
 export const MIN_ORDER_SIZE = 0.01;
+/** Limitless CLOB minimum order size in USDC (platform requirement). */
+export const LIMITLESS_MIN_ORDER_USD = 3;
 export const MIN_PRICE_CENTS = 1;
 export const MAX_PRICE_CENTS = 99;
 export const DUST_THRESHOLD = 0.01; // Minimum value to consider a position non-dust

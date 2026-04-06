@@ -2,7 +2,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { X, Trophy, CheckCircle, Circle, Star } from "lucide-react";
+import Image from "next/image";
+import { X, CheckCircle, Circle, Star } from "lucide-react";
 import type { DailyTasksStatus } from "@/app/api/daily-tasks/route";
 
 interface DailyTasksPopupProps {
@@ -72,9 +73,13 @@ export function DailyTasksPopup({
         {/* Header (fixed) */}
         <div className="flex items-center justify-between p-6 border-b border-gray-700">
           <div className="flex items-center gap-3">
-            <div className="bg-[#ffc000] p-2 rounded-lg">
-              <Trophy className="w-6 h-6 text-white" />
-            </div>
+            <Image
+              src="/images/mission.png"
+              alt="Daily Missions"
+              width={24}
+              height={24}
+              className="w-14 h-14 object-contain"
+            />
             <div>
               <h2 className="text-xl font-bold text-white">Daily Missions</h2>
               <p className="text-sm text-gray-400">

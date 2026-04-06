@@ -10,6 +10,7 @@ import copy from "copy-to-clipboard";
 import ChatSidebar from "../_components/chat/ChatSidebar";
 import ChatInput, {
   type PredictionMarketMode,
+  type ClawSelectionContext,
 } from "../_components/chat/ChatInput";
 import Message, { MessageData } from "../_components/chat/Message";
 import { CryptoSwapPanel } from "../_components/chat/CryptoSwapPanel";
@@ -26,6 +27,7 @@ import {
   showErrorNotification,
   showSuccessNotification,
 } from "@/components/ui/notification";
+import { PaywallModal, type PaywallLimitCode } from "@/components/subscription/PaywallModal";
 
 export default function ChatDetailPage() {
   const router = useRouter();
@@ -60,12 +62,14 @@ export default function ChatDetailPage() {
   const [quotedContent, setQuotedContent] = useState<string | undefined>(
     undefined,
   );
-  const [marketMode, setMarketMode] = useState<PredictionMarketMode>("Auto");
+  const [marketMode, setMarketMode] = useState<PredictionMarketMode>("Markets");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [isSwapOpen, setIsSwapOpen] = useState(false);
   const [activeCryptoPayload, setActiveCryptoPayload] = useState<any | null>(
     null,
   );
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallLimitCode, setPaywallLimitCode] = useState<PaywallLimitCode | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const initialMessageIdsRef = useRef<Set<string>>(new Set());
   const initialMessagesCapturedRef = useRef(false);
@@ -287,8 +291,8 @@ export default function ChatDetailPage() {
   }, [chatId]);
 
   const handleSendMessage = useCallback(
-    async (message: string, quotedContent?: string) => {
-      if (!chatId || !message.trim() || isSending) return;
+    async (message: string, quotedContent?: string, context?: ClawSelectionContext) => {
+      if (!chatId || !message.trim() || isSending || !authenticated || !currentUserId) return;
 
       setIsSending(true);
       // Don't assume the phase on the client. The server will emit status events
@@ -352,9 +356,29 @@ export default function ChatDetailPage() {
             role: "user",
             history: historyForAi,
             marketMode,
+            ...(context?.cryptoChain && { cryptoChain: context.cryptoChain }),
+            ...(context?.predictionSubmode != null && { predictionSubmode: context.predictionSubmode }),
+            ...(context?.predictionDisplayLevel != null && { predictionDisplayLevel: context.predictionDisplayLevel }),
           }),
           signal: controller.signal,
         });
+
+        if (res.status === 402) {
+          const data = await res.json().catch(() => ({}));
+          const code = (data?.code === "PAID_LIMIT_REACHED" ? "PAID_LIMIT_REACHED" : "FREE_LIMIT_REACHED") as PaywallLimitCode;
+          setPaywallLimitCode(code);
+          setShowPaywall(true);
+          setMessages((prev) =>
+            prev.filter(
+              (msg) =>
+                !msg.id.startsWith("temp-user-") && !msg.id.startsWith("temp-ai-"),
+            ),
+          );
+          setStreamingPhase("");
+          setStreamingStatusLabel("");
+          setIsSending(false);
+          return;
+        }
 
         if (!res.ok) {
           throw new Error("Failed to send message");
@@ -611,7 +635,7 @@ export default function ChatDetailPage() {
         setQuotedContent(undefined);
       }
     },
-    [chatId, isSending, messages, currentChat, marketMode, extractContractFromText],
+    [chatId, isSending, messages, currentChat, marketMode, extractContractFromText, authenticated, currentUserId],
   );
 
   const handleQuote = useCallback((content: string) => {
@@ -879,6 +903,7 @@ export default function ChatDetailPage() {
   }
 
   return (
+    <>
     <div className="relative w-full h-screen flex flex-col overflow-hidden">
       <div className="flex-1 flex overflow-hidden">
         <div className="h-full flex flex-col w-full">
@@ -1021,6 +1046,8 @@ export default function ChatDetailPage() {
                     onClearQuote={handleClearQuote}
                     marketMode={marketMode}
                     onMarketModeChange={setMarketMode}
+                    disabled={!authenticated}
+                    disabledPlaceholder="Sign in to chat"
                   />
                 </div>
               </div>
@@ -1038,5 +1065,16 @@ export default function ChatDetailPage() {
         </div>
       </div>
     </div>
+    <PaywallModal
+      open={showPaywall}
+      onClose={() => {
+        setShowPaywall(false);
+        setPaywallLimitCode(null);
+      }}
+      context="claw"
+      limitCode={paywallLimitCode}
+      paymentMetadata={currentUserId ? { userId: currentUserId } : undefined}
+    />
+    </>
   );
 }

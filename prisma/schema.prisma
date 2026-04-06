@@ -32,13 +32,72 @@ model User {
   lastQueryDate  DateTime?
   queriesToday   Int       @default(0)
 
+  // Subscription & usage tracking
+  subscriptionPlan        SubscriptionPlan @default(FREE)
+  subscriptionPeriodStart DateTime?
+  subscriptionPeriodEnd   DateTime?
+
+  // Monthly paid bundle usage (for active CLAW_PRO periods)
+  clawMessagesThisPeriod             Int @default(0)
+  rexScreenerReportsThisPeriod       Int @default(0)
+  rexScreenerFollowupsThisPeriod     Int @default(0)
+  rexMarketsReportsThisPeriod        Int @default(0)
+  rexMarketsTechFollowupsThisPeriod  Int @default(0)
+  rexMarketsNewsFollowupsThisPeriod  Int @default(0)
+
+  // Free Tier daily usage (resets every day)
+  freeTierUsageDate                  DateTime?
+  clawFreeMessagesToday              Int @default(0)
+  rexScreenerFreeReportsToday        Int @default(0)
+  rexMarketsFreeTechReportsToday     Int @default(0)
+  rexMarketsFreeNewsReportsToday     Int @default(0)
+
   reports   Report[]
   swaps     SwapTransaction[]
   clawV5Chats ClawV5Chat[]
   referrer  User?    @relation("UserReferrals", fields: [referredBy], references: [id])
   referrals User[]   @relation("UserReferrals")
+  polymarketTrades PolymarketTrade[]
+  subscriptions Subscription[]
 
   @@map("users")
+}
+
+enum SubscriptionPlan {
+  FREE
+  CLAW_PRO
+}
+
+/// User subscription history (MoonPay): one row per subscribe/renew event.
+model Subscription {
+  id            String   @id @default(cuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactionId String?  // MoonPay/Helio transaction id
+  createdAt     DateTime @default(now())
+
+  @@index([userId])
+  @@index([userId, createdAt])
+  @@index([transactionId])
+  @@map("Subscription")
+}
+
+// Polymarket prediction market trade – one row per filled trade for dashboard volume (total, per week, per user).
+// Synced from client when user loads Polymarket UI or after placing an order (useTrades data).
+model PolymarketTrade {
+  id               String   @id @default(cuid())
+  polymarketTradeId  String   @unique // External ID from Polymarket to avoid duplicates
+  walletAddress    String   // Ethereum address (maker or taker)
+  userId          String?  // Linked RaptorX user (matched by ethereumWallet)
+  user            User?   @relation(fields: [userId], references: [id], onDelete: SetNull)
+  volumeUsd       Float    // size * price (USD notional per trade)
+  tradedAt        DateTime // match_time from Polymarket
+  createdAt      DateTime @default(now())
+
+  @@index([walletAddress])
+  @@index([userId])
+  @@index([tradedAt])
+  @@map("polymarket_trades")
 }
 
 model Report {
@@ -93,6 +152,8 @@ model Message {
   role           MessageRole
   content        String
   timestamp      DateTime     @default(now())
+  /// For market reports: "tech" | "news" to enforce 2 tech + 2 news queries per report per day (free tier).
+  followupKind   String?
 
   @@index([conversationId])
   @@map("messages")
@@ -124,15 +185,21 @@ model SwapTransaction {
   amountUSD       Float
   fromToken       String
   toToken         String
-  fromAddress     String
-  toAddress       String
+  fromAddress     String   // token contract address (from)
+  toAddress       String   // token contract address (to)
   chain           String   // "solana" | "bnb"
   isBuy           Boolean  // true for buy, false for sell
   pointsAwarded   Int      @default(0)
+  // LiFi tracking fields
+  walletAddress   String?  // wallet that performed the swap (proof of purchase)
+  fromAmountRaw   String?  // raw token amount spent (e.g. SOL/USDC)
+  toAmountRaw     String?  // raw token amount received (coins purchased)
+  txHash          String?  // transaction hash for proof of purchase
   createdAt       DateTime @default(now())
 
   @@index([userId])
   @@index([userId, chain])
+  @@index([txHash])
   @@map("swaptransactions")
 }
 

@@ -202,8 +202,18 @@ export default function RexMarketsReportData({
                   <h6 className="!text-[12px] !font-normal text-[#F2F2F2]">
                     Rex Pilot
                   </h6>
-                  <p className="text-[12px] font-normal text-[#7A7A7A]">
+                  <p className="text-[12px] font-normal text-[#7A7A7A] flex items-center gap-1.5 flex-wrap">
                     Your AI Pilot for everything crypto
+                    <span className="inline-flex items-center gap-1 shrink-0" aria-hidden="true">
+                      <Image
+                        src="/images/limitless-logo.png"
+                        alt=""
+                        width={14}
+                        height={14}
+                        className="w-3.5 h-3.5 object-contain"
+                      />
+                      <span className="text-[#7A7A7A]">Limitless</span>
+                    </span>
                   </p>
                 </div>
               </div>

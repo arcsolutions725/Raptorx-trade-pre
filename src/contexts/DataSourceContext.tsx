@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, useEffect, useLayoutEffect, ReactNode } from "react";
 
-type DataSource = "kalshi" | "polymarket" | "all";
+type DataSource = "kalshi" | "polymarket" | "limitless" | "all";
 
 interface DataSourceContextType {
   dataSource: DataSource;
@@ -21,7 +21,7 @@ export function DataSourceProvider({ children }: { children: ReactNode }) {
     if (typeof window !== "undefined") {
       const stored = localStorage.getItem("dataSource");
       const initialValue: DataSource = 
-        (stored === "polymarket" || stored === "kalshi" || stored === "all") 
+        (stored === "polymarket" || stored === "kalshi" || stored === "limitless" || stored === "all") 
           ? stored 
           : "kalshi";
       setDataSourceState(initialValue);
@@ -40,7 +40,7 @@ export function DataSourceProvider({ children }: { children: ReactNode }) {
     const handleStorageChange = () => {
       if (typeof window !== "undefined") {
         const stored = localStorage.getItem("dataSource");
-        if (stored === "polymarket" || stored === "kalshi" || stored === "all") {
+        if (stored === "polymarket" || stored === "kalshi" || stored === "limitless" || stored === "all") {
           setDataSourceState(stored);
         }
       }

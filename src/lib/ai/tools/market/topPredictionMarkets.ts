@@ -446,7 +446,7 @@ async function fetchKalshiSeriesDirect(params: {
 }): Promise<any[]> {
   const searchParams = new URLSearchParams({
     order_by: "trending",
-    status: "open,unopened",
+    status: "open",
     page_size: String(params.pageSize),
     with_milestones: "true",
   });

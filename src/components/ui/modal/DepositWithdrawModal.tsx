@@ -13,9 +13,13 @@ import usePolygonBalances from "@/hooks/usePolygonBalances";
 import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
 import { useSolanaBalance } from "@/hooks/useSolanaBalance";
 import { useUsdcBalance } from "@/hooks/useUsdcBalance";
+import { useBaseBalance } from "@/hooks/useBaseBalance";
 import { showSuccessNotification } from "@/components/ui/notification";
 import { USDC_E_DECIMALS } from "@/constants/tokens";
-import { parseUnits, isAddress } from "viem";
+import { parseUnits, isAddress, createWalletClient, custom } from "viem";
+import { base } from "viem/chains";
+import { erc20Abi } from "viem";
+import { USDC_BASE_ADDRESS, USDC_BASE_DECIMALS } from "@/constants/tokens";
 import { useWallets, usePrivy } from "@privy-io/react-auth";
 import {
   useSignAndSendTransaction,
@@ -44,13 +48,13 @@ const SOLANA_RPC =
 const SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const SOLANA_USDC_DECIMALS = 6;
 
-type PlatformTab = "kalshi" | "polymarket";
+type PlatformTab = "kalshi" | "polymarket" | "limitless";
 type KalshiWithdrawAsset = "SOL" | "USDC";
 
 type DepositWithdrawModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  /** When on rexmarkets, pre-select Kalshi or Polymarket based on current page */
+  /** When on rexmarkets, pre-select Kalshi, Polymarket, or Limitless based on current page */
   defaultPlatform?: PlatformTab;
 };
 
@@ -86,6 +90,9 @@ export default function DepositWithdrawModal({
   );
   const [lastWithdrawnAsset, setLastWithdrawnAsset] =
     useState<KalshiWithdrawAsset | null>(null);
+  const [isSendingLimitlessUsdc, setIsSendingLimitlessUsdc] = useState(false);
+  const [limitlessWithdrawError, setLimitlessWithdrawError] = useState<string | null>(null);
+  const [isRefreshingBaseBalance, setIsRefreshingBaseBalance] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -149,6 +156,14 @@ export default function DepositWithdrawModal({
   } = useUsdcBalance(isOpen && platformTab === "kalshi" ? solanaAddress : null);
 
   const {
+    usdcBalance: baseUsdcBalance,
+    usdcBalanceFormatted: baseUsdcFormatted,
+    ethBalanceFormatted: baseEthFormatted,
+    isLoading: isBaseBalanceLoading,
+    refetch: refetchBaseBalance,
+  } = useBaseBalance(isOpen && platformTab === "limitless" ? eoaAddress : undefined);
+
+  const {
     data: depositAddressesData,
     isLoading: isLoadingDepositAddresses,
     error: depositAddressesError,
@@ -174,6 +189,7 @@ export default function DepositWithdrawModal({
       setCopiedAddress(null);
       setAddressError(null);
       setKalshiWithdrawError(null);
+      setLimitlessWithdrawError(null);
       setKalshiWithdrawAsset("USDC");
       setLastWithdrawnAmount(null);
       setLastWithdrawnAsset(null);
@@ -272,6 +288,16 @@ export default function DepositWithdrawModal({
       setIsRefreshingBalance(false);
     }
   }, [refetchSolanaBalance, refetchKalshiUsdcBalance, isRefreshingBalance]);
+
+  const handleRefreshLimitlessBalance = useCallback(async () => {
+    if (isRefreshingBaseBalance || !refetchBaseBalance) return;
+    setIsRefreshingBaseBalance(true);
+    try {
+      await refetchBaseBalance();
+    } finally {
+      setIsRefreshingBaseBalance(false);
+    }
+  }, [refetchBaseBalance, isRefreshingBaseBalance]);
 
   const handleTransfer = async () => {
     if (!relayClient || !recipient || !amount) return;
@@ -628,6 +654,89 @@ export default function DepositWithdrawModal({
     queryClient,
   ]);
 
+  const handleLimitlessWithdraw = useCallback(async () => {
+    const trimmedRecipient = recipient.trim();
+    const usdcAmount = parseFloat(amount);
+
+    if (!eoaAddress || !trimmedRecipient || !amount) {
+      setLimitlessWithdrawError("Please enter recipient and amount.");
+      return;
+    }
+    if (!isAddress(trimmedRecipient)) {
+      setLimitlessWithdrawError("Invalid EVM address.");
+      return;
+    }
+    if (isNaN(usdcAmount) || usdcAmount <= 0) {
+      setLimitlessWithdrawError("Please enter a valid USDC amount.");
+      return;
+    }
+    if (usdcAmount > baseUsdcBalance) {
+      setLimitlessWithdrawError("Insufficient USDC balance on Base.");
+      return;
+    }
+
+    setLimitlessWithdrawError(null);
+    setIsSendingLimitlessUsdc(true);
+
+    try {
+      const wallet = wallets?.find(
+        (w) => (w as { address?: string }).address?.toLowerCase() === eoaAddress?.toLowerCase()
+      );
+      if (!wallet) {
+        throw new Error("Wallet not found. Please connect your wallet.");
+      }
+      const provider = typeof (wallet as { getEthereumProvider?: () => Promise<unknown> }).getEthereumProvider === "function"
+        ? await (wallet as { getEthereumProvider: () => Promise<unknown> }).getEthereumProvider()
+        : null;
+      if (!provider) {
+        throw new Error("Wallet provider not available. Please connect your wallet.");
+      }
+
+      // Ensure wallet is on Base before sending USDC (Limitless uses Base).
+      // Per Privy React docs (https://docs.privy.io/wallets/using-wallets/ethereum/switch-chain),
+      // use the wallet's switchChain method — do not use provider.request('wallet_switchEthereumChain')
+      // as that is for React Native and can cause "handleSwitchEthereumChain" errors in React.
+      const walletWithSwitch = wallet as { chainId?: string | number; switchChain?: (chainId: number) => Promise<void> };
+      const currentChainId = walletWithSwitch.chainId;
+      const isOnBase =
+        currentChainId === base.id ||
+        currentChainId === `eip155:${base.id}` ||
+        currentChainId === String(base.id);
+      if (!isOnBase) {
+        if (typeof walletWithSwitch.switchChain !== "function") {
+          throw new Error("Cannot switch chain. Please switch your wallet to Base (Chain ID 8453) manually and try again.");
+        }
+        await walletWithSwitch.switchChain(base.id);
+      }
+
+      const client = createWalletClient({
+        account: eoaAddress as `0x${string}`,
+        chain: base,
+        transport: custom(provider as Parameters<typeof custom>[0]),
+      });
+      const amountWei = parseUnits(amount, USDC_BASE_DECIMALS);
+      const hash = await client.writeContract({
+        address: USDC_BASE_ADDRESS as `0x${string}`,
+        abi: erc20Abi,
+        functionName: "transfer",
+        args: [trimmedRecipient as `0x${string}`, amountWei],
+      });
+
+      setShowSuccess(true);
+      setRecipient("");
+      setAmount("");
+      showSuccessNotification("Withdrawal successful", `${amount} USDC sent on Base.`);
+      refetchBaseBalance?.();
+      queryClient.invalidateQueries({ queryKey: ["baseBalance", eoaAddress] });
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Withdraw failed.";
+      setLimitlessWithdrawError(message);
+    } finally {
+      setIsSendingLimitlessUsdc(false);
+    }
+  }, [recipient, amount, eoaAddress, baseUsdcBalance, wallets, refetchBaseBalance, queryClient]);
+
   // Helper function to get user-friendly error message
   const getErrorMessage = () => {
     if (!error) return null;
@@ -691,7 +800,7 @@ export default function DepositWithdrawModal({
             </button>
           </div>
 
-          {/* Platform tabs: Kalshi | Polymarket */}
+          {/* Platform tabs: Kalshi | Polymarket | Limitless */}
           <div className="flex space-x-1 mx-4 mt-4 bg-[#141414] p-1 rounded-lg">
             <button
               onClick={() => setPlatformTab("kalshi")}
@@ -713,10 +822,20 @@ export default function DepositWithdrawModal({
             >
               Polymarket
             </button>
+            <button
+              onClick={() => setPlatformTab("limitless")}
+              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+                platformTab === "limitless"
+                  ? "bg-black text-white"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Limitless
+            </button>
           </div>
 
-          {/* Deposit / Withdraw tabs (Kalshi and Polymarket) */}
-          {(platformTab === "polymarket" || platformTab === "kalshi") && (
+          {/* Deposit / Withdraw tabs (Kalshi, Polymarket, Limitless) */}
+          {(platformTab === "polymarket" || platformTab === "kalshi" || platformTab === "limitless") && (
             <div className="flex space-x-1 mx-4 mt-2 bg-[#141414] p-1 rounded-lg">
               <button
                 onClick={() => setActiveTab("deposit")}
@@ -974,6 +1093,144 @@ export default function DepositWithdrawModal({
                   {!solanaAddress && (
                     <p className="text-xs text-yellow-400 text-center">
                       Connect your Phantom or Privy Solana wallet to withdraw.
+                    </p>
+                  )}
+                </div>
+              )
+            ) : platformTab === "limitless" ? (
+              activeTab === "deposit" ? (
+                /* Limitless Deposit: Base address + balance */
+                <div className="space-y-4">
+                  <div className="bg-white/5 rounded-lg p-4">
+                    <h4 className="text-white font-semibold mb-3">
+                      Base Wallet (Limitless)
+                    </h4>
+                    <p className="text-xs text-gray-400 mb-3">
+                      Send USDC or ETH on Base to this address to fund your Limitless trading.
+                    </p>
+                    {!eoaAddress ? (
+                      <p className="text-gray-400 text-sm py-2">
+                        Connect your wallet to see your Base address.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-gray-400 text-xs">Base (EVM) Address:</span>
+                          <div className="flex items-center gap-2 bg-black/30 rounded px-2 py-1.5">
+                            <span className="text-white text-xs font-mono break-all flex-1 min-w-0">
+                              {eoaAddress}
+                            </span>
+                            <button
+                              onClick={() => handleCopyAddress(eoaAddress, "evm")}
+                              className="p-1 hover:bg-white/10 rounded transition-colors shrink-0"
+                              title="Copy Base address"
+                            >
+                              {copiedAddress === "evm" ? (
+                                <Check className="w-4 h-4 text-green-400" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-gray-400 hover:text-white" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="bg-black/30 rounded-lg p-3 mt-2 space-y-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs text-gray-400">
+                              Wallet Balance (Base)
+                            </p>
+                            <button
+                              type="button"
+                              onClick={handleRefreshLimitlessBalance}
+                              disabled={
+                                isRefreshingBaseBalance ||
+                                isBaseBalanceLoading
+                              }
+                              className="p-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Refresh balance"
+                            >
+                              <RefreshCw
+                                className={`w-4 h-4 text-gray-400 hover:text-[#ffc000] ${
+                                  isRefreshingBaseBalance ? "animate-spin" : ""
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          <div className="flex flex-col gap-1 text-[14px]">
+                            {isBaseBalanceLoading || isRefreshingBaseBalance ? (
+                              <span className="inline-block animate-pulse h-5 w-24 bg-white/10 rounded align-middle" />
+                            ) : (
+                              <span className="text-white/90 font-semibold text-[12px]">
+                                {baseUsdcFormatted} USDC ({baseEthFormatted} ETH)
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                /* Limitless Withdraw: USDC on Base */
+                <div className="space-y-4">
+                  {limitlessWithdrawError && (
+                    <div className="bg-red-500/20 border border-red-500/40 rounded-lg p-3">
+                      <p className="text-red-300 text-sm">{limitlessWithdrawError}</p>
+                    </div>
+                  )}
+                  {showSuccess && (
+                    <div className="bg-green-500/20 border border-green-500/40 rounded-lg p-3">
+                      <p className="text-green-300 font-medium text-sm">Transfer successful!</p>
+                    </div>
+                  )}
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">Recipient (EVM address)</label>
+                    <input
+                      type="text"
+                      value={recipient}
+                      onChange={(e) => setRecipient(e.target.value)}
+                      placeholder="0x..."
+                      className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-[#ffc000] text-white font-mono text-sm"
+                      disabled={isSendingLimitlessUsdc}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">
+                      Available: {baseUsdcFormatted} USDC (Base)
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={amount}
+                        onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
+                        placeholder="0.00"
+                        className="w-full px-4 py-2 pr-16 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-[#ffc000] text-white"
+                        disabled={isSendingLimitlessUsdc}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setAmount(baseUsdcFormatted)}
+                        className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs bg-[#ffc000] hover:bg-[#ffd000] rounded text-black font-semibold"
+                      >
+                        MAX
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleLimitlessWithdraw}
+                    disabled={
+                      isSendingLimitlessUsdc ||
+                      !recipient.trim() ||
+                      !amount ||
+                      !eoaAddress ||
+                      baseUsdcBalance <= 0
+                    }
+                    className="w-full py-3 bg-[#ffc000] hover:bg-[#ffd000] disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-bold rounded-lg transition-colors"
+                  >
+                    {isSendingLimitlessUsdc ? "Sending..." : "Send USDC (Base)"}
+                  </button>
+                  {!eoaAddress && (
+                    <p className="text-xs text-yellow-400 text-center">
+                      Connect your wallet to withdraw.
                     </p>
                   )}
                 </div>

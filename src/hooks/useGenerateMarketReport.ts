@@ -21,6 +21,8 @@ type GenerateArgs = {
   marketTicker: string;
   marketTitle: string;
   marketData?: any;
+  // "technical" | "news" – used for per-kind quotas in backend
+  reportKind?: "technical" | "news";
 };
 
 type UseGenerateMarketReportOptions = {
@@ -108,7 +110,7 @@ export function useGenerateMarketReport(
   );
 
   const generateFromFields = useCallback(
-    async ({ marketTicker, marketTitle, marketData }: GenerateArgs) => {
+    async ({ marketTicker, marketTitle, marketData, reportKind }: GenerateArgs) => {
       if (!marketTicker?.trim() || !marketTitle?.trim()) {
         throw new Error("Missing market ticker or title.");
       }
@@ -125,10 +127,15 @@ export function useGenerateMarketReport(
 
       try {
         const { res, json } = await postGenerateMarket(
-          { marketTicker, marketTitle, marketData },
+          { marketTicker, marketTitle, marketData, reportKind },
           { "x-user-id": userId }
         );
-        if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+        if (!res.ok) {
+          const err: any = new Error(json?.error || `HTTP ${res.status}`);
+          err.status = res.status;
+          err.code = json?.code;
+          throw err;
+        }
         return await commonBuildReport(json, marketTicker, marketTitle);
       } catch (err: any) {
         setError(err?.message || "Failed to generate market report.");

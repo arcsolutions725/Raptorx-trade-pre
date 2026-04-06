@@ -32,30 +32,35 @@ export async function GET(request: NextRequest) {
       market: clobTokenId, // CLOB token ID (condition_id)
     });
 
-    // Fidelity mapping for each interval
-    const fidelityMap: { [key: string]: string } = {
-      "1m": "180",
-      "1w": "30",
-      "1d": "5",
-      "6h": "1",
-      "1h": "1",
+    const nowSec = Math.floor(Date.now() / 1000);
+    const polymarketInterval = (interval || "all").toLowerCase();
+
+    // Match Polymarket website's exact API usage:
+    // - All, 1M, 1d, 1w: use startTs + fidelity (no interval param)
+    // - 6h, 1h: use interval param + fidelity=1
+    // Use coarser fidelity for long ranges to avoid fetching 100k+ points (causes slowness)
+    const useIntervalParam = polymarketInterval === "6h" || polymarketInterval === "1h";
+    const startTsByInterval: Record<string, number> = {
+      all: nowSec - 365 * 24 * 60 * 60,   // 1 year
+      "1m": nowSec - 30 * 24 * 60 * 60,   // 30 days
+      "1w": nowSec - 7 * 24 * 60 * 60,    // 7 days
+      "1d": nowSec - 24 * 60 * 60,        // 1 day
+    };
+    const fidelityByInterval: Record<string, number> = {
+      all: 60,   // 1 point/hour for 1 year (~8.7k points vs 105k at fidelity 5)
+      "1m": 30,  // 1 point/30min for 30 days (~1.4k points)
+      "1w": 15,  // 1 point/15min for 7 days (~670 points)
+      "1d": 5,   // 1 point/5min for 24h (~288 points)
     };
 
-    // For "ALL" (when interval is null or "all"), don't include interval parameter, but include startTs and fidelity=720
-    if (!interval || interval.toLowerCase() === "all") {
-      // Use a start timestamp to get historical data
-      // The user's example shows startTs=1754414893, using current timestamp or a reasonable default
-      const startTs = Math.floor(Date.now() / 1000) - 365 * 24 * 60 * 60; // 1 year ago
-      pricesHistoryParams.append("startTs", startTs.toString());
-      pricesHistoryParams.append("fidelity", "720");
-    } else {
-      // For other intervals, convert to lowercase and include interval with appropriate fidelity
-      const polymarketInterval = interval.toLowerCase();
+    if (useIntervalParam) {
       pricesHistoryParams.append("interval", polymarketInterval);
-
-      // Get fidelity from map, default to "1" if not found
-      const fidelity = fidelityMap[polymarketInterval] || "1";
-      pricesHistoryParams.append("fidelity", fidelity);
+      pricesHistoryParams.append("fidelity", "1");  // 1-minute granularity for 6h/1h (short range, small payload)
+    } else {
+      const startTs = startTsByInterval[polymarketInterval] ?? startTsByInterval.all;
+      const fidelity = fidelityByInterval[polymarketInterval] ?? fidelityByInterval.all;
+      pricesHistoryParams.append("startTs", startTs.toString());
+      pricesHistoryParams.append("fidelity", String(fidelity));
     }
 
     const pricesHistoryUrl = `https://clob.polymarket.com/prices-history?${pricesHistoryParams.toString()}`;
@@ -188,19 +193,32 @@ export async function GET(request: NextRequest) {
       )
       .sort((a: any, b: any) => (a?.time || 0) - (b?.time || 0));
 
+    // Downsample if still too many points (chart needs ~300–500 max for smooth display)
+    const MAX_POINTS = 400;
+    let finalTransformed = transformed;
+    if (transformed.length > MAX_POINTS) {
+      const step = (transformed.length - 1) / (MAX_POINTS - 1);
+      const indices = new Set<number>([0, transformed.length - 1]);
+      for (let i = 1; i < MAX_POINTS - 1; i++) {
+        indices.add(Math.round(i * step));
+      }
+      finalTransformed = transformed.filter((_, idx) => indices.has(idx));
+    }
+
     return NextResponse.json(
       {
         s: "ok", // Status: ok
-        t: transformed.map((item) => item?.time || 0), // Timestamps
-        o: transformed.map((item) => item?.open || 0), // Open prices
-        h: transformed.map((item) => item?.high || 0), // High prices
-        l: transformed.map((item) => item?.low || 0), // Low prices
-        c: transformed.map((item) => item?.close || 0), // Close prices
-        v: transformed.map((item) => item?.volume || 0), // Volumes
+        t: finalTransformed.map((item) => item?.time || 0), // Timestamps
+        o: finalTransformed.map((item) => item?.open || 0), // Open prices
+        h: finalTransformed.map((item) => item?.high || 0), // High prices
+        l: finalTransformed.map((item) => item?.low || 0), // Low prices
+        c: finalTransformed.map((item) => item?.close || 0), // Close prices
+        v: finalTransformed.map((item) => item?.volume || 0), // Volumes
       },
       {
         headers: {
-          "Cache-Control": "public, s-maxage=30, stale-while-revalidate=60",
+          // Historical data changes slowly; longer cache reduces load
+          "Cache-Control": "public, s-maxage=60, stale-while-revalidate=120",
         },
       },
     );

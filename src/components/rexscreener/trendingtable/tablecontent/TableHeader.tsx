@@ -27,7 +27,7 @@ export function TableHeader({
   };
 
   return (
-    <div className="sticky top-0 z-20 grid grid-cols-[minmax(300px,1.5fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] sm:grid-cols-[minmax(400px,2fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] bg-black text-white font-semibold shadow-sm">
+    <div className="sticky top-0 z-20 grid grid-cols-[minmax(200px,1.5fr)_minmax(70px,1fr)_minmax(140px,1fr)_minmax(70px,1fr)_minmax(100px,1fr)_minmax(100px,1fr)_minmax(70px,1fr)] sm:grid-cols-[minmax(400px,2fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] bg-black text-white font-semibold shadow-sm">
       {/* Token — sticky only on sm+ */}
       <div 
         className="sm:sticky sm:left-0 sm:z-30 flex items-center px-3 py-2 whitespace-nowrap truncate bg-black sm:shadow-[2px_0_4px_rgba(0,0,0,0.3)] sm:isolation-auto"
@@ -104,11 +104,6 @@ export function TableHeader({
           <span className="text-[12px] text-white/60 font-normal">Age</span>
           {getSortIcon("age")}
         </button>
-      </div>
-
-      {/* Last Generated On */}
-      <div className="flex items-center px-3 py-2 whitespace-nowrap truncate relative z-0 bg-black">
-        <span className="text-[12px] text-white/60 font-normal">Last Generated On</span>
       </div>
     </div>
   );

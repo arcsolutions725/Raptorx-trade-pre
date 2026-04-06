@@ -95,45 +95,30 @@ export default function BuySellModal({
 
   return (
     <>
-      {/* Backdrop */}
-      <div 
-        className="fixed inset-0 bg-black z-100 lg:hidden"
+      {/* Backdrop - same as Limitless: blur */}
+      <div
+        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] lg:hidden"
         onClick={onClose}
       />
-      
-      {/* Modal */}
-      <div className="fixed inset-0 z-[100] flex items-end justify-center lg:hidden pointer-events-none">
+
+      {/* Modal - centered, smaller card like Limitless */}
+      <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 lg:hidden pointer-events-none">
         <div
           ref={modalRef}
-          className="w-full max-h-[95vh] bg-black border-t border-white/10 rounded-t-2xl shadow-2xl pointer-events-auto overflow-y-auto custom-sidebar-scrollbar"
+          className="relative w-full max-w-[360px] max-h-[90vh] bg-black border border-white/10 rounded-2xl shadow-2xl pointer-events-auto overflow-y-auto custom-sidebar-scrollbar"
           onClick={(e) => e.stopPropagation()}
         >
-          {/* Header with Close Button */}
-          <div className="flex items-center justify-between p-4 border-b border-white/10 sticky top-0 bg-black z-10 backdrop-blur-sm">
-            <h2 className="text-lg font-bold text-white">Place Order</h2>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-white/10 rounded-lg transition text-gray-400 hover:text-white touch-manipulation"
-              aria-label="Close modal"
-            >
-              <svg
-                className="w-6 h-6"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-
-          {/* BuySellWidget Content */}
-          <div className="p-4 pb-6">
+          <button
+            type="button"
+            onClick={onClose}
+            className="absolute top-3 right-3 z-10 p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors touch-manipulation"
+            aria-label="Close modal"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <div className="p-0">
             <BuySellWidget
               currentYesPrice={currentYesPrice}
               currentNoPrice={currentNoPrice}

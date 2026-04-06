@@ -70,8 +70,8 @@ function createLimiter(concurrency: number) {
 }
 
 function filterValidMarketCap(tokens: any[], chain: string): any[] {
-  // For BNB chain, filter out tokens with market cap of 0 or null/undefined
-  if (chain === "bsc") {
+  // For BNB and Base (EVM), filter out tokens with market cap of 0 or null/undefined
+  if (chain === "bsc" || chain === "base") {
     return tokens.filter((token) => {
       const mc = token?.marketCap;
       return mc !== null && mc !== undefined && mc > 0;
@@ -727,7 +727,7 @@ async function handleTokenSearch(opts: {
     let searchResults: any[] = [];
 
     if (search_type === "address") {
-      // If chain is "all", detect based on address pattern (0x... => bsc)
+      // If chain is "all", detect based on address pattern (0x... => bsc; could be base too, default bsc for now)
       const targetChain =
         chain === "all"
           ? /^0x[a-fA-F0-9]{40}$/.test(search_query.trim())
@@ -766,12 +766,17 @@ async function handleTokenSearch(opts: {
         // BNB chain: resolve by scanning Birdeye tokenlist for exact symbol matches
         const listed = await searchTokenByTicker(search_query, chain, apiKey, 10);
         const normalized = listed.map((t) => normalizeTokenlistToken(t, chain));
-        // Apply market cap filter for BNB results
+        const filtered = filterValidMarketCap(normalized, chain);
+        searchResults = dedupeByAddress(filtered).slice(0, limit);
+      } else if (chain === "base") {
+        // Base chain: Birdeye tokenlist search
+        const listed = await searchTokenByTicker(search_query, chain, apiKey, 10);
+        const normalized = listed.map((t) => normalizeTokenlistToken(t, chain));
         const filtered = filterValidMarketCap(normalized, chain);
         searchResults = dedupeByAddress(filtered).slice(0, limit);
       } else if (chain === "all") {
-        // ALL chains: fetch both in parallel and merge
-        const [solResults, bnbListed] = await Promise.all([
+        // ALL chains: fetch Solana, BNB, Base in parallel and merge
+        const [solResults, bnbListed, baseListed] = await Promise.all([
           (async () => {
             const jupMints = await fetchJupiterMintsByQuery(search_query);
             if (jupMints.length === 0) return [] as any[];
@@ -849,9 +854,22 @@ async function handleTokenSearch(opts: {
             const filtered = filterValidMarketCap(normalized, "bsc");
             return dedupeByAddress(filtered);
           })(),
+          (async () => {
+            const listed = await searchTokenByTicker(
+              search_query,
+              "base",
+              apiKey,
+              10
+            );
+            const normalized = listed.map((t) =>
+              normalizeTokenlistToken(t, "base")
+            );
+            const filtered = filterValidMarketCap(normalized, "base");
+            return dedupeByAddress(filtered);
+          })(),
         ]);
 
-        const combined = [...bnbListed, ...solResults];
+        const combined = [...baseListed, ...bnbListed, ...solResults];
         searchResults = combined.slice(0, Math.max(limit, 25));
       } else {
         // Solana and others: use Jupiter search + Birdeye overview
@@ -1003,7 +1021,7 @@ async function handleTokenSearch(opts: {
   }
 }
 
-// ------- Mixed Chain Handler (Solana + BNB) -------
+// ------- Mixed Chain Handler (Solana + BNB + Base) -------
 async function handleMixedChainTokens(opts: {
   limit: number;
   offset: number;
@@ -1029,16 +1047,17 @@ async function handleMixedChainTokens(opts: {
     apiKey,
   } = opts;
 
-  // Calculate proportional split: BNB gets extra token on odd numbers
-  const bnbLimit = Math.ceil(limit / 2);
-  const solanaLimit = Math.floor(limit / 2);
+  // Proportional split across three chains
+  const perChain = Math.ceil(limit / 3);
+  const solanaLimit = perChain;
+  const bnbLimit = perChain;
+  const baseLimit = perChain;
+  const solanaOffset = Math.floor(offset / 3);
+  const bnbOffset = Math.floor(offset / 3);
+  const baseOffset = Math.floor(offset / 3);
 
-  // Calculate offsets for each chain (proportional)
-  const bnbOffset = Math.ceil(offset / 2);
-  const solanaOffset = Math.floor(offset / 2);
-
-  // Fetch both chains in parallel
-  const [solanaTokens, bnbTokens] = await Promise.all([
+  // Fetch all three chains in parallel
+  const [solanaTokens, bnbTokens, baseTokens] = await Promise.all([
     fetchChainTokens({
       chain: "solana",
       limit: solanaLimit,
@@ -1053,7 +1072,7 @@ async function handleMixedChainTokens(opts: {
       apiKey,
     }),
     fetchChainTokens({
-      chain: "bsc", // Birdeye uses "bsc" for BNB Chain
+      chain: "bsc",
       limit: bnbLimit,
       offset: bnbOffset,
       sort_by,
@@ -1065,13 +1084,30 @@ async function handleMixedChainTokens(opts: {
       verified_only,
       apiKey,
     }),
+    fetchChainTokens({
+      chain: "base",
+      limit: baseLimit,
+      offset: baseOffset,
+      sort_by,
+      sort_type,
+      min_liquidity,
+      ui_amount_mode,
+      include_creation,
+      creation_concurrency,
+      verified_only,
+      apiKey,
+    }),
   ]);
 
-  // Interleave the results for better mix visualization
+  // Interleave: round-robin solana, bnb, base
   const mixed: any[] = [];
-  const maxLength = Math.max(solanaTokens.length, bnbTokens.length);
-
+  const maxLength = Math.max(
+    solanaTokens.length,
+    bnbTokens.length,
+    baseTokens.length
+  );
   for (let i = 0; i < maxLength; i++) {
+    if (i < baseTokens.length) mixed.push(baseTokens[i]);
     if (i < bnbTokens.length) mixed.push(bnbTokens[i]);
     if (i < solanaTokens.length) mixed.push(solanaTokens[i]);
   }
@@ -1086,8 +1122,9 @@ async function handleMixedChainTokens(opts: {
       chainDistribution: {
         solana: solanaTokens.length,
         bnb: bnbTokens.length,
+        base: baseTokens.length,
       },
-      upstreamTotal: undefined, // Mixed mode doesn't have single total
+      upstreamTotal: undefined,
       exhausted: false,
     },
     { status: 200 }
@@ -1123,7 +1160,7 @@ async function fetchChainTokens(opts: {
   } = opts;
 
   try {
-    // Get verified set based on chain
+    // Get verified set based on chain (Base has no verified list; treat like unverified)
     let verifiedSet: Set<string> | null = null;
     if (verified_only) {
       if (chain === "solana") {
@@ -1131,6 +1168,7 @@ async function fetchChainTokens(opts: {
       } else if (chain === "bsc") {
         verifiedSet = await getBnbVerifiedSet();
       }
+      // base: no verified list, verifiedSet stays null so we return all
     }
 
     const collected: any[] = [];
@@ -1292,6 +1330,10 @@ export async function POST(request: NextRequest) {
     const bnbVerifiedSet = await getBnbVerifiedSet();
     verifiedSet = verified_only ? bnbVerifiedSet : null;
     verifiedTotal = bnbVerifiedSet.size;
+  } else if (chain === "base") {
+    // Base: no verified list; show all tokens
+    verifiedSet = null;
+    verifiedTotal = undefined;
   }
 
   // If we need verified-only pagination, we must over-fetch until we can fill (offset + limit)

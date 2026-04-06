@@ -7,6 +7,7 @@ import Image from "next/image";
 import type { MarketReport } from "@/hooks/useGenerateMarketReport";
 import { useRexChat } from "@/hooks/useRexChat";
 import { useReportWithConversation, useReports } from "@/hooks/useReports";
+import { PaywallModal, type PaywallLimitCode } from "@/components/subscription/PaywallModal";
 
 type AIGeneratedMarketsReportProps = {
   generatedReport?: MarketReport | null;
@@ -167,6 +168,8 @@ export default function AIGeneratedMarketsReport({
   onViewHistory,
 }: AIGeneratedMarketsReportProps) {
   const [inputMessage, setInputMessage] = useState("");
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallLimitCode, setPaywallLimitCode] = useState<PaywallLimitCode | null>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -255,8 +258,14 @@ export default function AIGeneratedMarketsReport({
       shouldAutoScrollRef.current = true;
       await sendMessage(inputMessage.trim());
       setInputMessage("");
-    } catch (e) {
-      console.error("Chat error:", e);
+    } catch (e: any) {
+      if (e?.status === 402) {
+        const code = (e?.code === "PAID_LIMIT_REACHED" ? "PAID_LIMIT_REACHED" : "FREE_LIMIT_REACHED") as PaywallLimitCode;
+        setPaywallLimitCode(code);
+        setShowPaywall(true);
+      } else {
+        console.error("Chat error:", e);
+      }
     }
   }, [inputMessage, isSending, activeReport, sendMessage]);
 
@@ -313,6 +322,7 @@ export default function AIGeneratedMarketsReport({
   }
 
   return (
+    <>
     <div
       className="text-white flex flex-col h-full relative overflow-hidden min-h-0"
       style={{
@@ -429,5 +439,16 @@ export default function AIGeneratedMarketsReport({
         </div>
       </div>
     </div>
+    <PaywallModal
+      open={showPaywall}
+      onClose={() => {
+        setShowPaywall(false);
+        setPaywallLimitCode(null);
+      }}
+      context="rexmarkets"
+      limitCode={paywallLimitCode ?? undefined}
+      paymentMetadata={userId ? { userId } : undefined}
+    />
+    </>
   );
 }

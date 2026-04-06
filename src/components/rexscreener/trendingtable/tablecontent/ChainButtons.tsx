@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 
-export type Chain = "solana" | "bsc" | "all";
+export type Chain = "solana" | "bsc" | "base" | "monad" | "all";
 
 interface ChainButtonsProps {
   selectedChain: Chain;
@@ -24,7 +24,8 @@ export function ChainButtons({
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [sliderStyle, setSliderStyle] = useState<SliderStyle | null>(null);
 
-  const chains: Chain[] = ["all", "bsc", "solana"];
+  // Order: All, Monad, Base, Solana, BNB
+  const chains: Chain[] = ["all", "monad", "base", "solana", "bsc"];
   const activeIndex = chains.indexOf(selectedChain);
 
   const updateSliderPosition = useCallback(() => {
@@ -127,9 +128,6 @@ export function ChainButtons({
         borderRadius: "12px",
         maxWidth: "100%",
         WebkitOverflowScrolling: "touch",
-        touchAction: "pan-x pan-y",
-        overscrollBehavior: "contain",
-        scrollBehavior: "smooth",
       }}
     >
       {/* Animated background slider */}
@@ -169,9 +167,64 @@ export function ChainButtons({
         >
           <span className="text-sm text-white font-medium">All</span>
         </button>
+        {/* Monad */}
+        <button
+          ref={(el) => {
+            buttonRefs.current[1] = el;
+          }}
+          onClick={() => onChainChange("monad")}
+          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
+            isActive("monad")
+              ? "text-white font-semibold"
+              : "text-white hover:text-white/90"
+          }`}
+          style={{
+            padding: "10px 14px",
+            height: "40px",
+            borderRadius: "12px",
+          }}
+          title="Monad"
+        >
+          <Image
+            src="/images/monad.png"
+            alt="Monad"
+            width={20}
+            height={20}
+            className="w-5 h-5 shrink-0 object-contain"
+          />
+          <span className="font-normal text-[14px]">Monad</span>
+        </button>
+        {/* Base */}
         <button
           ref={(el) => {
             buttonRefs.current[2] = el;
+          }}
+          onClick={() => onChainChange("base")}
+          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
+            isActive("base")
+              ? "text-white font-semibold"
+              : "text-white hover:text-white/90"
+          }`}
+          style={{
+            padding: "10px 14px",
+            height: "40px",
+            borderRadius: "12px",
+          }}
+          title="Base"
+        >
+          <Image
+            src="/images/base.png"
+            alt="Base"
+            width={20}
+            height={20}
+            className="w-5 h-5 shrink-0 object-contain"
+          />
+          <span className="font-normal text-[14px]">Base</span>
+        </button>
+        {/* Solana */}
+        <button
+          ref={(el) => {
+            buttonRefs.current[3] = el;
           }}
           onClick={() => onChainChange("solana")}
           className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
@@ -189,15 +242,16 @@ export function ChainButtons({
           <Image
             src="/images/solana.png"
             alt="Solana"
-            width={16}
-            height={16}
-            className="object-contain"
+            width={20}
+            height={20}
+            className="w-5 h-5 shrink-0 object-contain"
           />
           <span className="font-normal text-[14px]">Solana</span>
         </button>
+        {/* BNB */}
         <button
           ref={(el) => {
-            buttonRefs.current[1] = el;
+            buttonRefs.current[4] = el;
           }}
           onClick={() => onChainChange("bsc")}
           className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
@@ -217,7 +271,7 @@ export function ChainButtons({
             alt="BNB Chain"
             width={20}
             height={20}
-            className="object-contain"
+            className="w-5 h-5 shrink-0 object-contain"
           />
           <span className="font-normal text-[14px]">BNB Chain</span>
         </button>

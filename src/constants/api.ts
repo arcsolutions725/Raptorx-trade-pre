@@ -10,6 +10,10 @@ export const POLYMARKET_PROFILE_URL = (address: string) =>
 export const POLYGON_RPC_URL =
   process.env.NEXT_PUBLIC_POLYGON_RPC_URL || "https://polygon-rpc.com";
 
+/** Base mainnet (chainId 8453) – used by Limitless */
+export const BASE_RPC_URL =
+  process.env.NEXT_PUBLIC_BASE_RPC_URL || "https://mainnet.base.org";
+
 // Remote signing endpoint
 export const REMOTE_SIGNING_URL = () =>
   typeof window !== "undefined"

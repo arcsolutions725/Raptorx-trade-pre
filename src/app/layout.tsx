@@ -24,11 +24,14 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
+// Base URL for absolute social card image URLs (X/Twitter requires absolute URLs)
+const SITE_BASE_URL =
+  typeof process !== "undefined" && process.env.NEXT_PUBLIC_SITE_URL
+    ? (process.env.NEXT_PUBLIC_SITE_URL as string).replace(/\/$/, "")
+    : "https://raptorx.trade";
+
 export const metadata: Metadata = {
-  metadataBase:
-    typeof process !== "undefined" && process.env.NEXT_PUBLIC_SITE_URL
-      ? new URL(process.env.NEXT_PUBLIC_SITE_URL as string)
-      : new URL("https://raptorx.trade"),
+  metadataBase: new URL(SITE_BASE_URL),
   applicationName: "RaptorXchange",
   title: {
     default: "RaptorXchange - The Intelligence Engine for Traders",
@@ -147,7 +150,7 @@ export const metadata: Metadata = {
     locale: "en_US",
     images: [
       {
-        url: "/images/x_banner.png",
+        url: `${SITE_BASE_URL}/images/x_banner.png`,
         width: 1200,
         height: 630,
         alt: "RaptorXchange - AI Crypto Trading Platform for Solana and BSC",
@@ -160,7 +163,7 @@ export const metadata: Metadata = {
     title: "RaptorX - The Intelligent Pro Terminal for Prediction Markets & Crypto",
     description:
       "We are the AI Bloomberg Terminal for Crypto & Prediction markets. Hunt intelligently, hunt with Raptor.",
-    images: ["/images/x_banner.png"],
+    images: [`${SITE_BASE_URL}/images/x_banner.png`],
     creator: "@huntonraptor",
     site: "@huntonraptor",
   },
@@ -180,6 +183,7 @@ export const metadata: Metadata = {
     yandex: process.env.NEXT_PUBLIC_YANDEX_VERIFICATION,
   },
   other: {
+    "base:app_id": "69b71548d6271e8cedf2adbd",
     "apple-mobile-web-app-capable": "yes",
     "apple-mobile-web-app-status-bar-style": "black-translucent",
     "format-detection": "telephone=no",
@@ -313,7 +317,7 @@ export default function RootLayout({
               "Cross-chain swaps",
               "Market intelligence",
             ],
-            screenshot: "/images/x_banner.png",
+            screenshot: `${SITE_BASE_URL}/images/x_banner.png`,
             url:
               (typeof window === "undefined"
                 ? (typeof process !== "undefined" &&

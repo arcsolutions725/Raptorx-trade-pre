@@ -22,7 +22,20 @@ type GenerateArgs = {
   contractAddress: string;
   ticker: string;
   projectName?: string;
+  /** Optional chain from token so the report is stored with correct chain for SwapWidget */
+  chain?: "base" | "bsc" | "solana" | "monad";
 };
+
+/** Normalize token chainId to API chain value so the report is saved with correct chain */
+function normalizeTokenChain(chainId?: string): "base" | "bsc" | "solana" | "monad" | undefined {
+  if (!chainId) return undefined;
+  const c = chainId.toLowerCase().trim();
+  if (c === "base" || c === "8453") return "base";
+  if (c === "bsc" || c === "bnb" || c === "56") return "bsc";
+  if (c === "solana" || c === "sol") return "solana";
+  if (c === "monad" || c === "10143") return "monad";
+  return undefined;
+}
 
 type UseGenerateRexReportOptions = {
   onReportGenerated?: (report: Report) => void;
@@ -121,7 +134,7 @@ export function useGenerateRexReport(opts: UseGenerateRexReportOptions = {}) {
   );
 
   const generateFromFields = useCallback(
-    async ({ contractAddress, ticker, projectName }: GenerateArgs) => {
+    async ({ contractAddress, ticker, projectName, chain }: GenerateArgs) => {
       if (!contractAddress?.trim() || !ticker?.trim()) {
         throw new Error("Missing contract address or ticker.");
       }
@@ -138,11 +151,18 @@ export function useGenerateRexReport(opts: UseGenerateRexReportOptions = {}) {
       reportGenStore.start(contractAddress);
 
       try {
+        const body: Record<string, unknown> = { contractAddress, ticker, projectName };
+        if (chain) body.chain = chain;
         const { res, json } = await postGenerate(
-          { contractAddress, ticker, projectName },
+          body,
           { "x-user-id": userId }
         );
-        if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
+        if (!res.ok) {
+          const err: any = new Error(json?.error || `HTTP ${res.status}`);
+          err.status = res.status;
+          err.code = json?.code;
+          throw err;
+        }
         return await commonBuildReport(json, contractAddress, projectName);
       } catch (err: any) {
         setError(err?.message || "Failed to generate report.");
@@ -175,11 +195,16 @@ export function useGenerateRexReport(opts: UseGenerateRexReportOptions = {}) {
       inFlightRef.current = true;
       reportGenStore.start(contractAddress);
 
+      const chain = normalizeTokenChain(t.chainId);
       try {
-        let { res, json } = await postGenerate(
-          { contractAddress, ticker, projectName, storeToSystem: true },
-          { "x-user-id": userId }
-        );
+        const body: Record<string, unknown> = {
+          contractAddress,
+          ticker,
+          projectName,
+          storeToSystem: true,
+        };
+        if (chain) body.chain = chain;
+        let { res, json } = await postGenerate(body, { "x-user-id": userId });
 
         if (res.status === 409 && json?.exists) {
           const ok =
@@ -188,16 +213,15 @@ export function useGenerateRexReport(opts: UseGenerateRexReportOptions = {}) {
             )) ?? false;
           if (!ok) throw new Error("Admin cancelled overwrite.");
 
-          ({ res, json } = await postGenerate(
-            {
-              contractAddress,
-              ticker,
-              projectName,
-              storeToSystem: true,
-              overwrite: true,
-            },
-            { "x-user-id": userId }
-          ));
+          const overwriteBody: Record<string, unknown> = {
+            contractAddress,
+            ticker,
+            projectName,
+            storeToSystem: true,
+            overwrite: true,
+          };
+          if (chain) overwriteBody.chain = chain;
+          ({ res, json } = await postGenerate(overwriteBody, { "x-user-id": userId }));
         }
 
         if (!res.ok) throw new Error(json?.error || `HTTP ${res.status}`);
@@ -219,7 +243,8 @@ export function useGenerateRexReport(opts: UseGenerateRexReportOptions = {}) {
       const contractAddress = t.tokenAddress ?? "";
       const ticker = t.symbol ?? "";
       const projectName = t.name ?? undefined;
-      return generateFromFields({ contractAddress, ticker, projectName });
+      const chain = normalizeTokenChain(t.chainId);
+      return generateFromFields({ contractAddress, ticker, projectName, chain });
     },
     [generateFromFields]
   );

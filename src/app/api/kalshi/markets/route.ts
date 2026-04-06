@@ -94,7 +94,7 @@ export async function GET(request: NextRequest) {
     const { searchParams } = new URL(request.url);
     
     const pageSize = parseInt(searchParams.get("limit") || "25");
-    const status = searchParams.get("status") || "open,unopened";
+    const status = searchParams.get("status") || "open";
     const cursor = searchParams.get("cursor") || undefined;
     const category = searchParams.get("category") || undefined;
     const tag = searchParams.get("tag") || undefined;

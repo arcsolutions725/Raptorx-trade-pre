@@ -87,7 +87,7 @@ export function useKalashiMarkets(
     queryFn: async () => {
       const params = new URLSearchParams({
         limit: pageSize.toString(),
-        status: "open,unopened",
+        status: "open",
       });
 
       if (cursor) {

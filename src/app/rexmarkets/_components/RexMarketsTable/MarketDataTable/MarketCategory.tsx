@@ -4,6 +4,8 @@ import { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import clsx from "clsx";
 import { useKalshiCategories } from "@/hooks/useKalshiCategories";
 import { usePolymarketCategories } from "@/hooks/usePolymarketCategories";
+import { useLimitlessNavigation } from "@/hooks/useLimitlessNavigation";
+import { useLimitlessTagGroups } from "@/hooks/useLimitlessTagGroups";
 import {
   usePolymarketTags,
   type PolymarketTag,
@@ -47,6 +49,16 @@ export default function MarketCategory({
     error: polymarketErrorObj,
   } = usePolymarketCategories(dataSource === "polymarket" || dataSource === "all");
 
+  // Only enable Limitless categories when dataSource is "limitless" or "all"
+  const {
+    categoriesData: limitlessCategories,
+    slugToId: limitlessSlugToId,
+    isLoading: limitlessLoading,
+    isError: limitlessError,
+    error: limitlessErrorObj,
+  } = useLimitlessNavigation(dataSource === "limitless" || dataSource === "all");
+
+
   // Store display names for categories in "all" mode
   const categoryDisplayNames = useMemo(() => {
     if (!isAllMode) return {};
@@ -70,14 +82,24 @@ export default function MarketCategory({
         displayNames[normalized] = category; // Polymarket takes precedence for display
       });
     }
+
+    // Collect display names from Limitless
+    if (limitlessCategories && typeof limitlessCategories === "object") {
+      Object.keys(limitlessCategories).forEach((category) => {
+        const normalized = category.toLowerCase().trim();
+        if (!displayNames[normalized]) displayNames[normalized] = category;
+      });
+    }
     
     return displayNames;
-  }, [isAllMode, kalshiCategories, polymarketCategories]);
+  }, [isAllMode, kalshiCategories, polymarketCategories, limitlessCategories]);
 
   // Merge categories when in "all" mode
   const mergedCategoriesData = useMemo(() => {
     if (!isAllMode) {
-      return dataSource === "polymarket" ? polymarketCategories : kalshiCategories;
+      if (dataSource === "polymarket") return polymarketCategories;
+      if (dataSource === "limitless") return limitlessCategories;
+      return kalshiCategories;
     }
     
     // Merge categories from both sources, grouping by normalized category name
@@ -118,21 +140,50 @@ export default function MarketCategory({
         }
       });
     }
+
+    // Add Limitless categories (from navigation API)
+    if (limitlessCategories && typeof limitlessCategories === "object") {
+      Object.entries(limitlessCategories).forEach(([category, slugs]) => {
+        if (Array.isArray(slugs) && slugs.length > 0) {
+          const normalizedCategory = category.toLowerCase().trim();
+          if (!merged[normalizedCategory]) {
+            merged[normalizedCategory] = [];
+          }
+          slugs.forEach(slug => {
+            if (!merged[normalizedCategory].includes(`limitless:${slug}`)) {
+              merged[normalizedCategory].push(`limitless:${slug}`);
+            }
+          });
+        }
+      });
+    }
     
     return merged;
-  }, [isAllMode, dataSource, kalshiCategories, polymarketCategories]);
+  }, [isAllMode, dataSource, kalshiCategories, polymarketCategories, limitlessCategories]);
 
   // Select the appropriate data source
   const categoriesData = mergedCategoriesData;
-  const isLoading = isAllMode 
-    ? (kalshiLoading || polymarketLoading)
-    : (dataSource === "polymarket" ? polymarketLoading : kalshiLoading);
+  const isLoading = isAllMode
+    ? (kalshiLoading || polymarketLoading || limitlessLoading)
+    : dataSource === "polymarket"
+      ? polymarketLoading
+      : dataSource === "limitless"
+        ? limitlessLoading
+        : kalshiLoading;
   const isError = isAllMode
-    ? (kalshiError || polymarketError)
-    : (dataSource === "polymarket" ? polymarketError : kalshiError);
+    ? (kalshiError || polymarketError || limitlessError)
+    : dataSource === "polymarket"
+      ? polymarketError
+      : dataSource === "limitless"
+        ? limitlessError
+        : kalshiError;
   const error = isAllMode
-    ? (kalshiErrorObj || polymarketErrorObj)
-    : (dataSource === "polymarket" ? polymarketErrorObj : kalshiErrorObj);
+    ? (kalshiErrorObj || polymarketErrorObj || limitlessErrorObj)
+    : dataSource === "polymarket"
+      ? polymarketErrorObj
+      : dataSource === "limitless"
+        ? limitlessErrorObj
+        : kalshiErrorObj;
   const [internalCategory, setInternalCategory] = useState<string | null>(null);
   const [internalTag, setInternalTag] = useState<string | null>(null);
   const categoryButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
@@ -155,6 +206,17 @@ export default function MarketCategory({
       : internalCategory;
   const selectedTag =
     externalSelectedTag !== undefined ? externalSelectedTag : internalTag;
+
+  // Limitless tag groups: only for categories with tags (Crypto, Sport, Finance); not for Other
+  const limitlessCategoryId = useMemo(() => {
+    if ((dataSource !== "limitless" && dataSource !== "all") || !selectedCategory || !limitlessSlugToId) return null;
+    return limitlessSlugToId[selectedCategory] ?? null;
+  }, [dataSource, selectedCategory, limitlessSlugToId]);
+  const { data: limitlessTagGroupsData } = useLimitlessTagGroups(
+    limitlessCategoryId,
+    (dataSource === "limitless" || dataSource === "all") && !!limitlessCategoryId
+  );
+  const limitlessTagGroups = limitlessTagGroupsData?.tagGroups ?? [];
 
   // Get the category slug for Polymarket tags fetching (must be after selectedCategory is declared)
   const categorySlugForTags = useMemo(() => {
@@ -253,8 +315,8 @@ export default function MarketCategory({
         return slugOrLabel;
       }
 
-      // For Polymarket, find which category contains this slug
-      if (dataSource === "polymarket") {
+      // For Polymarket or Limitless, find which category contains this slug
+      if (dataSource === "polymarket" || dataSource === "limitless") {
         for (const [categoryLabel, slugs] of Object.entries(categoriesData)) {
           if (Array.isArray(slugs) && slugs.includes(slugOrLabel)) {
             return categoryLabel;
@@ -273,9 +335,26 @@ export default function MarketCategory({
     categoryButtonRefs.current = new Array(categories.length).fill(null);
   }, [categories.length]);
 
+  // Limitless tag item: { label, value } where value is "paramKey:paramValue"
+  type LimitlessTagItem = { label: string; value: string };
+
   // For Polymarket, tags are objects with label and slug
-  // For Kalshi, tags are strings
+  // For Kalshi, tags are strings. For Limitless, tags are { label, value } from tag groups.
   const selectedTags = useMemo(() => {
+    // Limitless: only show tags when category has tag groups (Crypto, Sport, Finance); not for Other
+    if (dataSource === "limitless" || (isAllMode && selectedCategory && limitlessSlugToId?.[selectedCategory])) {
+      if (limitlessTagGroups.length > 0) {
+        const flat: LimitlessTagItem[] = [];
+        limitlessTagGroups.forEach((group) => {
+          group.tags.forEach((tag) => {
+            flat.push({ label: tag.name, value: `${group.paramKey}:${tag.paramValue}` });
+          });
+        });
+        return flat;
+      }
+      return []; // Other and categories with no tags: don't show tag section
+    }
+
     if (!selectedCategory || !categoriesData) {
       return [];
     }
@@ -363,68 +442,53 @@ export default function MarketCategory({
     dataSource,
     isAllMode,
     polymarketTags,
+    limitlessTagGroups,
+    limitlessSlugToId,
   ]);
 
-  // Helper to check if selected tag matches (handles both string tags for Kalshi and PolymarketTag objects)
+  // Helper to check if selected tag matches (handles string, PolymarketTag, LimitlessTagItem)
   const isTagSelected = useCallback(
-    (tag: string | PolymarketTag): boolean => {
+    (tag: string | PolymarketTag | LimitlessTagItem): boolean => {
       if (!selectedTag) return false;
-      
-      // In "all" mode, tags might have source prefixes
+      if (typeof tag === "object" && tag !== null && "value" in tag && !("slug" in tag)) {
+        const limitTag = tag as LimitlessTagItem;
+        return selectedTag === limitTag.value || selectedTag === `limitless:${limitTag.value}`;
+      }
       if (isAllMode) {
-        if (typeof tag === "string") {
-          // Check if it's a Kalshi tag
-          return tag === selectedTag || `kalshi:${tag}` === selectedTag || tag === `kalshi:${selectedTag}`;
-        } else {
-          // Polymarket tag object
-          const tagObj = tag as PolymarketTag;
-          return tagObj.slug === selectedTag || `polymarket:${tagObj.slug}` === selectedTag;
-        }
-      }
-      
-      if (dataSource === "polymarket") {
-        // For Polymarket, tags are objects, compare by slug
+        if (typeof tag === "string") return tag === selectedTag || `kalshi:${tag}` === selectedTag || tag === `kalshi:${selectedTag}`;
         const tagObj = tag as PolymarketTag;
-        return tagObj.slug === selectedTag;
-      } else {
-        // For Kalshi, tags are strings
-        return tag === selectedTag;
+        return tagObj.slug === selectedTag || `polymarket:${tagObj.slug}` === selectedTag;
       }
+      if (dataSource === "polymarket") return (tag as PolymarketTag).slug === selectedTag;
+      return tag === selectedTag;
     },
     [selectedTag, dataSource, isAllMode]
   );
 
-  // Helper to get tag value for onTagChange (slug for Polymarket, string for Kalshi)
+  // Helper to get tag value for onTagChange (slug for Polymarket, string for Kalshi, paramKey:paramValue for Limitless)
   const getTagValue = useCallback(
-    (tag: string | PolymarketTag): string => {
+    (tag: string | PolymarketTag | LimitlessTagItem): string => {
+      if (typeof tag === "object" && tag !== null && "value" in tag && !("slug" in tag)) {
+        const limitTag = tag as LimitlessTagItem;
+        return isAllMode ? `limitless:${limitTag.value}` : limitTag.value;
+      }
       if (isAllMode) {
-        // In "all" mode, prefix tags with source
-        if (typeof tag === "string") {
-          return `kalshi:${tag}`;
-        } else {
-          const tagObj = tag as PolymarketTag;
-          return `polymarket:${tagObj.slug}`;
-        }
+        if (typeof tag === "string") return `kalshi:${tag}`;
+        return `polymarket:${(tag as PolymarketTag).slug}`;
       }
-      
-      if (dataSource === "polymarket") {
-        const tagObj = tag as PolymarketTag;
-        return tagObj.slug;
-      } else {
-        return tag as string;
-      }
+      if (dataSource === "polymarket") return (tag as PolymarketTag).slug;
+      return tag as string;
     },
     [dataSource, isAllMode]
   );
 
   // Helper to get tag display label
   const getTagLabel = useCallback(
-    (tag: string | PolymarketTag): string => {
-      // Check if it's a PolymarketTag object (has label and slug properties)
-      if (typeof tag === "object" && tag !== null && "label" in tag && "slug" in tag) {
-        return (tag as PolymarketTag).label;
+    (tag: string | PolymarketTag | LimitlessTagItem): string => {
+      if (typeof tag === "object" && tag !== null) {
+        if ("label" in tag && "value" in tag && !("slug" in tag)) return (tag as LimitlessTagItem).label;
+        if ("label" in tag && "slug" in tag) return (tag as PolymarketTag).label;
       }
-      // Otherwise, it's a string
       return tag as string;
     },
     []
@@ -454,7 +518,7 @@ export default function MarketCategory({
         // In "all" mode, use the normalized category name
         categoryToPass = newCategory.toLowerCase().trim();
       } else if (
-        dataSource === "polymarket" &&
+        (dataSource === "polymarket" || dataSource === "limitless") &&
         newCategory &&
         categoriesData &&
         typeof categoriesData === "object" &&
@@ -490,7 +554,7 @@ export default function MarketCategory({
   );
 
   const handleTagClick = useCallback(
-    (tag: string | PolymarketTag) => {
+    (tag: string | PolymarketTag | LimitlessTagItem) => {
       const tagValue = getTagValue(tag);
       const newTag = selectedTag === tagValue ? null : tagValue;
       if (externalSelectedTag === undefined) {
@@ -1022,15 +1086,14 @@ export default function MarketCategory({
               {selectedTags.length > 0 ? (
                 selectedTags.map((tag, tagIndex) => {
                   const tagLabel = getTagLabel(tag);
-                  // Determine tagKey based on tag type, not dataSource
-                  // In "all" mode, prefix with source to ensure uniqueness
                   let tagKey: string;
-                  if (typeof tag === "object" && tag !== null && "slug" in tag) {
+                  if (typeof tag === "object" && tag !== null && "value" in tag && !("slug" in tag)) {
+                    tagKey = isAllMode ? `limitless:${(tag as LimitlessTagItem).value}` : (tag as LimitlessTagItem).value;
+                  } else if (typeof tag === "object" && tag !== null && "slug" in tag) {
                     const slug = (tag as PolymarketTag).slug;
                     tagKey = isAllMode ? `polymarket:${slug}` : slug;
                   } else {
-                    const tagStr = tag as string;
-                    tagKey = isAllMode ? `kalshi:${tagStr}` : tagStr;
+                    tagKey = isAllMode ? `kalshi:${tag as string}` : (tag as string);
                   }
                   const isTagSelectedValue = isTagSelected(tag);
                   return (

@@ -14,6 +14,12 @@ import {
 } from "recharts";
 import { getPolymarketInterval } from "@/utils/polymarketTrading";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  computeSeriesStats,
+  ChartStatsDot,
+  getStatsLabelsForPoint,
+  CHART_STATS_DOT_MARGIN,
+} from "../../../shared/ChartStatsDot";
 
 type MarketWithClobToken = {
   clobTokenId: string;
@@ -273,7 +279,8 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
         };
       },
       enabled: !!market.clobTokenId,
-      refetchInterval: 30000, // Refetch every 30 seconds
+      staleTime: 60 * 1000, // Consider fresh for 1 min (reduces refetches when switching tabs)
+      refetchInterval: 60000, // Refetch every 60 seconds (historical data changes slowly)
     })),
   });
 
@@ -479,6 +486,50 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
     return ticks;
   }, [yDomain]);
 
+  // Per-series Lowest / Highest / Current for pulsating dots and labels
+  const seriesStatsMap = useMemo(() => {
+    const map = new Map<string, ReturnType<typeof computeSeriesStats>>();
+    if (!chartDataFormatted?.length) return map;
+    marketKeys.forEach((mk) => {
+      const stats = computeSeriesStats(chartDataFormatted, mk.key);
+      if (stats) map.set(mk.key, stats);
+    });
+    return map;
+  }, [chartDataFormatted, marketKeys]);
+
+  // Top Highest/Lowest: when 3+ series overlap, only the actual top gets preferred placement
+  const topPlacementMap = useMemo(() => {
+    const map = new Map<
+      string,
+      { isTopHighest: boolean; isTopLowest: boolean }
+    >();
+    const visible = marketKeys.filter((m) => !hiddenMarketKeys.has(m.key));
+    const statsList = visible
+      .map((mk) => ({ key: mk.key, stats: seriesStatsMap.get(mk.key) }))
+      .filter((x): x is { key: string; stats: NonNullable<typeof x.stats> } =>
+        Boolean(x.stats)
+      );
+    const globalMax = Math.max(
+      ...statsList.map((x) => x.stats.maxValue),
+      -Infinity
+    );
+    const globalMin = Math.min(
+      ...statsList.map((x) => x.stats.minValue),
+      Infinity
+    );
+    const firstTopHighest = statsList.find((x) => x.stats.maxValue >= globalMax)
+      ?.key;
+    const firstTopLowest = statsList.find((x) => x.stats.minValue <= globalMin)
+      ?.key;
+    statsList.forEach(({ key }) => {
+      map.set(key, {
+        isTopHighest: key === firstTopHighest,
+        isTopLowest: key === firstTopLowest,
+      });
+    });
+    return map;
+  }, [marketKeys, hiddenMarketKeys, seriesStatsMap]);
+
   // Get last data point time for each market to show markers
   // Each market may have its last data point at different times
   const lastDataPointTimes = useMemo(() => {
@@ -564,7 +615,7 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={chartDataFormatted}
-            margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
+            margin={CHART_STATS_DOT_MARGIN}
           >
             <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
             <XAxis
@@ -636,7 +687,7 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
                 </div>
               )}
             />
-            {marketKeys.map((market) => {
+            {marketKeys.map((market, index) => {
               if (hiddenMarketKeys.has(market.key)) return null;
               // Check if this market has data in the chart
               const hasData = chartDataFormatted.some((point) => {
@@ -648,9 +699,7 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
                 return null;
               }
 
-              // Get the last data point time for this market
-              const lastTime = lastDataPointTimes.get(market.key);
-              
+              const stats = seriesStatsMap.get(market.key);
               return (
                 <Line
                   key={market.key}
@@ -662,73 +711,26 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
                   activeDot={{ r: 4, fill: market.color }}
                   connectNulls={true}
                   isAnimationActive={false}
-                  // Show dot only at the last data point for this market with ping animation
                   dot={(props: any) => {
-                    // Check if this is the last data point for this specific market
-                    // The payload contains the data point with the time property
-                    if (lastTime !== undefined && props.payload && props.payload.time === lastTime) {
-                      const dotSize = 4;
-                      const pingSize = 10;
-                      
-                      // Convert hex color to RGB for opacity
-                      const hexToRgb = (hex: string) => {
-                        const result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
-                        return result
-                          ? {
-                              r: parseInt(result[1], 16),
-                              g: parseInt(result[2], 16),
-                              b: parseInt(result[3], 16),
-                            }
-                          : null;
-                      };
-                      
-                      const rgb = hexToRgb(market.color) || { r: 0, g: 0, b: 0 };
-                      const colorRgb = `rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
-                      
-                      return (
-                        <g>
-                          {/* Ping animation circle - expanding and fading with smooth easing */}
-                          <circle
-                            cx={props.cx}
-                            cy={props.cy}
-                            r={dotSize}
-                            fill={colorRgb}
-                            opacity={0.75}
-                          >
-                            <animate
-                              attributeName="r"
-                              from={dotSize}
-                              to={pingSize}
-                              dur="1.5s"
-                              repeatCount="indefinite"
-                              calcMode="spline"
-                              keySplines="0.4 0 0.2 1"
-                              keyTimes="0;1"
-                            />
-                            <animate
-                              attributeName="opacity"
-                              from={0.75}
-                              to={0}
-                              dur="1.5s"
-                              repeatCount="indefinite"
-                              calcMode="spline"
-                              keySplines="0.4 0 0.2 1"
-                              keyTimes="0;1"
-                            />
-                          </circle>
-                          {/* Main dot */}
-                          <circle
-                            cx={props.cx}
-                            cy={props.cy}
-                            r={dotSize}
-                            fill={market.color}
-                            stroke="#000"
-                            strokeWidth={1}
-                          />
-                        </g>
-                      );
-                    }
-                    return null;
+                    const payload = props.payload;
+                    if (!payload || typeof payload.time === "undefined") return null;
+                    const labels = getStatsLabelsForPoint(payload.time, stats ?? null);
+                    if (labels.length === 0) return null;
+                    const placement = topPlacementMap.get(market.key);
+                    const isCurrent =
+                      stats && payload.time === stats.lastTime;
+                    return (
+                      <ChartStatsDot
+                        cx={props.cx}
+                        cy={props.cy}
+                        labels={labels}
+                        color={market.color}
+                        seriesIndex={index}
+                        isTopHighest={placement?.isTopHighest ?? true}
+                        isTopLowest={placement?.isTopLowest ?? true}
+                        isCurrentPriceLabel={isCurrent ?? false}
+                      />
+                    );
                   }}
                 />
               );

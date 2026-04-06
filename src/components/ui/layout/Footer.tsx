@@ -4,6 +4,7 @@
 import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import Image from "next/image";
+import { TermsOfServiceModal } from "@/components/ui/modal/TermsOfServiceModal";
 
 interface CryptoToken {
   id: string;
@@ -30,6 +31,7 @@ export default function Footer() {
   const [predictionMarkets, setPredictionMarkets] = useState<
     PredictionMarket[]
   >([]);
+  const [showTerms, setShowTerms] = useState(false);
 
   /* ---------------------------
       FETCH DATA: MAIN PAGE
@@ -59,7 +61,7 @@ export default function Footer() {
       const fetchPredictionMarkets = async () => {
         try {
           const res = await fetch(
-            "/api/kalshi/markets?limit=15&status=open,unopened",
+            "/api/kalshi/markets?limit=15&status=open",
             { cache: "no-store" },
           );
           if (res.ok) {
@@ -294,11 +296,32 @@ export default function Footer() {
             </a>
           </div>
 
-          <span className="text-white text-xs sm:text-sm font-normal ml-0 sm:ml-2 whitespace-nowrap">
+          <div className="flex items-center gap-2 ml-0 sm:ml-2">
+            {/* <button
+              type="button"
+              onClick={() => setShowTerms(true)}
+              className="text-white text-xs sm:text-sm font-normal whitespace-nowrap hover:text-[#ffc000] transition-colors underline-offset-2 hover:underline"
+            >
+              Terms of Service
+            </button> */}
+            <a
+              href="/docs/TermsofService-RaptorX.pdf"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-white text-xs sm:text-sm hover:text-[#ffc000] transition-colors whitespace-nowrap"
+            >
+              Terms of Service
+            </a>
+          </div>
+          <span className="text-white text-xs sm:text-sm font-normal whitespace-nowrap">
             © {new Date().getFullYear()} Raptorx. All Rights Reserved
           </span>
         </div>
       </div>
+      <TermsOfServiceModal
+        isOpen={showTerms}
+        onClose={() => setShowTerms(false)}
+      />
     </footer>
   );
 }

@@ -12,12 +12,14 @@ import {
 } from "react";
 import type { KalashiMarket } from "@/hooks/useKalashiMarkets";
 import type { PolymarketMarket } from "@/hooks/usePolymarketMarkets";
+import type { LimitlessMarket } from "@/hooks/useLimitlessMarkets";
 import { useGenerateMarketReport } from "@/hooks/useGenerateMarketReport";
 import { usePrivy } from "@privy-io/react-auth";
 import { useReportGenStatus } from "@/lib/storage/reportGenStore";
 import { useEventMetadata } from "@/hooks/useEventMetadata";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import clsx from "clsx";
+import { PaywallModal } from "@/components/subscription/PaywallModal";
 
 type MarketReportData = {
   id: string;
@@ -30,10 +32,10 @@ type MarketReportData = {
 };
 
 type TableRowProps = {
-  market: (KalashiMarket | PolymarketMarket) & {
-    _source?: "kalshi" | "polymarket";
+  market: (KalashiMarket | PolymarketMarket | LimitlessMarket) & {
+    _source?: "kalshi" | "polymarket" | "limitless";
   };
-  onMarketClick?: (market: KalashiMarket | PolymarketMarket) => void;
+  onMarketClick?: (market: KalashiMarket | PolymarketMarket | LimitlessMarket) => void;
   onReportGenerated?: (report: MarketReportData) => void;
   currentUserId: string;
   index?: number;
@@ -74,10 +76,11 @@ function TableRow({
     userId: currentUserId,
   });
 
-  // Use marketSource to determine if this specific market is Polymarket or Kalshi
+  // Use marketSource to determine if this specific market is Polymarket, Kalshi, or Limitless
   // This is critical for "all" mode where we have mixed markets
   const isPolymarket = marketSource === "polymarket";
   const isKalshi = marketSource === "kalshi";
+  const isLimitless = marketSource === "limitless";
 
   const { isGenerating, startedAt } = useReportGenStatus(market?.ticker);
   const [hasGenerated, setHasGenerated] = useState(false);
@@ -93,6 +96,7 @@ function TableRow({
       : null
   );
   const [imageError, setImageError] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   // Memoize market type calculations
   const marketsArray = useMemo(() => market?.markets || [], [market?.markets]);
@@ -128,8 +132,12 @@ function TableRow({
         }.webp?size=sm`;
       }
     }
+    if (isLimitless) {
+      const limitlessMarket = market as LimitlessMarket;
+      return limitlessMarket?.image || limitlessMarket?.icon || null;
+    }
     return null;
-  }, [metadataImageUrl, market, isPolymarket, isKalshi]);
+  }, [metadataImageUrl, market, isPolymarket, isKalshi, isLimitless]);
 
   // Memoize formatted values - use marketSource to determine which structure to use
   const yesPrice = useMemo(() => {
@@ -144,8 +152,15 @@ function TableRow({
       const kalshiMarket = market as KalashiMarket;
       return isBinaryMarket ? formatPrice(kalshiMarket.yes_bid) : "—";
     }
+    if (isLimitless) {
+      const limitlessMarket = market as LimitlessMarket;
+      if (limitlessMarket.yesPrice === "—") return "—";
+      return typeof limitlessMarket.yesPrice === "number"
+        ? `$${limitlessMarket.yesPrice.toFixed(2)}¢`
+        : limitlessMarket.yesPrice;
+    }
     return "—";
-  }, [isBinaryMarket, market, isPolymarket, isKalshi]);
+  }, [isBinaryMarket, market, isPolymarket, isKalshi, isLimitless]);
 
   const noPrice = useMemo(() => {
     if (isPolymarket) {
@@ -159,8 +174,15 @@ function TableRow({
       const kalshiMarket = market as KalashiMarket;
       return isBinaryMarket ? formatPrice(kalshiMarket.no_ask) : "—";
     }
+    if (isLimitless) {
+      const limitlessMarket = market as LimitlessMarket;
+      if (limitlessMarket.noPrice === "—") return "—";
+      return typeof limitlessMarket.noPrice === "number"
+        ? `$${limitlessMarket.noPrice.toFixed(2)}¢`
+        : limitlessMarket.noPrice;
+    }
     return "—";
-  }, [isBinaryMarket, market, isPolymarket, isKalshi]);
+  }, [isBinaryMarket, market, isPolymarket, isKalshi, isLimitless]);
 
   const choice1Price = useMemo(() => {
     if (isPolymarket) {
@@ -175,8 +197,15 @@ function TableRow({
         ? formatPrice(topTwoChoices[0]?.yes_ask_dollars)
         : "—";
     }
+    if (isLimitless) {
+      const limitlessMarket = market as LimitlessMarket;
+      if (limitlessMarket.choiceI === "—") return "—";
+      return typeof limitlessMarket.choiceI === "number"
+        ? `$${limitlessMarket.choiceI.toFixed(2)}¢`
+        : limitlessMarket.choiceI;
+    }
     return "—";
-  }, [isMultiChoice, topTwoChoices, market, isPolymarket, isKalshi]);
+  }, [isMultiChoice, topTwoChoices, market, isPolymarket, isKalshi, isLimitless]);
 
   const choice2Price = useMemo(() => {
     if (isPolymarket) {
@@ -191,8 +220,15 @@ function TableRow({
         ? formatPrice(topTwoChoices[1]?.yes_ask_dollars)
         : "—";
     }
+    if (isLimitless) {
+      const limitlessMarket = market as LimitlessMarket;
+      if (limitlessMarket.choiceII === "—") return "—";
+      return typeof limitlessMarket.choiceII === "number"
+        ? `$${limitlessMarket.choiceII.toFixed(2)}¢`
+        : limitlessMarket.choiceII;
+    }
     return "—";
-  }, [isMultiChoice, topTwoChoices, market, isPolymarket, isKalshi]);
+  }, [isMultiChoice, topTwoChoices, market, isPolymarket, isKalshi, isLimitless]);
 
   const volume24h = useMemo(() => {
     if (isPolymarket) {
@@ -203,8 +239,13 @@ function TableRow({
       const kalshiMarket = market as KalashiMarket;
       return formatVolume(kalshiMarket.volume_24h);
     }
+    if (isLimitless) {
+      const limitlessMarket = market as LimitlessMarket;
+      // Always format from numeric value for consistent $X.XXK / $X.XXM display
+      return formatVolume(limitlessMarket.volume24hr);
+    }
     return "—";
-  }, [market, isPolymarket, isKalshi]);
+  }, [market, isPolymarket, isKalshi, isLimitless]);
 
   // Reset image error when market or image URL changes
   useEffect(() => {
@@ -263,10 +304,12 @@ function TableRow({
     async (selectedMarket: KalashiMarket | PolymarketMarket) => {
       if (!selectedMarket) return;
       try {
-        // Generate report using the selected market (supports both Kalshi and Polymarket)
         await generateFromMarket(selectedMarket);
         setHasGenerated(true);
-      } catch {
+      } catch (err: any) {
+        if (err?.status === 402) {
+          setShowPaywall(true);
+        }
         setCountdown(null);
         setHasGenerated(false);
         if (intervalRef.current) {
@@ -306,6 +349,7 @@ function TableRow({
     : "[grid-template-columns:minmax(300px,2fr)_minmax(100px,1fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)] sm:[grid-template-columns:minmax(400px,2.5fr)_minmax(100px,1fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)]";
 
   return (
+    <>
     <div
       className={`grid ${gridColumns} items-center px-0 py-0 text-sm text-white/90 text-[14px] ${
         isEvenRow ? "bg-[#191919]" : "bg-black"
@@ -349,6 +393,8 @@ function TableRow({
                       height={16}
                       className="w-4 h-4"
                     />
+                  ) : isLimitless ? (
+                    <span className="text-[#8B5CF6] font-bold text-sm">L</span>
                   ) : (
                     <span className="text-[#17cb91] font-bold text-sm">K</span>
                   )}
@@ -463,6 +509,13 @@ function TableRow({
         </div>
       )}
     </div>
+    <PaywallModal
+      open={showPaywall}
+      onClose={() => setShowPaywall(false)}
+      context="rexmarkets"
+      paymentMetadata={currentUserId ? { userId: currentUserId } : undefined}
+    />
+    </>
   );
 }
 

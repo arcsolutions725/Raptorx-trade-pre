@@ -19,6 +19,8 @@ import {
 import { StorageManager } from "@/lib/storage/storage-util";
 import { DexSwapper } from "@/components/swap/DexSwapper";
 import RexHeader from "@/components/ui/layout/Header";
+import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
+import { useEthereumWalletAddress } from "@/hooks/useEthereumWalletAddress";
 
 /* Technical Indicators + Analysis */
 import TechnicalIndicators from "@/components/rexscreener/technicalindicators/TechnicalIndicators";
@@ -41,7 +43,7 @@ interface Props {
   tokenAddress?: string | null;
   isViewingChart?: boolean;
   onTokenSelect?: (token: TrendingToken | null) => void;
-  selectedChain?: "solana" | "bsc" | "all";
+  selectedChain?: "solana" | "bsc" | "base" | "monad" | "all";
   hideHeader?: boolean; // Hide header when used as sidebar
   onClose?: () => void; // Callback to close the sidebar
   forceShowExchange?: boolean; // Force show the exchange panel when true
@@ -124,7 +126,7 @@ export function GenerateRexscreenerReport({
   forceShowExchange = false,
 }: Props) {
   const [swapMinimized, setSwapMinimized] = useState(!forceShowExchange);
-  const [contentMinimized, setContentMinimized] = useState(forceShowExchange);
+  const [contentMinimized, setContentMinimized] = useState(false);
   const { authenticated: privyAuthenticated, user: privyUser } = usePrivy();
   const { isAuthenticated: phantomAuthenticated, user: phantomUser } = usePhantomConnect();
   
@@ -211,11 +213,11 @@ export function GenerateRexscreenerReport({
     selectedReportId,
   ]);
 
-  // Handle forceShowExchange prop changes
+  // Handle forceShowExchange prop changes - show both report view and trading view
   useEffect(() => {
     if (forceShowExchange) {
       setSwapMinimized(false);
-      setContentMinimized(true);
+      setContentMinimized(false);
     }
   }, [forceShowExchange]);
 
@@ -260,6 +262,33 @@ export function GenerateRexscreenerReport({
     userId || undefined,
     selectedReportId
   );
+
+  const { solanaAddress } = useSolanaWalletAddress();
+  const { ethereumAddress } = useEthereumWalletAddress();
+  const dexForceChain =
+    activeReport?.chain === "bsc" || activeReport?.chain === "bnb"
+      ? "bsc"
+      : activeReport?.chain === "solana"
+        ? "solana"
+        : activeReport?.chain === "base"
+          ? "base"
+    : activeReport?.chain === "monad"
+      ? "monad"
+          : selectedChain === "bsc"
+            ? "bsc"
+            : selectedChain === "base"
+              ? "base"
+              : selectedChain === "solana"
+        ? "solana"
+        : selectedChain === "monad"
+          ? "monad"
+          : undefined;
+  const dexWalletAddress =
+    dexForceChain === "solana"
+      ? solanaAddress
+      : dexForceChain === "bsc" || dexForceChain === "base"
+        ? ethereumAddress
+        : null;
 
   useEffect(() => {
     if (activeReport?.contractAddress) {
@@ -465,16 +494,17 @@ export function GenerateRexscreenerReport({
                       <Image
                         src="/images/home-logo.png"
                         alt="RaptorX Logo"
-                        width={200}
-                        height={200}
+                        width={!swapMinimized ? 72 : 200}
+                        height={!swapMinimized ? 72 : 200}
+                        className={!swapMinimized ? "w-14 h-14 sm:w-16 sm:h-16" : ""}
                         priority
                       />
                       <Image
                         src={"/images/beta.png"}
                         alt="Beta version"
-                        width={28}
-                        height={28}
-                        className="pb-5 -ml-8"
+                        width={!swapMinimized ? 16 : 28}
+                        height={!swapMinimized ? 16 : 28}
+                        className={!swapMinimized ? "w-4 h-4 pb-2 -ml-3 sm:pb-2.5 sm:-ml-3.5" : "pb-5 -ml-8"}
                       />
                     </div>
                     <div className="flex flex-col gap-8 items-center justify-center">
@@ -531,24 +561,25 @@ export function GenerateRexscreenerReport({
                       <Image
                         src="/images/home-logo.png"
                         alt="RaptorX Logo"
-                        width={200}
-                        height={200}
+                        width={!swapMinimized ? 72 : 200}
+                        height={!swapMinimized ? 72 : 200}
+                        className={!swapMinimized ? "w-32 h-30 sm:w-48 sm:h-48" : ""}
                         priority
                       />
                       <Image
                         src={"/images/beta.png"}
                         alt="Beta version"
-                        width={28}
-                        height={28}
-                        className="pb-5 -ml-8"
+                        width={!swapMinimized ? 16 : 28}
+                        height={!swapMinimized ? 16 : 28}
+                        className={!swapMinimized ? "w-8 h-6 pb-2 -ml-3 sm:pb-2.5 sm:-ml-3.5" : "pb-5 -ml-8"}
                       />
                     </div>
-                    <div className="flex flex-col gap-10 items-center justify-center">
-                      <div className="flex flex-col gap-8">
-                        <h1 className="max-w-150 w-full text-[18px]! font-normal! text-[#F2F2F2] text-center">
+                    <div className={!swapMinimized ? "flex flex-col gap-4 items-center justify-center" : "flex flex-col gap-8 sm:gap-10 items-center justify-center"}>
+                      <div className={!swapMinimized ? "flex flex-col gap-2 items-center justify-center" : "flex flex-col gap-6 items-center justify-center"}>
+                        <h1 className={!swapMinimized ? "max-w-80 sm:max-w-150 w-full text-[16px]! sm:text-[18px]! font-normal! text-[#F2F2F2] text-center" : "max-w-150 w-full text-[18px]! font-normal! text-[#F2F2F2] text-center"}>
                           Rex Pilot. Your AI Pilot for everything crypto.
                         </h1>
-                        <h4 className="max-w-150 w_full text-[18px]! font-normal! text-[#F2F2F2] text-center">
+                        <h4 className={!swapMinimized ? "max-w-70 sm:max-w-150 w-full text-[14px]! sm:text-[18px]! font-normal! text-[#F2F2F2]/80 text-center" : "max-w-150 w-full text-[16px]! sm:text-[18px]! font-normal! text-[#F2F2F2]/80 text-center"}>
                           Click <span className="text-[#00b050]">Generate</span>{" "}
                           to generate Alpha reports for any coin on Solana & BNB!
                         </h4>
@@ -556,7 +587,7 @@ export function GenerateRexscreenerReport({
                       {serverReports.length > 0 && (
                         <button
                           onClick={() => setShowHistory(true)}
-                          className="px-4 sm:px-6 py-2 sm:py-3 bg-[#ffc000] text-black rounded-lg font-semibold! text-xs sm:text-[14px] hover:bg-[#00b050] transition w-full sm:w-auto"
+                          className="px-4 sm:px-6 py-2 sm:py-3 bg-[#ffc000] text-black rounded-lg font-semibold! text-xs sm:text-[14px] hover:bg-[#00b050] transition max-w-[80%] sm:max-w-full w-full sm:w-auto"
                         >
                           View Report History ({serverReports.length})
                         </button>
@@ -829,16 +860,8 @@ export function GenerateRexscreenerReport({
                 <DexSwapper
                   currentUserId={currentUser?.id ? currentUser.id : ""}
                   toTokenAddress={currentTokenAddress || undefined}
-                  forceChain={
-                    activeReport?.chain === "bsc" ||
-                    activeReport?.chain === "bnb"
-                      ? "bsc"
-                      : activeReport?.chain === "solana"
-                      ? "solana"
-                      : selectedChain !== "all"
-                      ? selectedChain
-                      : undefined
-                  }
+                  forceChain={dexForceChain}
+                  walletAddress={dexWalletAddress}
                 />
               </div>
             </div>
@@ -869,7 +892,7 @@ export function GenerateRexscreenerReport({
                 </h1>
                 <h4 className="max-w-150 w-full text-[18px]! font-normal! text-[#F2F2F2] text-center">
                   Click <span className="text-[#00b050]">Generate</span> to
-                  generate Alpha reports for any coin on Solana & BNB!
+                  generate Alpha reports for any coin on Solana, BNB & Base!
                 </h4>
               </div>
             </header>

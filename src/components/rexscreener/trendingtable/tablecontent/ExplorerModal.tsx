@@ -21,11 +21,26 @@ export default function ExplorerModal({
   const modalRef = useRef<HTMLDivElement>(null);
 
   // Determine which explorer to use
-  const isBSC = chainId?.toLowerCase() === "bsc" || chainId === "56";
-  const explorerUrl = isBSC
-    ? `https://bscscan.com/token/${tokenAddress}`
-    : `https://solscan.io/token/${tokenAddress}`;
-  const explorerName = isBSC ? "BSCScan" : "SolScan";
+  const lowerChainId = chainId?.toLowerCase();
+  const isBSC = lowerChainId === "bsc" || chainId === "56";
+  const isBase = lowerChainId === "base" || chainId === "8453";
+  const isMonad = lowerChainId === "monad" || chainId === "10143";
+
+  const explorerUrl = isBase
+    ? `https://basescan.org/token/${tokenAddress}`
+    : isBSC
+      ? `https://bscscan.com/token/${tokenAddress}`
+      : isMonad
+        ? `https://monadscan.com/address/${tokenAddress}`
+        : `https://solscan.io/token/${tokenAddress}`;
+
+  const explorerName = isBase
+    ? "BaseScan"
+    : isBSC
+      ? "BSCScan"
+      : isMonad
+        ? "MonadScan"
+        : "SolScan";
 
   // Handle escape key
   useEffect(() => {

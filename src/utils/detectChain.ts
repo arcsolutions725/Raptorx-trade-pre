@@ -1,12 +1,17 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Detect blockchain chain from DexScreener data or other sources
- * Returns normalized chain identifier: "bnb" or "solana"
+ * Returns normalized chain identifier: "bnb", "base", "solana", or "monad"
  */
-export function detectChainFromDexData(dexData: any): "bsc" | "solana" {
+export function detectChainFromDexData(dexData: any): "bsc" | "base" | "solana" | "monad" {
   if (!dexData) return "solana";
 
-  const chainId = dexData.chainId?.toLowerCase();
+  const chainId = dexData.chainId?.toLowerCase?.() ?? String(dexData.chainId ?? "");
+
+  // Base chain detection (before BSC so "base" isn't missed)
+  if (chainId === "base" || chainId === "8453") {
+    return "base";
+  }
 
   // BNB/BSC chain detection
   if (
@@ -16,6 +21,11 @@ export function detectChainFromDexData(dexData: any): "bsc" | "solana" {
     chainId === "56"
   ) {
     return "bsc";
+  }
+
+  // Monad chain detection
+  if (chainId === "monad" || chainId === "10143") {
+    return "monad";
   }
 
   // Default to Solana for any other chain or solana-specific chainIds
@@ -42,19 +52,21 @@ export function detectChainFromAddress(address: string): "bsc" | "solana" {
 
 /**
  * Comprehensive chain detection combining multiple methods
- * Priority: DexData > Address Pattern > Default
+ * Priority: Explicit > DexData > Address Pattern > Default
  */
 export function detectChain(params: {
   dexData?: any;
   address?: string;
   explicitChain?: string;
-}): "bsc" | "solana" {
+}): "bsc" | "base" | "solana" | "monad" {
   const { dexData, address, explicitChain } = params;
 
-  // If explicitly provided, use it
+  // If explicitly provided (e.g. from frontend token.chainId), use it
   if (explicitChain) {
-    const normalized = explicitChain.toLowerCase();
-    if (normalized === "bsc" || normalized === "bnb") return "bsc";
+    const normalized = explicitChain.toLowerCase().trim();
+    if (normalized === "base" || normalized === "8453") return "base";
+    if (normalized === "bsc" || normalized === "bnb" || normalized === "56") return "bsc";
+    if (normalized === "monad" || normalized === "10143") return "monad";
     return "solana";
   }
 
@@ -64,7 +76,7 @@ export function detectChain(params: {
     if (chainFromDex) return chainFromDex;
   }
 
-  // Fallback to address pattern detection
+  // Fallback to address pattern detection (0x => bsc; cannot distinguish Base from BSC by address alone)
   if (address) {
     return detectChainFromAddress(address);
   }

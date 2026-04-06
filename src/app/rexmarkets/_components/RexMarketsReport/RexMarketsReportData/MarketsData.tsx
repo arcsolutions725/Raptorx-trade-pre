@@ -14,7 +14,9 @@ import {
   type MarketChatMessage,
 } from "@/lib/marketChatStorage";
 import { useDataSource } from "@/contexts/DataSourceContext";
+import { usePathname } from "next/navigation";
 import ProbabilityChart from "./shared/ProbabilityChart";
+import { useLimitlessHistoricalPrice } from "@/hooks/useLimitlessHistoricalPrice";
 
 // Format price to match RexMarketsTable style: $XX.XX¢
 function formatPrice(price?: number | string): string {
@@ -31,11 +33,30 @@ function formatProbability(probability?: number | string): string {
   return `${(numProb * 100).toFixed(1)}%`;
 }
 
-// Format bid/ask (already in cents 0-100)
+// Format bid/ask (in cents 0-100) - show decimals for small values
 function formatBidAsk(value?: number | string): string {
   const numValue = typeof value === "string" ? Number(value) : value;
   if (typeof numValue !== "number" || isNaN(numValue)) return "—";
-  return numValue.toFixed(0);
+  if (numValue === 0) return "0";
+  if (numValue < 1 && numValue > 0) return numValue.toFixed(2);
+  if (numValue >= 100) return numValue.toFixed(0);
+  return numValue.toFixed(1);
+}
+
+/** Effective liquidity: use API liquidity when > 0, else bid+ask depth as proxy (e.g. Limitless). */
+function getEffectiveLiquidity(o: { liquidity?: number; yes_bid?: number; yes_ask?: number }): number {
+  const liq = Number(o.liquidity) || 0;
+  if (liq > 0) return liq;
+  const bid = Number(o.yes_bid) || 0;
+  const ask = Number(o.yes_ask) || 0;
+  return bid + ask;
+}
+
+/** Completed/closed markets have no liquidity and should be hidden. */
+function isCompletedMarket(o: { status?: string; liquidity?: number }): boolean {
+  const s = (o.status || "").toLowerCase();
+  if (["closed", "resolved", "archived", "finalized"].includes(s)) return true;
+  return false;
 }
 
 type MarketsDataProps = {
@@ -54,9 +75,12 @@ export default function MarketsData({
   eventId,
 }: MarketsDataProps) {
   const { dataSource } = useDataSource();
+  const pathname = usePathname();
+  const isLimitlessRoute = pathname?.startsWith("/rexmarkets/limitless/");
   const { marketDetails, isLoading: isLoadingDetails } = useMarketDetails(
     eventTicker || null,
     eventId || null,
+    isLimitlessRoute ? eventTicker ?? null : undefined,
   );
 
   const [imageError, setImageError] = useState(false);
@@ -142,14 +166,222 @@ export default function MarketsData({
     }
   }, [inputMessage]);
 
+  // For Limitless, build outcomes from rawEventData.markets (same shape as Kalshi/Polymarket) for table + insights
+  const outcomesForInsightsAndTable = useMemo((): import("@/hooks/useMarketDetails").MarketOutcome[] | null => {
+    if (!marketDetails) return null;
+    let raw: import("@/hooks/useMarketDetails").MarketOutcome[] | null = null;
+
+    if (pathname?.startsWith("/rexmarkets/limitless/")) {
+      const rawEvent = (marketDetails as { rawEventData?: {
+        markets?: Array<{
+          id?: number; slug?: string; title?: string; prices?: number[];
+          volume?: string; volumeFormatted?: string; status?: string;
+          tradePrices?: { buy?: { market?: number[] }; sell?: { market?: number[] } };
+          expirationDate?: string; expirationTimestamp?: number;
+          liquidity?: number; liquidityNum?: number;
+        }>;
+        title?: string; slug?: string; prices?: number[]; volume?: string; volumeFormatted?: string;
+        status?: string; expirationDate?: string; expirationTimestamp?: number;
+      } }).rawEventData;
+      const markets = rawEvent?.markets;
+      const list = Array.isArray(markets) && markets.length > 0 ? markets : null;
+      const toOutcome = (m: {
+        id?: number; slug?: string; title?: string; prices?: number[];
+        volume?: string; volumeFormatted?: string; status?: string;
+        tradePrices?: { buy?: { market?: number[] }; sell?: { market?: number[] } };
+        expirationDate?: string; expirationTimestamp?: number;
+        liquidity?: number; liquidityNum?: number;
+      }): import("@/hooks/useMarketDetails").MarketOutcome => {
+        const yesPrice = Array.isArray(m.prices) && typeof m.prices[0] === "number" ? m.prices[0] : 0;
+        const noPrice = Array.isArray(m.prices) && typeof m.prices[1] === "number" ? m.prices[1] : 0;
+        const vol = m.volumeFormatted != null ? parseFloat(String(m.volumeFormatted)) : (typeof m.volume === "string" ? parseFloat(m.volume) : Number(m.volume) || 0);
+        const buyMarket = m.tradePrices?.buy?.market;
+        const sellMarket = m.tradePrices?.sell?.market;
+        const yesBidPct = Array.isArray(sellMarket) && typeof sellMarket[0] === "number" ? sellMarket[0] : yesPrice;
+        const yesAskPct = Array.isArray(buyMarket) && typeof buyMarket[0] === "number" ? buyMarket[0] : yesPrice;
+        const liquidity = Number(m.liquidityNum ?? m.liquidity ?? 0) || 0;
+        return {
+          ticker: m.slug ?? String(m.id ?? ""),
+          subtitle: m.title ?? "",
+          probability: yesPrice,
+          yes_price: yesPrice,
+          no_price: noPrice,
+          volume: Number.isFinite(vol) ? vol : 0,
+          volume_24h: undefined,
+          yes_bid: yesBidPct <= 1 ? yesBidPct * 100 : yesBidPct,
+          yes_ask: yesAskPct <= 1 ? yesAskPct * 100 : yesAskPct,
+          liquidity,
+          open_interest: 0,
+          status: m.status ?? "",
+          expected_expiration_time: m.expirationTimestamp ? new Date(m.expirationTimestamp).toISOString() : (m.expirationDate ?? null),
+        };
+      };
+      if (list) raw = list.map(toOutcome);
+      else if (rawEvent && (rawEvent.title != null || rawEvent.prices != null)) {
+        const yesPrice = Array.isArray(rawEvent.prices) && typeof rawEvent.prices[0] === "number" ? rawEvent.prices[0] : 0;
+        const noPrice = Array.isArray(rawEvent.prices) && typeof rawEvent.prices[1] === "number" ? rawEvent.prices[1] : 0;
+        const vol = rawEvent.volumeFormatted != null ? parseFloat(String(rawEvent.volumeFormatted)) : (typeof rawEvent.volume === "string" ? parseFloat(rawEvent.volume) : Number(rawEvent.volume) || 0);
+        raw = [{
+          ticker: rawEvent.slug ?? marketDetails.ticker ?? "",
+          subtitle: rawEvent.title ?? marketDetails.title ?? "",
+          probability: yesPrice,
+          yes_price: yesPrice,
+          no_price: noPrice,
+          volume: Number.isFinite(vol) ? vol : 0,
+          volume_24h: undefined,
+          yes_bid: yesPrice <= 1 ? yesPrice * 100 : yesPrice,
+          yes_ask: yesPrice <= 1 ? yesPrice * 100 : yesPrice,
+          liquidity: 0,
+          open_interest: 0,
+          status: rawEvent.status ?? "",
+          expected_expiration_time: rawEvent.expirationTimestamp ? new Date(rawEvent.expirationTimestamp).toISOString() : (rawEvent.expirationDate ?? null),
+        }];
+      } else raw = [];
+    } else {
+      raw = marketDetails.markets ?? null;
+    }
+
+    if (!raw || raw.length === 0) return raw;
+
+    // Filter out completed markets and those with zero effective liquidity (for table)
+    const filtered = raw.filter(
+      (o) => !isCompletedMarket(o) && getEffectiveLiquidity(o) > 0
+    );
+    // Sort by liquidity descending (highest first)
+    filtered.sort((a, b) => getEffectiveLiquidity(b) - getEffectiveLiquidity(a));
+    return filtered;
+  }, [marketDetails, pathname]);
+
+  // Outcomes for insights: do NOT filter by liquidity so insights still generate when volume/liquidity is $0
+  const outcomesForInsights = useMemo((): import("@/hooks/useMarketDetails").MarketOutcome[] | null => {
+    if (!marketDetails) return null;
+    let raw: import("@/hooks/useMarketDetails").MarketOutcome[] | null = null;
+    if (pathname?.startsWith("/rexmarkets/limitless/")) {
+      const sameAsTable = outcomesForInsightsAndTable;
+      return sameAsTable && sameAsTable.length > 0 ? sameAsTable : null;
+    }
+    raw = marketDetails.markets ?? null;
+    if (!raw || raw.length === 0) return raw;
+    const filtered = raw.filter((o) => !isCompletedMarket(o));
+    return filtered.length > 0 ? filtered : raw;
+  }, [marketDetails, pathname, outcomesForInsightsAndTable]);
+
   const { summary, isGenerating: isGeneratingSummary } = useMarketSummary(
     marketTitle || marketDetails?.title || null,
     marketDetails,
   );
   const { insights, isGenerating: isGeneratingInsights } = useMarketInsights(
     marketTitle || marketDetails?.title || null,
-    marketDetails?.markets || null,
+    outcomesForInsights,
+    marketDetails,
   );
+
+  // Same API and interval as left panel (LimitlessTradingInterface): 1W default
+  const { data: limitlessHistoryData, isLoading: isLoadingLimitlessChart } =
+    useLimitlessHistoricalPrice({
+      slug: isLimitlessRoute && eventTicker ? eventTicker : null,
+      interval: "1W",
+    });
+  const limitlessChartHistory = limitlessHistoryData?.history ?? [];
+  const limitlessHistoryByMarket = limitlessHistoryData?.markets ?? [];
+
+  // Same chart data build as left panel: multi-market from rawEventData + history, or single-series fallback
+  const { chartData: limitlessChartData, marketKeys: limitlessMarketKeys } =
+    useMemo(() => {
+      if (!isLimitlessRoute || !marketDetails) {
+        return { chartData: [], marketKeys: [] };
+      }
+      const rawData = marketDetails as {
+        rawEventData?: { markets?: { title?: string; slug?: string; prices?: number[] }[] };
+      } | null;
+      const eventMarkets =
+        (rawData?.rawEventData as
+          | { markets?: { id?: number; title?: string; slug?: string; prices?: number[] }[] }
+          | undefined)?.markets ?? [];
+      if (eventMarkets.length === 0 || limitlessHistoryByMarket.length === 0) {
+        return { chartData: [], marketKeys: [] };
+      }
+      const MARKET_COLORS = [
+        "#8B5CF6",
+        "#00ff88",
+        "#00a8ff",
+        "#ff6b6b",
+        "#ffc000",
+        "#9b59b6",
+        "#1abc9c",
+        "#e74c3c",
+      ];
+      const byTitle = new Map<
+        string,
+        { title: string; slug?: string; history: { ts: number; price: number }[] }
+      >();
+      for (const m of limitlessHistoryByMarket) {
+        const t = (m.title ?? "").trim();
+        if (t) byTitle.set(t, { title: m.title, slug: m.slug, history: m.history ?? [] });
+      }
+      const bySlug = new Map<string, (typeof limitlessHistoryByMarket)[0]>();
+      for (const m of limitlessHistoryByMarket) {
+        if (m.slug) bySlug.set(m.slug, m);
+      }
+      type MarketWithLatest = {
+        title: string;
+        slug?: string;
+        latestPrice: number;
+        history: { ts: number; price: number }[];
+      };
+      const withLatest: MarketWithLatest[] = eventMarkets.map((m) => {
+        const title = (m.title ?? "").trim();
+        const slug = m.slug;
+        const fromApi = byTitle.get(title) ?? (slug ? bySlug.get(slug) : null);
+        const history = fromApi?.history ?? [];
+        const currentYes =
+          Array.isArray(m.prices) && typeof m.prices[0] === "number" ? m.prices[0] : 0.5;
+        const latestPrice =
+          history.length > 0
+            ? typeof history[history.length - 1].price === "number"
+              ? history[history.length - 1].price
+              : currentYes
+            : currentYes;
+        const pct = latestPrice <= 1 ? latestPrice * 100 : latestPrice;
+        return { title, slug, latestPrice: pct, history };
+      });
+      const topMarkets = [...withLatest]
+        .sort((a, b) => b.latestPrice - a.latestPrice)
+        .slice(0, 4);
+      const allDataPoints = new Map<
+        number,
+        { time: number; timestamp: number; [key: string]: number | undefined }
+      >();
+      for (const market of topMarkets) {
+        const marketKey = market.title.replace(/[^a-zA-Z0-9]/g, "_");
+        for (const { ts, price } of market.history) {
+          const timeMs = ts * 1000;
+          const pricePct =
+            typeof price === "number" ? (price <= 1 ? price * 100 : price) : 0;
+          if (!allDataPoints.has(ts)) {
+            allDataPoints.set(ts, { time: timeMs, timestamp: ts });
+          }
+          allDataPoints.get(ts)![marketKey] = pricePct;
+        }
+      }
+      const chartData = Array.from(allDataPoints.values()).sort(
+        (a, b) => a.timestamp - b.timestamp
+      );
+      const marketKeys = topMarkets.map((m, idx) => ({
+        key: m.title.replace(/[^a-zA-Z0-9]/g, "_"),
+        title: m.title,
+        color: MARKET_COLORS[idx % MARKET_COLORS.length],
+      }));
+      return { chartData, marketKeys };
+    }, [isLimitlessRoute, marketDetails, limitlessHistoryByMarket]);
+
+  // Limitless: use volumeFormatted from market detail (same as left panel)
+  const limitlessVolumeFormatted = useMemo(() => {
+    if (!isLimitlessRoute || !marketDetails) return undefined;
+    const raw = (marketDetails as { rawEventData?: { volumeFormatted?: string } })
+      ?.rawEventData;
+    return raw?.volumeFormatted;
+  }, [isLimitlessRoute, marketDetails]);
 
   // Chat message sending
   const handleSend = useCallback(async () => {
@@ -278,23 +510,19 @@ export default function MarketsData({
       );
     });
 
-  // Detect market source from marketDetails structure
-  // In "all" mode, we need to determine the source from the data structure
+  // Detect market source from route or marketDetails structure
   const detectedSource = useMemo(() => {
+    const isLimitlessRoute = pathname?.startsWith("/rexmarkets/limitless/");
+    if (isLimitlessRoute) return "limitless";
     if (!marketDetails) return dataSource;
 
     // Kalshi markets have ranged_group_name (unique to Kalshi)
     // Polymarket markets have ticker at root level but NO ranged_group_name
-    // Note: Both have series_ticker, so we can't use that to differentiate
-    if (marketDetails.ranged_group_name) {
-      return "kalshi";
-    } else if (marketDetails.ticker) {
-      return "polymarket";
-    }
+    if (marketDetails.ranged_group_name) return "kalshi";
+    if (marketDetails.ticker) return "polymarket";
 
-    // Fallback to dataSource if we can't determine from structure
     return dataSource;
-  }, [marketDetails, dataSource]);
+  }, [marketDetails, dataSource, pathname]);
 
   // Generate external link URL based on detected source
   const getExternalLinkUrl = (): string | null => {
@@ -322,6 +550,10 @@ export default function MarketsData({
       const ticker = marketDetails.ticker || eventTicker;
       if (!ticker) return null;
       return `https://polymarket.com/event/${ticker}`;
+    } else if (source === "limitless") {
+      const slug = marketDetails.ticker || eventTicker;
+      if (!slug) return null;
+      return `https://limitless.exchange/markets/${slug}`;
     }
 
     return null;
@@ -409,20 +641,32 @@ export default function MarketsData({
             )}
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-3 mb-2 flex-wrap">
-                <h1 className="text-2xl font-bold text-[#ffc000] break-words flex items-center gap-2">
+                <h1 className="text-2xl font-bold text-[#ffc000] break-words">
                   {marketTitle}
                   {externalLinkUrl && (
-                    <button
-                      className={`flex-shrink-0 flex items-center gap-1.5 px-2.5 py-1.5 rounded-md font-semibold text-xs transition-all duration-200 hover:scale-105 shadow-md ${
-                        detectedSource === "kalshi"
-                          ? "bg-gradient-to-r from-[#09C285] to-[#07A875] hover:from-[#007A5E] hover:to-[#006B52] text-white border border-[#0AE09A]/20"
-                          : "bg-gradient-to-r from-[#265CFF] to-[#1E4DD9] hover:from-[#1A4BCC] hover:to-[#1539A8] text-white border border-[#4A7AFF]/20"
-                      }`}
+                    <>
+                      {" "}
+                      <button
+                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md font-semibold text-xs transition-all duration-200 hover:scale-105 shadow-md align-middle ${
+                          detectedSource === "kalshi"
+                            ? "bg-gradient-to-r from-[#09C285] to-[#07A875] hover:from-[#007A5E] hover:to-[#006B52] text-white border border-[#0AE09A]/20"
+                            : detectedSource === "limitless"
+                              ? "bg-black text-white border border-black/20"
+                              : "bg-gradient-to-r from-[#265CFF] to-[#1E4DD9] hover:from-[#1A4BCC] hover:to-[#1539A8] text-white border border-[#4A7AFF]/20"
+                        }`}
                       aria-label={`View on ${
-                        detectedSource === "kalshi" ? "Kalshi" : "Polymarket"
+                        detectedSource === "kalshi"
+                          ? "Kalshi"
+                          : detectedSource === "limitless"
+                            ? "Limitless"
+                            : "Polymarket"
                       }`}
                       title={`View on ${
-                        detectedSource === "kalshi" ? "Kalshi" : "Polymarket"
+                        detectedSource === "kalshi"
+                          ? "Kalshi"
+                          : detectedSource === "limitless"
+                            ? "Limitless"
+                            : "Polymarket"
                       }`}
                     >
                       {detectedSource === "kalshi" ? (
@@ -432,6 +676,19 @@ export default function MarketsData({
                           </span>
                           <span className="hidden sm:inline font-medium text-xs">
                             Kalshi
+                          </span>
+                        </>
+                      ) : detectedSource === "limitless" ? (
+                        <>
+                          <Image
+                            src="/images/limitless-logo.png"
+                            alt="Limitless"
+                            width={14}
+                            height={14}
+                            className="w-[14px] h-[14px]"
+                          />
+                          <span className="hidden sm:inline font-medium text-xs">
+                            Limitless
                           </span>
                         </>
                       ) : (
@@ -449,6 +706,7 @@ export default function MarketsData({
                         </>
                       )}
                     </button>
+                    </>
                   )}
                 </h1>
               </div>
@@ -528,9 +786,9 @@ export default function MarketsData({
                     </tr>
                   </thead>
                   <tbody>
-                    {marketDetails?.markets &&
-                    marketDetails.markets.length > 0 ? (
-                      marketDetails.markets.map((outcome, idx) => (
+                    {outcomesForInsightsAndTable &&
+                    outcomesForInsightsAndTable.length > 0 ? (
+                      outcomesForInsightsAndTable.map((outcome, idx) => (
                         <tr
                           key={outcome.ticker}
                           className={`border-b border-white/10 ${
@@ -550,12 +808,9 @@ export default function MarketsData({
                             {formatPrice(outcome.no_price)}
                           </td>
                           <td className="px-3 py-3 text-white whitespace-nowrap">
-                            {totalVolume
-                              ? totalVolume.toLocaleString()
-                              : (
-                                  (outcome.volume_24h ?? outcome.volume) ||
-                                  0
-                                ).toLocaleString()}
+                            {(
+                              (outcome.volume_24h ?? outcome.volume) ?? 0
+                            ).toLocaleString()}
                           </td>
                           <td className="px-3 py-3 text-white whitespace-nowrap">
                             {formatBidAsk(outcome.yes_bid)}
@@ -585,8 +840,9 @@ export default function MarketsData({
           )}
         </div>
 
-        {/* Probability Chart (collapsible) */}
-        {marketDetails?.markets && marketDetails.markets.length > 0 && (
+        {/* Market Data Chart (collapsible) - Limitless: PriceChart; Kalshi/Polymarket: ProbabilityChart */}
+        {(detectedSource === "limitless" ||
+          (marketDetails?.markets && marketDetails.markets.length > 0)) && (
           <div className="flex-shrink-0 pb-6">
             <button
               type="button"
@@ -610,10 +866,24 @@ export default function MarketsData({
             </button>
             {probabilityChartExpanded && (
               <div>
-                <ProbabilityChart
-                  markets={marketDetails.markets}
-                  totalVolume={totalVolume || marketDetails.total_volume}
-                />
+                {isLoadingLimitlessChart && detectedSource === "limitless" ? (
+                  <div className="flex items-center justify-center py-8 text-white/60">
+                    Loading chart...
+                  </div>
+                ) : detectedSource === "limitless" ? (
+                  <ProbabilityChart
+                    markets={[]}
+                    limitlessChartData={limitlessChartData}
+                    limitlessMarketKeys={limitlessMarketKeys}
+                    limitlessHistory={limitlessChartHistory}
+                    limitlessVolumeFormatted={limitlessVolumeFormatted}
+                  />
+                ) : (
+                  <ProbabilityChart
+                    markets={marketDetails!.markets}
+                    totalVolume={totalVolume || marketDetails!.total_volume}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -656,19 +926,27 @@ export default function MarketsData({
                 Market <span className="text-[#ffc000]">Statistics</span>
               </p>
               <div className="bg-white/5 rounded-lg p-4">
-                <div className="grid grid-cols-2 gap-4">
+                <div className={detectedSource === "limitless" ? "" : "grid grid-cols-2 gap-4"}>
                   <div>
                     <p className="text-white/60 text-sm mb-1">Total Volume</p>
                     <p className="text-white text-lg font-semibold">
-                      ${marketDetails.total_volume.toLocaleString()}
+                      {detectedSource === "limitless"
+                        ? (limitlessVolumeFormatted != null && limitlessVolumeFormatted !== ""
+                          ? (limitlessVolumeFormatted.startsWith("$")
+                              ? limitlessVolumeFormatted
+                              : `$${limitlessVolumeFormatted}`)
+                          : `$${(totalVolume ?? 0).toLocaleString()}`)
+                        : `$${(marketDetails.total_volume ?? totalVolume ?? 0).toLocaleString()}`}
                     </p>
                   </div>
-                  <div>
-                    <p className="text-white/60 text-sm mb-1">Series Volume</p>
-                    <p className="text-white text-lg font-semibold">
-                      ${marketDetails.total_series_volume.toLocaleString()}
-                    </p>
-                  </div>
+                  {detectedSource !== "limitless" && (
+                    <div>
+                      <p className="text-white/60 text-sm mb-1">Series Volume</p>
+                      <p className="text-white text-lg font-semibold">
+                        ${(marketDetails.total_series_volume ?? totalVolume ?? 0).toLocaleString()}
+                      </p>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>

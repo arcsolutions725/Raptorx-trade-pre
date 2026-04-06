@@ -7,6 +7,12 @@ import {
   cryptoPrompt,
   regularPrompt,
   synthesisAddendumPrompt,
+  internetMarketsPrompt,
+  kalshiPrompt,
+  polymarketPrompt,
+  limitlessPrompt,
+  predictionMarketsPrompt,
+  cryptoChainAddendum,
 } from "@/lib/ai/prompts";
 import { classifyQuestionDomain, type QuestionDomain } from "@/lib/ai/intent";
 import {
@@ -28,6 +34,7 @@ import {
   buildTopMarketsSuggestMessage,
   type TopMarketsEmbedPayload,
 } from "@/lib/ai/tools/market";
+import { checkAndIncrementUsage } from "@/lib/subscription/limits";
 
 const openRouter = new OpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -152,11 +159,17 @@ export async function POST(
       role = "user",
       history,
       marketMode,
+      cryptoChain,
+      predictionSubmode,
+      predictionDisplayLevel,
     }: {
       content: string;
       role?: "user" | "assistant";
       history?: Array<{ role: "user" | "assistant"; content: string }>;
-      marketMode?: "Auto" | "Kalshi" | "Polymarket";
+      marketMode?: "Markets" | "Crypto" | "Kalshi" | "Polymarket";
+      cryptoChain?: "solana" | "base" | "bnb";
+      predictionSubmode?: "polymarket" | "kalshi" | "limitless";
+      predictionDisplayLevel?: "category" | "provider";
     } = body;
 
     if (!content) {
@@ -180,6 +193,25 @@ export async function POST(
 
     if (!chat) {
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
+    }
+
+    // Subscription & usage: every user message to Claw counts toward limits.
+    if (role !== "assistant") {
+      const usageResult = await checkAndIncrementUsage(
+        chat.userId,
+        "CLAW_MESSAGE",
+      );
+      if (!usageResult.ok) {
+        const code = usageResult.reason;
+        return NextResponse.json(
+          {
+            error: "Claw usage limit reached",
+            code,
+            plan: usageResult.plan,
+          },
+          { status: 402 },
+        );
+      }
     }
 
     // Save user message
@@ -304,7 +336,25 @@ export async function POST(
                 model: DEFAULT_CHAT_MODEL,
                 text: content,
               });
-          const basePrompt = domain === "crypto" ? cryptoPrompt : regularPrompt;
+          const basePrompt = (() => {
+            if (marketMode === "Crypto") {
+              const chainAdd = cryptoChain ? cryptoChainAddendum(cryptoChain) : "";
+              return cryptoPrompt + chainAdd;
+            }
+            if (marketMode === "Kalshi") {
+              if (predictionDisplayLevel === "category") return predictionMarketsPrompt;
+              return kalshiPrompt;
+            }
+            if (marketMode === "Polymarket") {
+              if (predictionDisplayLevel === "category") return predictionMarketsPrompt;
+              return polymarketPrompt;
+            }
+            if (marketMode === "Markets") {
+              if (predictionSubmode === "limitless") return limitlessPrompt;
+              return internetMarketsPrompt;
+            }
+            return domain === "crypto" ? cryptoPrompt : regularPrompt;
+          })();
 
           try {
             // Top prediction markets intent: show cards for "top/hottest markets" regardless of domain.
@@ -313,13 +363,13 @@ export async function POST(
               sendStatus("markets");
               const category = extractTopMarketsCategory(content);
               const limit = extractTopMarketsLimit(content);
-              // In Auto mode, infer provider from query (e.g. "best sports on Kalshi" -> only Kalshi).
+              // In Markets (or Crypto) mode, infer provider from query (e.g. "best sports on Kalshi" -> only Kalshi).
               const provider =
                 marketMode === "Kalshi"
                   ? ("kalshi" as const)
                   : marketMode === "Polymarket"
                     ? ("polymarket" as const)
-                    : (marketMode?.toLowerCase() === "auto"
+                    : (marketMode === "Markets" || marketMode === "Crypto"
                         ? inferProviderFromTopMarketsQuery(content)
                         : undefined);
               const result = await fetchTopPredictionMarkets(baseUrl, {
@@ -427,7 +477,15 @@ export async function POST(
           try {
             const cryptoIntent = detectCryptoToolIntent(content);
             const shouldRunCryptoTools =
-              domain === "crypto" || cryptoIntent !== null;
+              // Only run crypto tools when the user is explicitly in Crypto mode
+              // or when there is no explicit market mode and the domain/intent
+              // clearly points to a crypto token query. This prevents cases where
+              // Kalshi/Polymarket market titles like "When will Bitcoin cross 100k again?"
+              // get misinterpreted as a BNB token named "100k" when the user is
+              // actually asking about a prediction market.
+              (marketMode === "Crypto" ||
+                (!marketMode &&
+                  (domain === "crypto" || cryptoIntent !== null)));
 
             if (shouldRunCryptoTools) {
               const out = await runCryptoToolAgent({

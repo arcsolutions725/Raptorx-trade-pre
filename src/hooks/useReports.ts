@@ -7,7 +7,13 @@ async function fetchJSON(input: RequestInfo, init?: RequestInit) {
   const res = await fetch(input, init);
   const data = await res.json().catch(() => ({}));
   if (!res.ok || data?.ok === false) {
-    throw new Error(data?.error || `HTTP ${res.status}`);
+    const err = new Error(data?.error || `HTTP ${res.status}`) as Error & {
+      status?: number;
+      code?: string;
+    };
+    err.status = res.status;
+    err.code = data?.code;
+    throw err;
   }
   return data;
 }
@@ -183,6 +189,8 @@ export function useAppendMessage(userId: string) {
       role: "user" | "assistant";
       content: string;
       timestamp?: string;
+      /** RexMarkets: "tech" | "news" for 2 tech + 2 news queries per report per day. */
+      followupKind?: "tech" | "news";
     }) =>
       fetchJSON(`/api/conversations/${args.reportId}/message`, {
         method: "POST",

@@ -10,6 +10,7 @@ import { usePrivy } from "@privy-io/react-auth";
 import copy from "copy-to-clipboard";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import { useReportGenStatus, reportGenStore } from "@/lib/storage/reportGenStore";
+import { PaywallModal } from "@/components/subscription/PaywallModal";
 
 function fromEpochSeconds(sec?: number): Date | null {
   return typeof sec === "number" ? new Date(sec * 1000) : null;
@@ -34,22 +35,10 @@ function timeSince(date: Date | null): string {
 function pickVolume24h(v?: TrendingToken["totalVolume"]): number | undefined {
   return v?.["24h"] ?? v?.["12h"] ?? v?.["4h"] ?? v?.["1h"];
 }
-function formatGeneratedAt(date = new Date()): string {
-  const pad = (n: number) => (n < 10 ? `0${n}` : `${n}`);
-  const Y = date.getFullYear();
-  const M = pad(date.getMonth() + 1);
-  const D = pad(date.getDate());
-  const h = pad(date.getHours());
-  const m = pad(date.getMinutes());
-  const s = pad(date.getSeconds());
-  return `${Y}-${M}-${D} ${h}:${m}:${s}`;
-}
-
 type Props = {
   token?: TrendingToken;
-  lastGeneratedOn?: string | null;
   rank: number | string;
-  onReportGenerated?: (report: any) => void;
+  onReportGenerated?: (report: any, token?: TrendingToken) => void;
   onOpenChart?: (token: TrendingToken) => void;
   currentUserId: string;
   isAdmin: boolean;
@@ -58,7 +47,6 @@ type Props = {
 
 export function TableRow({
   token,
-  lastGeneratedOn,
   rank,
   onReportGenerated,
   onOpenChart,
@@ -66,19 +54,9 @@ export function TableRow({
   isAdmin,
   index = 0,
 }: Props) {
-  const [localLastGeneratedOn, setLocalLastGeneratedOn] = useState<
-    string | null
-  >(lastGeneratedOn ?? null);
-  useEffect(() => {
-    if (lastGeneratedOn) setLocalLastGeneratedOn(lastGeneratedOn);
-  }, [lastGeneratedOn]);
-
   const { generateFromToken, adminGenerateAndStoreFromToken } =
     useGenerateRexReport({
-      onReportGenerated: (r) => {
-        setLocalLastGeneratedOn(formatGeneratedAt());
-        onReportGenerated?.(r);
-      },
+      onReportGenerated: (r) => onReportGenerated?.(r, token),
       userId: currentUserId,
     });
 
@@ -86,6 +64,7 @@ export function TableRow({
   const [hasGenerated, setHasGenerated] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   const { authenticated, ready, login } = usePrivy();
 
@@ -155,12 +134,26 @@ export function TableRow({
   const age = timeSince(fromEpochSeconds(token?.createdAt));
   const logoImage = token?.logo;
 
-  const isBnbChain =
-    token?.chainId?.toLowerCase() === "bsc" || token?.chainId === "56";
-  const baseCurrency = isBnbChain ? "WBNB" : "SOL";
-  const explorerUrl = isBnbChain
-    ? `https://bscscan.com/token/${token?.tokenAddress}`
-    : `https://solscan.io/token/${token?.tokenAddress}`;
+  const lowerChainId = token?.chainId?.toLowerCase();
+  const isBnbChain = lowerChainId === "bsc" || token?.chainId === "56";
+  const isBaseChain = lowerChainId === "base" || token?.chainId === "8453";
+  const isMonadChain = lowerChainId === "monad" || token?.chainId === "10143";
+
+  const baseCurrency = isBaseChain
+    ? "WETH"
+    : isBnbChain
+      ? "WBNB"
+      : isMonadChain
+        ? "MON"
+        : "SOL";
+
+  const explorerUrl = isBaseChain
+    ? `https://basescan.org/token/${token?.tokenAddress}`
+    : isBnbChain
+      ? `https://bscscan.com/token/${token?.tokenAddress}`
+      : isMonadChain
+        ? `https://monadscan.com/address/${token?.tokenAddress}`
+        : `https://solscan.io/token/${token?.tokenAddress}`;
 
   const openChart = () => {
     if (token?.tokenAddress && onOpenChart && token) onOpenChart(token);
@@ -176,9 +169,11 @@ export function TableRow({
     if (!token) return;
     try {
       await generateFromToken(token);
-      setLocalLastGeneratedOn((existing) => existing ?? formatGeneratedAt());
       setHasGenerated(true);
-    } catch {
+    } catch (err: any) {
+      if (err?.status === 402) {
+        setShowPaywall(true);
+      }
       setCountdown(null);
       setHasGenerated(false);
       if (intervalRef.current) {
@@ -194,7 +189,6 @@ export function TableRow({
       await adminGenerateAndStoreFromToken(token, {
         confirmOverwrite: async (msg) => window.confirm(msg),
       });
-      setLocalLastGeneratedOn((existing) => existing ?? formatGeneratedAt());
       setHasGenerated(true);
     } catch {
       setCountdown(null);
@@ -224,29 +218,30 @@ export function TableRow({
   const isEvenRow = index % 2 === 1;
 
   return (
-    <div className={`grid grid-cols-[minmax(300px,1.5fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] sm:grid-cols-[minmax(400px,2fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] items-center px-0 py-0 text-sm text-white/90 text-[14px]`}>
+    <>
+      <div className={`grid grid-cols-[minmax(200px,1.5fr)_minmax(70px,1fr)_minmax(140px,1fr)_minmax(70px,1fr)_minmax(100px,1fr)_minmax(100px,1fr)_minmax(70px,1fr)] sm:grid-cols-[minmax(400px,2fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] items-center px-0 py-0 text-xs sm:text-sm text-white/90 ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
       {/* Token */}
       <div
-        className={`sm:sticky sm:left-0 sm:z-10 flex items-center px-3 py-2 gap-2 whitespace-nowrap truncate ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}
+        className={`sm:sticky sm:left-0 sm:z-10 flex items-center px-3 py-[10.5px] sm:py-2 gap-1 sm:gap-2 whitespace-nowrap truncate ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}
         title={displayName}
       >
-        <div className="pr-2 shrink-0 text-[#A0A0A5]">{`#${rank}`}</div>
+        <div className="pr-0 sm:pr-2 shrink-0 text-[#A0A0A5]">{`#${rank}`}</div>
 
         {logoImage ? (
           <button
             type="button"
             onClick={openChart}
             onKeyDown={keyOpenChart}
-            className="pl-3 w-8.75 h-8.75 outline-none cursor-pointer group py-0! px-0! shrink-0 hidden sm:block"
+            className="pl-3 w-8 h-8 shrink-0 overflow-hidden rounded-full outline-none cursor-pointer group py-0! px-0! flex items-center justify-center bg-white/5"
             aria-label={`Open chart for ${displayName}`}
             title="Open chart"
           >
             <Image
               src={logoImage}
               alt="token logo"
-              width={35}
-              height={35}
-              className="group-hover:scale-[1.05] transition cursor-pointer"
+              width={32}
+              height={32}
+              className="w-8 h-8 object-contain group-hover:scale-[1.05] transition cursor-pointer"
             />
           </button>
         ) : (
@@ -346,8 +341,24 @@ export function TableRow({
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center justify-center gap-1.5 font-medium! text-[14px]! rounded-lg text-[#ffc000] transition-colors cursor-pointer hover:text-[#ffda44]"
-              aria-label={`View on ${isBnbChain ? "BSCScan" : "SolScan"}`}
-              title={`View token on ${isBnbChain ? "BSCScan" : "SolScan"}`}
+              aria-label={`View on ${
+                isBaseChain
+                  ? "BaseScan"
+                  : isBnbChain
+                    ? "BSCScan"
+                    : isMonadChain
+                      ? "MonadScan"
+                      : "SolScan"
+              }`}
+              title={`View token on ${
+                isBaseChain
+                  ? "BaseScan"
+                  : isBnbChain
+                    ? "BSCScan"
+                    : isMonadChain
+                      ? "MonadScan"
+                      : "SolScan"
+              }`}
             >
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
@@ -374,11 +385,13 @@ export function TableRow({
       <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-12.75 items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
         <span className="font-bold!">{age}</span>
       </div>
-
-      {/* Last Generated On */}
-      <div className={`px-3 py-2 whitespace-nowrap truncate h-12.75 items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
-        <span className="font-bold!">{localLastGeneratedOn ?? ""}</span>
       </div>
-    </div>
+      <PaywallModal
+        open={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        context="rexscreener"
+        paymentMetadata={currentUserId ? { userId: currentUserId } : undefined}
+      />
+    </>
   );
 }

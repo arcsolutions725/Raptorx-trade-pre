@@ -14,6 +14,47 @@ function requireUserId(req: NextRequest): string {
 }
 
 /**
+ * CORE token bonus (Solana only): 500 points per 100,000 CORE coins bought on RaptorX (RexScreener flow).
+ * toToken is stored as "core" (lowercase); we match case-insensitively.
+ */
+const CORE_BONUS_PER_100K = 500;
+const CORE_UNITS_FOR_BONUS = 100_000;
+const CORE_DECIMALS_SOLANA = 8; // override via env CORE_DECIMALS_SOLANA if needed
+
+/** True when this is a CORE buy on Solana. toToken comes as "core" from the widget. */
+function isCoreBuyOnSolana(toToken: string, toAddress: string, chain: string): boolean {
+  if (chain !== "solana") return false;
+  const symbolNorm = toToken?.trim().toLowerCase();
+  if (symbolNorm === "core") return true;
+  const addr = toAddress?.trim().toLowerCase();
+  const configured = process.env.CORE_TOKEN_ADDRESS_SOLANA?.trim().toLowerCase();
+  return !!configured && addr === configured;
+}
+
+function getCoreDecimals(): number {
+  const env = process.env.CORE_DECIMALS_SOLANA;
+  if (env != null) {
+    const n = parseInt(env, 10);
+    if (!isNaN(n) && n >= 0) return n;
+  }
+  return CORE_DECIMALS_SOLANA;
+}
+
+/**
+ * Calculate bonus points for buying CORE on Solana: 500 points per 100,000 CORE (human units).
+ * toAmountRaw is the raw token amount (with decimals).
+ */
+function calculateCoreBonusPoints(toAmountRaw: string | null | undefined): number {
+  if (!toAmountRaw || !String(toAmountRaw).trim()) return 0;
+  const raw = BigInt(String(toAmountRaw).trim());
+  const decimals = getCoreDecimals();
+  const divisor = BigInt(10 ** decimals);
+  const humanUnits = Number(raw / divisor);
+  const tiers = Math.floor(humanUnits / CORE_UNITS_FOR_BONUS);
+  return tiers * CORE_BONUS_PER_100K;
+}
+
+/**
  * Calculate points based on swap amount in USD
  * Tier structure:
  * - $100-$499: 250 points
@@ -41,8 +82,12 @@ interface SwapTransaction {
   toToken: string;
   fromAddress: string;
   toAddress: string;
-  chain: "solana" | "bnb";
+  chain: "solana" | "bnb" | "base";
   isBuy: boolean; // true for buy, false for sell
+  walletAddress?: string | null;
+  fromAmountRaw?: string | null;
+  toAmountRaw?: string | null;
+  txHash?: string | null;
 }
 
 /**
@@ -55,8 +100,12 @@ interface SwapTransaction {
  *   toToken: string,
  *   fromAddress: string,
  *   toAddress: string,
- *   chain: "solana" | "bnb",
- *   isBuy: boolean
+ *   chain: "solana" | "bnb" | "base",
+ *   isBuy: boolean,
+ *   walletAddress?: string,
+ *   fromAmountRaw?: string,
+ *   toAmountRaw?: string,
+ *   txHash?: string
  * }
  */
 export async function POST(request: NextRequest) {
@@ -70,6 +119,10 @@ export async function POST(request: NextRequest) {
       toAddress,
       chain,
       isBuy,
+      walletAddress,
+      fromAmountRaw,
+      toAmountRaw,
+      txHash,
     }: SwapTransaction = await request.json();
 
     // Validate input
@@ -84,8 +137,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Check if this transaction has already been credited within the last 5 minutes
-    // This prevents double-crediting by checking for recent swaps with same details
+    // Deduplicate: by txHash if provided (strongest), else by recent same-details within 5 min
+    if (txHash?.trim()) {
+      const existingByTx = await prisma.swapTransaction.findFirst({
+        where: { userId, txHash: txHash.trim() },
+      });
+      if (existingByTx) {
+        return NextResponse.json({
+          success: true,
+          alreadyCredited: true,
+          message: "Points already credited for this transaction",
+          pointsAwarded: existingByTx.pointsAwarded,
+        });
+      }
+    }
     const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
     const existingSwap = await prisma.swapTransaction.findFirst({
       where: {
@@ -111,8 +176,15 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Calculate points
-    const pointsAwarded = calculateSwapPoints(amountUSD);
+    // Base points from swap volume
+    const basePoints = calculateSwapPoints(amountUSD);
+
+    // CORE bonus (Solana only): 500 points per 100,000 CORE bought; toToken is "core"
+    let coreBonusPoints = 0;
+    if (isBuy && isCoreBuyOnSolana(toToken, toAddress, chain)) {
+      coreBonusPoints = calculateCoreBonusPoints(toAmountRaw);
+    }
+    const pointsAwarded = basePoints + coreBonusPoints;
 
     // Execute all database operations atomically using interactive transaction
     // This allows mixing different model operations (SwapTransaction and User)
@@ -130,6 +202,10 @@ export async function POST(request: NextRequest) {
           chain,
           isBuy,
           pointsAwarded,
+          walletAddress: walletAddress?.trim() || undefined,
+          fromAmountRaw: fromAmountRaw != null ? String(fromAmountRaw) : undefined,
+          toAmountRaw: toAmountRaw != null ? String(toAmountRaw) : undefined,
+          txHash: txHash?.trim() || undefined,
         },
       });
 
@@ -147,11 +223,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       pointsAwarded,
+      coreBonusPoints: coreBonusPoints > 0 ? coreBonusPoints : undefined,
       message:
         pointsAwarded > 0
           ? `Awarded ${pointsAwarded} points for ${
               isBuy ? "buying" : "selling"
-            } $${amountUSD.toFixed(2)}`
+            } $${amountUSD.toFixed(2)}${coreBonusPoints > 0 ? ` (including ${coreBonusPoints} CORE bonus)` : ""}`
           : `Swap amount $${amountUSD.toFixed(
               2
             )} does not meet minimum $100 for points`,
@@ -161,6 +238,10 @@ export async function POST(request: NextRequest) {
         isBuy,
         fromAddress,
         toAddress,
+        walletAddress: walletAddress || undefined,
+        fromAmountRaw: fromAmountRaw || undefined,
+        toAmountRaw: toAmountRaw || undefined,
+        txHash: txHash || undefined,
       },
     });
   } catch (err: any) {

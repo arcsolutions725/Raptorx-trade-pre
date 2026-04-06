@@ -19,8 +19,9 @@ import { TableRow } from "./TableRow";
 import DexscreenerView from "./DexscreenerView";
 import PageLoaderOverlay from "@/components/PageLoaderOverlay";
 import { TokenSearchBar } from "@/components/rexscreener/TokenSearchBar";
-import { ChevronDown, Check } from "lucide-react";
+import { ChevronDown, Check, Search, X } from "lucide-react";
 import { ChainButtons } from "./ChainButtons";
+import clsx from "clsx";
 import { useTopbar } from "@/contexts/TopbarContext";
 
 /* ============================ Styled, Up-Opening Select ============================ */
@@ -168,7 +169,7 @@ function RowsPerPageSelect({
 /* ============================ Main Component ============================ */
 
 interface TrendingTableContentProps {
-  onReportGenerated?: (report: any) => void;
+  onReportGenerated?: (report: any, token?: TrendingToken | null) => void;
   currentUserId: string;
   isAdmin: boolean;
   onTokenSelect?: (
@@ -177,6 +178,23 @@ interface TrendingTableContentProps {
     isViewing: boolean
   ) => void;
   onChainChange?: (chain: Chain) => void;
+  externalTokenForChart?: TrendingToken | null;
+  externalViewingChart?: boolean;
+}
+
+function buildChartTitle(t: TrendingToken): string {
+  const lowerChainId = t?.chainId?.toLowerCase();
+  const isBaseChain = lowerChainId === "base" || t?.chainId === "8453";
+  const isBnbChain = lowerChainId === "bsc" || t?.chainId === "56";
+  const isMonadChain = lowerChainId === "monad" || t?.chainId === "10143";
+  const baseCurrency = isBaseChain
+    ? "WETH"
+    : isBnbChain
+      ? "WBNB"
+      : isMonadChain
+        ? "MON"
+        : "SOL";
+  return `${t?.name ?? t?.symbol ?? "Token"} / ${baseCurrency}`;
 }
 
 export function TrendingTableContent({
@@ -185,6 +203,8 @@ export function TrendingTableContent({
   isAdmin,
   onTokenSelect,
   onChainChange,
+  externalTokenForChart = null,
+  externalViewingChart = false,
 }: TrendingTableContentProps) {
   const { isTopbarVisible } = useTopbar();
   
@@ -195,6 +215,7 @@ export function TrendingTableContent({
   );
   const [isSearchMode, setIsSearchMode] = useState(false);
   const [selectedChain, setSelectedChain] = useState<Chain>("all");
+  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
 
   // Notify parent of chain change
   useEffect(() => {
@@ -293,9 +314,18 @@ export function TrendingTableContent({
     // ⬇️ capture list state before switching UI (see step 2)
     captureListState();
 
-    const isBnbChain =
-      t?.chainId?.toLowerCase() === "bsc" || t?.chainId === "56";
-    const baseCurrency = isBnbChain ? "WBNB" : "SOL";
+    const lowerChainId = t?.chainId?.toLowerCase();
+    const isBaseChain = lowerChainId === "base" || t?.chainId === "8453";
+    const isBnbChain = lowerChainId === "bsc" || t?.chainId === "56";
+    const isMonadChain = lowerChainId === "monad" || t?.chainId === "10143";
+
+    const baseCurrency = isBaseChain
+      ? "WETH"
+      : isBnbChain
+        ? "WBNB"
+        : isMonadChain
+          ? "MON"
+          : "SOL";
     const title = `${t?.name ?? t?.symbol ?? "Token"} / ${baseCurrency}`;
     setSelectedForChart({ token: t, address: addr, title });
 
@@ -441,6 +471,7 @@ export function TrendingTableContent({
   // --- NEW: Centered overlay visibility (non-scrolling)
   const showCenteredOverlay = (isLoading && rows.length === 0) || isError;
 
+  // Chart from row click (internal state)
   if (selectedForChart) {
     return (
       <DexscreenerView
@@ -454,34 +485,108 @@ export function TrendingTableContent({
     );
   }
 
+  // Chart from Generate button (parent set external token + viewing) – same workflow as Base/Solana/BNB
+  if (externalViewingChart && externalTokenForChart?.tokenAddress) {
+    const addr = externalTokenForChart.tokenAddress;
+    const title = buildChartTitle(externalTokenForChart);
+    return (
+      <DexscreenerView
+        token={externalTokenForChart}
+        tokenAddress={addr}
+        title={title}
+        onBack={() => onTokenSelect?.(null, null, false)}
+        currentUserId={currentUserId}
+        onReportGenerated={onReportGenerated}
+      />
+    );
+  }
+
   return (
     <div className="w-full flex flex-col gap-3">
       <div className="px-4 py-3 flex flex-col sm:flex-row items-start justify-center sm:justify-between gap-5 sm:gap-10">
-        <div className="shrink-0">
-          <ChainButtons
-            selectedChain={selectedChain}
-            onChainChange={(chain) => {
-              setSelectedChain(chain);
-              setPageIndex(1);
-            }}
-          />
+        {/* Desktop: ChainButtons + TokenSearchBar side by side */}
+        <div className="hidden sm:flex flex-1 sm:flex-row items-start justify-center sm:justify-between gap-5 sm:gap-10 w-full">
+          <div className="shrink-0">
+            <ChainButtons
+              selectedChain={selectedChain}
+              onChainChange={(chain) => {
+                setSelectedChain(chain);
+                setPageIndex(1);
+              }}
+            />
+          </div>
+          <div className="w-full sm:flex-1 flex justify-center sm:justify-end">
+            <div className="w-full max-w-full sm:max-w-75">
+              <TokenSearchBar
+                onSearch={handleSearch}
+                onClear={handleClearSearch}
+                className="w-full"
+              />
+            </div>
+          </div>
         </div>
 
-        <div className="w-full sm:flex-1 flex justify-center sm:justify-end">
-          <div className="w-full max-w-full sm:max-w-75">
-            <TokenSearchBar
-              onSearch={handleSearch}
-              onClear={handleClearSearch}
-              className="w-full"
-            />
+        {/* Mobile: search icon next to ChainButtons; tap to expand full search with close (same UI as RexMarkets) */}
+        <div className="sm:hidden relative overflow-hidden min-h-[44px] w-full">
+          {/* Row 1: ChainButtons + search icon (slides left when search expanded) */}
+          <div
+            className={clsx(
+              "flex items-center justify-between gap-2 w-full transition-transform duration-300 ease-out",
+              mobileSearchOpen ? "-translate-x-full" : "translate-x-0"
+            )}
+          >
+            <div className="shrink-0 max-w-[calc(100%-52px)] overflow-x-auto scrollbar-none">
+              <ChainButtons
+                selectedChain={selectedChain}
+                onChainChange={(chain) => {
+                  setSelectedChain(chain);
+                  setPageIndex(1);
+                }}
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileSearchOpen(true)}
+              className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-xl text-white hover:text-white hover:bg-white/20 transition-colors"
+              aria-label="Open search"
+            >
+              <Search className="w-6 h-6" />
+            </button>
+          </div>
+
+          {/* Row 2: Full-width search bar + close (slides in from right when open) */}
+          <div
+            className={clsx(
+              "absolute top-0 left-0 right-0 flex items-center gap-2 transition-transform duration-300 ease-out min-h-[44px]",
+              mobileSearchOpen ? "translate-x-0" : "translate-x-full"
+            )}
+          >
+            <div className="flex-1 min-w-0">
+              <TokenSearchBar
+                onSearch={(query, type) => {
+                  handleSearch(query, type);
+                  setMobileSearchOpen(false);
+                }}
+                onClear={handleClearSearch}
+                className="w-full"
+              />
+            </div>
+            <button
+              type="button"
+              onClick={() => setMobileSearchOpen(false)}
+              className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-xl bg-white/12 text-white/80 hover:text-white hover:bg-white/20 transition-colors"
+              aria-label="Close search"
+            >
+              <X className="w-5 h-5" />
+            </button>
           </div>
         </div>
       </div>
 
       <div className={`relative border border-white/10 ${
         isTopbarVisible 
-          ? "h-[calc(100vh-490px)] sm:h-[calc(100vh-395px)] md:h-[calc(100vh-390px)]"
-          : "h-[calc(100vh-450px)] sm:h-[calc(100vh-355px)] md:h-[calc(100vh-350px)]"
+          ? "h-[calc(100vh-400px)] sm:h-[calc(100vh-395px)] md:h-[calc(100vh-390px)]"
+          : "h-[calc(100vh-360px)] sm:h-[calc(100vh-355px)] md:h-[calc(100vh-350px)]"
       }`}>
         {isPageLoading && <PageLoaderOverlay />}
 

@@ -2,6 +2,8 @@
 
 import { X } from "lucide-react";
 import { SwapWidget } from "@/components/swap/SwapWidget";
+import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
+import { useEthereumWalletAddress } from "@/hooks/useEthereumWalletAddress";
 
 function resolveForceChain(chainId?: string): "solana" | "bsc" | undefined {
   const c = String(chainId || "").toLowerCase();
@@ -27,6 +29,15 @@ export function CryptoSwapPanel({
     token?.tokenAddress || token?.contractAddress || null;
   const forceChain = resolveForceChain(token?.chainId);
 
+  const { solanaAddress } = useSolanaWalletAddress();
+  const { ethereumAddress } = useEthereumWalletAddress();
+  const walletAddress =
+    forceChain === "solana"
+      ? solanaAddress
+      : forceChain === "bsc"
+        ? ethereumAddress
+        : null;
+
   // Only mount SwapWidget when panel is open so it receives toTokenAddress on first mount (fixes empty "To" field)
   const content = (
     <div className="relative h-full min-h-0 bg-[#0b0b0b]">
@@ -45,6 +56,7 @@ export function CryptoSwapPanel({
             currentUserId={currentUserId}
             toTokenAddress={tokenAddress}
             forceChain={forceChain}
+            walletAddress={walletAddress}
           />
         ) : (
           <div className="h-full min-h-[200px]" />

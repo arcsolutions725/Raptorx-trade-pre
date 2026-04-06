@@ -16,6 +16,7 @@ import { formatPrice } from "@/utils/polymarketTrading";
 import { usePrivy } from "@privy-io/react-auth";
 import {
   useSignAndSendTransaction,
+  useSignMessage,
   useWallets,
 } from "@privy-io/react-auth/solana";
 import { useSolana } from "@phantom/react-sdk";
@@ -27,6 +28,7 @@ import { useUsdcBalance } from "@/hooks/useUsdcBalance";
 import { useSolPrice } from "@/hooks/useSolPrice";
 import { useDflowPositions } from "@/hooks/useDflowPositions";
 import useKalshiGeoblock from "@/hooks/useKalshiGeoblock";
+import { useProofKyc } from "@/hooks/useProofKyc";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Connection, PublicKey, VersionedTransaction } from "@solana/web3.js";
 import bs58 from "bs58";
@@ -104,6 +106,7 @@ export default function BuySellWidget({
     | "confirming";
   const [progressStep, setProgressStep] = useState<ProgressStep>("idle");
   const [showLoginModal, setShowLoginModal] = useState(false);
+  const [showProofKycModal, setShowProofKycModal] = useState(false);
 
   const { authenticated: privyAuthenticated, user: privyUser } = usePrivy();
   const { isAuthenticated: phantomAuthenticated, openModal: openPhantomModal } =
@@ -125,6 +128,7 @@ export default function BuySellWidget({
     useKalshiGeoblock();
   const { signAndSendTransaction: privySignAndSend } =
     useSignAndSendTransaction();
+  const { signMessage: privySignMessage } = useSignMessage();
   const { wallets: privySolanaWallets, ready: privyWalletsReady } =
     useWallets();
   const authenticated = phantomAuthenticated || privyAuthenticated;
@@ -137,6 +141,54 @@ export default function BuySellWidget({
           return addr?.toLowerCase() === solanaAddress.toLowerCase();
         }) ?? null)
       : null;
+
+  const signProofMessage = useCallback(
+    async (messageBytes: Uint8Array): Promise<string> => {
+      if (solanaSource === "privy" && privySolanaWallet && privySignMessage) {
+        const result = await privySignMessage({
+          message: messageBytes,
+          wallet: privySolanaWallet,
+          options: {
+            uiOptions: {
+              title: "Sign to verify wallet for KYC",
+              description:
+                "This links your wallet to Proof for identity verification.",
+            },
+          },
+        });
+        const sig = result?.signature;
+        if (!sig || sig.length === 0) throw new Error("No signature");
+        return bs58.encode(sig);
+      }
+      type PhantomSolana = {
+        signMessage: (msg: Uint8Array, display?: string) => Promise<{ signature: Uint8Array }>;
+      };
+      const phantomSolana: PhantomSolana | undefined =
+        typeof window !== "undefined"
+          ? (window as unknown as { phantom?: { solana?: PhantomSolana } }).phantom?.solana
+          : undefined;
+      if (!phantomSolana?.signMessage) {
+        throw new Error(
+          "Wallet cannot sign messages. Use Phantom or connect a wallet that supports message signing."
+        );
+      }
+      const { signature } = await phantomSolana.signMessage(messageBytes, "utf8");
+      return bs58.encode(signature);
+    },
+    [solanaSource, privySolanaWallet, privySignMessage],
+  );
+
+  const signProofMessageStable = useCallback(
+    async (messageBytes: Uint8Array) => signProofMessage(messageBytes),
+    [signProofMessage],
+  );
+
+  const {
+    isVerified: isProofVerified,
+    isLoadingProof,
+    startKycFlow,
+    refetchProof,
+  } = useProofKyc(solanaAddress, solanaAddress ? signProofMessageStable : null);
 
   // Selected market ticker for DFlow (same as Kalshi market ticker)
   const selectedMarketTicker = useMemo(() => {
@@ -425,6 +477,11 @@ export default function BuySellWidget({
         "Trading unavailable",
         "Trading is not available in your region. Kalshi restricts access from your jurisdiction.",
       );
+      return;
+    }
+
+    if (activeTab === "buy" && !isLoadingProof && !isProofVerified) {
+      setShowProofKycModal(true);
       return;
     }
 
@@ -739,12 +796,14 @@ export default function BuySellWidget({
   }, [
     authenticated,
     isKalshiGeoblocked,
+    activeTab,
+    isLoadingProof,
+    isProofVerified,
     solanaAddress,
     selectedOutcome,
     size,
     orderType,
     limitPrice,
-    activeTab,
     solBalance,
     usdcBalance,
     solPriceUsd,
@@ -810,8 +869,8 @@ export default function BuySellWidget({
 
   return (
     <div className="flex flex-col min-h-full border border-white/10 rounded-lg overflow-hidden">
-      {/* Profile Section - same as Polymarket */}
-      <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
+      {/* Profile Section - pr-12 on mobile for modal close button; title max-w on mobile */}
+      <div className="flex items-center gap-3 px-4 py-3 pr-12 lg:pr-4 border-b border-white/10">
         {symbolImageUrl ? (
           <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
             <Image
@@ -828,7 +887,7 @@ export default function BuySellWidget({
             <span className="text-white/60 text-xs">?</span>
           </div>
         )}
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0 max-w-[65%] lg:max-w-none">
           <div className="text-sm font-medium text-white truncate">
             {marketTitle || "Market"}
           </div>
@@ -878,6 +937,36 @@ export default function BuySellWidget({
           />
         </div>
       </div>
+
+      {/* KYC required banner on Buy tab (Kalshi/DFlow requirement) */}
+      {activeTab === "buy" &&
+        authenticated &&
+        solanaAddress &&
+        !isLoadingProof &&
+        !isProofVerified && (
+          <div className="mx-4 mt-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3">
+            <span className="text-sm text-amber-200">
+              Verify your identity to buy on Kalshi. Selling does not require
+              verification.
+            </span>
+            <button
+              type="button"
+              onClick={async () => {
+                try {
+                  await startKycFlow();
+                } catch (e) {
+                  showErrorNotification(
+                    "Verification",
+                    e instanceof Error ? e.message : "Could not start KYC. Try again."
+                  );
+                }
+              }}
+              className="shrink-0 py-1.5 px-3 rounded-md bg-amber-500 text-black text-sm font-medium hover:opacity-90"
+            >
+              Verify now
+            </button>
+          </div>
+        )}
 
       {/* Yes/No Selection Buttons - same as Polymarket */}
       <div className="p-4 flex gap-3 bg-[#0a0a0a]">
@@ -1107,6 +1196,54 @@ export default function BuySellWidget({
         isOpen={showLoginModal}
         onClose={() => setShowLoginModal(false)}
       />
+
+      {/* Proof KYC modal: required for Kalshi prediction market buying */}
+      {showProofKycModal && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4">
+          <div
+            className="rounded-lg border border-white/20 bg-[#0d0d0d] p-6 max-w-md w-full shadow-xl"
+            role="dialog"
+            aria-labelledby="proof-kyc-title"
+          >
+            <h2
+              id="proof-kyc-title"
+              className="text-lg font-semibold text-white mb-2"
+            >
+              Identity verification required
+            </h2>
+            <p className="text-sm text-white/80 mb-4">
+              Kalshi requires identity verification (KYC) to buy on prediction
+              markets. You can still sell without verification. Complete
+              verification once to keep buying.
+            </p>
+            <div className="flex gap-3">
+              <button
+                type="button"
+                onClick={() => setShowProofKycModal(false)}
+                className="flex-1 py-2.5 rounded-lg border border-white/20 text-white/90 hover:bg-white/10 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={async () => {
+                  try {
+                    await startKycFlow();
+                  } catch (e) {
+                    showErrorNotification(
+                      "Verification",
+                      e instanceof Error ? e.message : "Could not start KYC. Try again."
+                    );
+                  }
+                }}
+                className="flex-1 py-2.5 rounded-lg bg-[#14F195] text-black font-medium hover:opacity-90 transition"
+              >
+                Complete KYC
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

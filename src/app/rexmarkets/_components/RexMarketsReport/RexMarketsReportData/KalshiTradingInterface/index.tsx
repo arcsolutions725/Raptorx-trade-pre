@@ -14,8 +14,9 @@ import { useGenerateMarketReport } from "@/hooks/useGenerateMarketReport";
 import { useReportGenStatus } from "@/lib/storage/reportGenStore";
 import { usePrivy } from "@privy-io/react-auth";
 import { useKalshiComments } from "@/hooks/useKalshiComments";
+import { PaywallModal } from "@/components/subscription/PaywallModal";
 
-const INTERVALS = ["1W", "1M", "ALL"];
+const INTERVALS = ["1H", "6H", "1D", "1W", "1M", "ALL"];
 
 type KalshiTradingInterfaceProps = {
   eventTicker?: string | null;
@@ -118,6 +119,7 @@ export default function KalshiTradingInterface({
   const [hasGenerated, setHasGenerated] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
 
   // Initialize countdown when generation starts
   useEffect(() => {
@@ -190,7 +192,10 @@ export default function KalshiTradingInterface({
     try {
       await generateFromMarket(marketForGeneration as any);
       setHasGenerated(true);
-    } catch {
+    } catch (err: any) {
+      if (err?.status === 402) {
+        setShowPaywall(true);
+      }
       setCountdown(null);
       setHasGenerated(false);
       if (intervalRef.current) {
@@ -539,6 +544,12 @@ export default function KalshiTradingInterface({
         onMarketIndexChange={setSelectedMarketIndex}
         initialOutcome={modalInitialOutcome}
       />
+<PaywallModal
+      open={showPaywall}
+      onClose={() => setShowPaywall(false)}
+      context="rexmarkets"
+      paymentMetadata={userId ? { userId } : undefined}
+    />
     </div>
   );
 }

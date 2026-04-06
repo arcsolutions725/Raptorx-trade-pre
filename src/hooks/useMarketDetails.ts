@@ -2,9 +2,22 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { useState, useEffect } from "react";
 import { usePathname } from "next/navigation";
 import { useDataSource } from "@/contexts/DataSourceContext";
+
+/** Stable cache key for a market - avoids duplicate API calls across components. */
+function getMarketCacheId(md: any): string {
+  if (!md || typeof md !== "object") return "";
+  return (
+    md.ticker ??
+    md.series_ticker ??
+    md.event_ticker ??
+    md.event_id ??
+    md.slug ??
+    md.id ??
+    ""
+  );
+}
 
 export type MarketOutcome = {
   ticker: string;
@@ -47,6 +60,15 @@ export type MarketDetails = {
   ticker?: string; // For Polymarket
   series_id?: string | null; // Series ID for comments API
   event_id?: string | null; // Event ID for reference
+  id?: string | null; // Limitless / provider-specific event or market id
+  // Limitless / provider-specific optional fields
+  image?: string | null;
+  icon?: string | null;
+  yesPrice?: number | string;
+  noPrice?: number | string;
+  prices?: (number | string)[];
+  description?: string;
+  liquidity?: number;
 };
 
 export function useMarketDetails(eventTicker: string | null, eventId?: string | null, slug?: string | null) {
@@ -63,6 +85,7 @@ export function useMarketDetails(eventTicker: string | null, eventId?: string | 
       const currentPathname = typeof window !== "undefined" ? window.location.pathname : pathname;
       const isKalshiRoute = currentPathname?.startsWith("/rexmarkets/kalshi/");
       const isPolymarketRoute = currentPathname?.startsWith("/rexmarkets/polymarket/");
+      const isLimitlessRoute = currentPathname?.startsWith("/rexmarkets/limitless/");
 
       // Determine which API endpoint to use
       let apiPath: string;
@@ -83,15 +106,43 @@ export function useMarketDetails(eventTicker: string | null, eventId?: string | 
           return null;
         }
       }
-      // If slug is provided, always use Polymarket API (slug is Polymarket-specific)
+      // If we're on a Limitless route, always use Limitless API
+      else if (isLimitlessRoute) {
+        if (slug) {
+          apiPath = `/api/limitless/market-details?slug=${encodeURIComponent(slug)}`;
+        } else if (eventId) {
+          apiPath = `/api/limitless/market-details?id=${encodeURIComponent(eventId)}`;
+        } else if (eventTicker) {
+          apiPath = `/api/limitless/market-details?ticker=${encodeURIComponent(eventTicker)}`;
+        } else {
+          return null;
+        }
+      }
+      // If slug is provided, check dataSource to determine API
       else if (slug) {
-        apiPath = `/api/polymarket/market-details?slug=${encodeURIComponent(slug)}`;
+        if (dataSource === "limitless") {
+          apiPath = `/api/limitless/market-details?slug=${encodeURIComponent(slug)}`;
+        } else {
+          // Default to Polymarket for slug (slug is Polymarket-specific)
+          apiPath = `/api/polymarket/market-details?slug=${encodeURIComponent(slug)}`;
+        }
       } else if (dataSource === "polymarket") {
         // For Polymarket, prioritize event_id, then ticker
         if (eventId) {
           apiPath = `/api/polymarket/market-details?event_id=${encodeURIComponent(eventId)}`;
         } else if (eventTicker) {
           apiPath = `/api/polymarket/market-details?event_ticker=${encodeURIComponent(eventTicker)}`;
+        } else {
+          return null;
+        }
+      } else if (dataSource === "limitless") {
+        // For Limitless, prioritize slug, then id, then ticker
+        if (slug) {
+          apiPath = `/api/limitless/market-details?slug=${encodeURIComponent(slug)}`;
+        } else if (eventId) {
+          apiPath = `/api/limitless/market-details?id=${encodeURIComponent(eventId)}`;
+        } else if (eventTicker) {
+          apiPath = `/api/limitless/market-details?ticker=${encodeURIComponent(eventTicker)}`;
         } else {
           return null;
         }
@@ -143,105 +194,78 @@ export function useMarketDetails(eventTicker: string | null, eventId?: string | 
   };
 }
 
+const MARKET_SUMMARY_STALE_MS = 5 * 60 * 1000; // 5 min - avoid refetching same market
+
 export function useMarketSummary(marketTitle: string | null, marketData: any = null) {
-  const [summary, setSummary] = useState<string>("");
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const cacheId = getMarketCacheId(marketData);
+  const query = useQuery({
+    queryKey: ["market-summary", marketTitle ?? "", cacheId],
+    queryFn: async () => {
+      const res = await fetch("/api/kalshi/market-summary", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ marketTitle, marketData }),
+      });
+      if (!res.ok) throw new Error("Failed to generate summary");
+      const data = await res.json();
+      return data.summary || "";
+    },
+    enabled: !!marketTitle && !!cacheId,
+    staleTime: MARKET_SUMMARY_STALE_MS,
+    gcTime: MARKET_SUMMARY_STALE_MS * 2,
+  });
 
-  useEffect(() => {
-    if (!marketTitle) {
-      setSummary("");
-      return;
-    }
-
-    const generateSummary = async () => {
-      setIsGenerating(true);
-      setError(null);
-
-      try {
-        const res = await fetch("/api/kalshi/market-summary", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ marketTitle, marketData }),
-        });
-
-        if (!res.ok) {
-          throw new Error("Failed to generate summary");
-        }
-
-        const data = await res.json();
-        setSummary(data.summary || "");
-      } catch (err: any) {
-        setError(err.message || "Failed to generate summary");
-        setSummary("");
-      } finally {
-        setIsGenerating(false);
-      }
-    };
-
-    generateSummary();
-  }, [marketTitle, marketData]);
-
-  return { summary, isGenerating, error };
+  return {
+    summary: query.data ?? "",
+    isGenerating: query.isFetching,
+    error: query.error ? (query.error as Error).message : null,
+  };
 }
 
+const MARKET_INSIGHTS_STALE_MS = 5 * 60 * 1000; // 5 min - avoid refetching same market
+
 export function useMarketInsights(
-  marketTitle: string | null, 
+  marketTitle: string | null,
   outcomes: MarketOutcome[] | null,
   marketDetails: MarketDetails | null = null
 ) {
-  const [insights, setInsights] = useState<string[]>([]);
-  const [isGenerating, setIsGenerating] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const cacheId = getMarketCacheId(marketDetails);
 
-  useEffect(() => {
-    if (!marketTitle || !outcomes || outcomes.length === 0) {
-      setInsights([]);
-      return;
-    }
+  const query = useQuery({
+    queryKey: ["market-insights", marketTitle ?? "", cacheId],
+    queryFn: async () => {
+      const openTime =
+        marketDetails?.open_time || outcomes?.[0]?.open_time || null;
+      const closeTime =
+        marketDetails?.close_time || outcomes?.[0]?.close_time || null;
+      const expirationTime =
+        marketDetails?.expected_expiration_time ||
+        outcomes?.[0]?.expected_expiration_time ||
+        null;
 
-    const generateInsights = async () => {
-      setIsGenerating(true);
-      setError(null);
+      const res = await fetch("/api/kalshi/market-insights", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          marketTitle,
+          outcomes,
+          openTime,
+          closeTime,
+          expirationTime,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to generate insights");
+      const data = await res.json();
+      return (data.insights || []) as string[];
+    },
+    enabled: !!marketTitle && !!cacheId && !!outcomes && outcomes.length > 0,
+    staleTime: MARKET_INSIGHTS_STALE_MS,
+    gcTime: MARKET_INSIGHTS_STALE_MS * 2,
+  });
 
-      try {
-        // Extract date/time information from market details or first outcome
-        const openTime = marketDetails?.open_time || outcomes[0]?.open_time || null;
-        const closeTime = marketDetails?.close_time || outcomes[0]?.close_time || null;
-        const expirationTime = marketDetails?.expected_expiration_time || outcomes[0]?.expected_expiration_time || null;
-
-        const res = await fetch("/api/kalshi/market-insights", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ 
-            marketTitle, 
-            outcomes,
-            openTime,
-            closeTime,
-            expirationTime,
-          }),
-        });
-
-        if (!res.ok) {
-          throw new Error("Failed to generate insights");
-        }
-
-        const data = await res.json();
-        setInsights(data.insights || []);
-      } catch (err: any) {
-        setError(err.message || "Failed to generate insights");
-        setInsights([]);
-      } finally {
-        setIsGenerating(false);
-      }
-    };
-
-    generateInsights();
-  }, [marketTitle, outcomes, marketDetails]);
-
-  return { insights, isGenerating, error };
+  return {
+    insights: query.data ?? [],
+    isGenerating: query.isFetching,
+    error: query.error ? (query.error as Error).message : null,
+  };
 }

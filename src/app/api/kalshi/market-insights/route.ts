@@ -18,6 +18,19 @@ Requirements:
 - No markdown formatting, just simple text
 - CRITICAL: When referencing dates or times in your insights, you MUST use the exact dates and times provided in the market information. Do NOT make up, estimate, or infer dates. Only reference dates/times that are explicitly provided in the data.`;
 
+/** Summarize outcomes to reduce token usage - keep only fields needed for insights. */
+function summarizeOutcomes(outcomes: any[]): any[] {
+  const maxOutcomes = 12;
+  return outcomes.slice(0, maxOutcomes).map((o) => ({
+    outcome: o.subtitle ?? o.groupItemTitle ?? o.title ?? o.question ?? "",
+    probability: o.probability ?? o.yes_price ?? o.yesPrice,
+    volume: o.volume ?? o.volume_24h ?? o.volume24hr ?? 0,
+    liquidity: o.liquidity ?? 0,
+    yes_bid: o.yes_bid ?? 0,
+    yes_ask: o.yes_ask ?? 0,
+  }));
+}
+
 // Helper function to format timestamp to readable date/time
 function formatTimestamp(ts: string | null | undefined): string | null {
   if (!ts) return null;
@@ -69,12 +82,14 @@ export async function POST(request: NextRequest) {
       dateTimeContext += "\nIMPORTANT: When referencing dates or times in your insights, you MUST use the exact dates and times shown above. Do NOT make up, estimate, or use incorrect dates. Only reference the dates/times explicitly provided here.\n";
     }
 
+    const summarizedOutcomes = summarizeOutcomes(Array.isArray(outcomes) ? outcomes : []);
+
     const aiPrompt = `Analyze this prediction market outcomes data and provide 4 key insights:
 
 Market: ${marketTitle}
 ${dateTimeContext}
 Outcomes Data:
-${JSON.stringify(outcomes, null, 2)}
+${JSON.stringify(summarizedOutcomes, null, 2)}
 
 Provide exactly 4 bullet points analyzing patterns, probabilities, liquidity, volume, or other notable aspects of this data.${dateTimeContext ? " Remember to use the correct dates and times provided above if you reference any timing information." : ""}`;
 

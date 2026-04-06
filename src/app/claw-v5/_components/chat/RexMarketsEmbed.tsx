@@ -23,7 +23,38 @@ function formatProbability(probability?: number | string): string {
 function formatBidAsk(value?: number | string): string {
   const numValue = typeof value === "string" ? Number(value) : value;
   if (typeof numValue !== "number" || Number.isNaN(numValue)) return "—";
-  return numValue.toFixed(0);
+  if (numValue === 0) return "0";
+  if (numValue < 1 && numValue > 0) return numValue.toFixed(2);
+  if (numValue >= 100) return numValue.toFixed(0);
+  return numValue.toFixed(1);
+}
+
+/** Effective liquidity: use API liquidity when > 0, else bid+ask depth as proxy. */
+function getEffectiveLiquidity(o: {
+  liquidity?: number;
+  yes_bid?: number;
+  yes_ask?: number;
+}): number {
+  const liq = Number(o.liquidity) || 0;
+  if (liq > 0) return liq;
+  const bid = Number(o.yes_bid) || 0;
+  const ask = Number(o.yes_ask) || 0;
+  return bid + ask;
+}
+
+/** Completed/closed markets have no liquidity and should be hidden. */
+function isCompletedMarket(o: { status?: string }): boolean {
+  const s = (o.status || "").toLowerCase();
+  return ["closed", "resolved", "archived", "finalized"].includes(s);
+}
+
+/** Filter out completed markets and sort by liquidity descending. */
+function filterAndSortByLiquidity(markets: any[]): any[] {
+  const filtered = markets.filter(
+    (o) => !isCompletedMarket(o) && getEffectiveLiquidity(o) > 0
+  );
+  filtered.sort((a, b) => getEffectiveLiquidity(b) - getEffectiveLiquidity(a));
+  return filtered;
 }
 
 function getExternalLinkUrl(
@@ -90,7 +121,13 @@ export function RexMarketsEmbed({ payload }: { payload: any }) {
 
   const title = md?.title || "Market";
   const symbol = md?.symbol_image_url || md?.symbolImageUrl || "";
-  const markets: any[] = Array.isArray(md?.markets) ? md.markets : [];
+  const rawMarkets: any[] = Array.isArray(md?.markets) ? md.markets : [];
+  const markets = filterAndSortByLiquidity(rawMarkets);
+  // For insights, use all non-completed outcomes (don't require liquidity) so insights generate when volume is $0
+  const marketsForInsights =
+    rawMarkets.length > 0
+      ? rawMarkets.filter((o) => !isCompletedMarket(o))
+      : rawMarkets;
   const tradeUrl = getRaptorxTradeUrl(provider, md, raptorxUrl);
 
   const {
@@ -102,7 +139,7 @@ export function RexMarketsEmbed({ payload }: { payload: any }) {
     insights,
     isGenerating: isGeneratingInsights,
     error: insightsError,
-  } = useMarketInsights(title, markets, md);
+  } = useMarketInsights(title, marketsForInsights.length > 0 ? marketsForInsights : markets, md);
 
   return (
     <div className="my-3 w-full min-w-0 max-w-full rounded-xl border border-white/10 overflow-hidden">

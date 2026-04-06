@@ -9,7 +9,7 @@ import AccountModal from "@/components/ui/modal/AccountModal";
 import LoginModal from "@/components/ui/modal/LoginModal";
 import DepositWithdrawModal from "@/components/ui/modal/DepositWithdrawModal";
 import MarketInfoModal from "@/components/ui/modal/MarketInfoModal";
-import { User, X } from "lucide-react";
+import { User, Wallet, ClipboardList, X } from "lucide-react";
 import { useTopbar } from "@/contexts/TopbarContext";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
@@ -61,6 +61,9 @@ export default function RexHeader({
   const pathname = usePathname();
   const isRexMarketsPage =
     pathname === "/rexmarkets" || pathname.startsWith("/rexmarkets/");
+  const isMarketDetailPage =
+    isRexMarketsPage &&
+    pathname.split("/").filter(Boolean).length >= 3;
   const isClawV5Page =
     pathname === "/claw-v5" || pathname.startsWith("/claw-v5/");
   const { dataSource, setDataSource } = useDataSource();
@@ -85,7 +88,7 @@ export default function RexHeader({
       ? "AI-powered chat assistant."
       : isRexMarketsPage
         ? "Prediction Intelligence by your side."
-        : "Real-time insights powered by RaptorX AI and live market data.");
+        : "Real time insights powered by Claw AI 5.0.");
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
@@ -432,11 +435,11 @@ export default function RexHeader({
 
           {/* Right: Deposit & Login */}
           <div className="flex items-center gap-2 sm:gap-4">
-            {/* Deposit Button - Only show when authenticated and on rexmarkets page */}
+            {/* Deposit Button - Only show when authenticated and on rexmarkets page; hidden on mobile (use avatar dropdown instead) */}
             {authenticated && isRexMarketsPage && (
               <button
                 onClick={() => setShowDepositModal(true)}
-                className="px-4 py-2 rounded-lg bg-[#ffc000] hover:bg-[#ffd000] text-black font-semibold text-sm transition"
+                className="hidden sm:inline-flex px-4 py-2 rounded-lg bg-[#ffc000] hover:bg-[#ffd000] text-black font-semibold text-sm transition"
                 aria-label="Deposit"
                 title="Deposit & Withdraw"
               >
@@ -466,17 +469,30 @@ export default function RexHeader({
                       className="fixed inset-0 z-30"
                       onClick={() => setShowUserDropdown(false)}
                     />
-                    <div className="absolute right-0 top-full mt-2 w-48 bg-[#0D0D0D] border border-white/10 rounded-lg shadow-xl z-40 overflow-hidden">
+                    <div className="absolute right-0 top-full mt-2 w-48 bg-[#0D0D0D] border border-white/10 rounded-lg shadow-xl z-40 overflow-hidden py-1">
                       <button
                         onClick={() => {
                           setShowUserDropdown(false);
                           setShowAccountModal(true);
                           fetchUser();
                         }}
-                        className="w-full px-4 py-3 text-left text-white hover:bg-white/10 transition-colors text-sm font-medium"
+                        className="w-full px-4 py-3 text-left text-white hover:bg-white/10 transition-colors text-sm font-medium flex items-center gap-3"
                       >
+                        <User className="w-4 h-4 shrink-0 text-white/70" />
                         Profile
                       </button>
+                      {isRexMarketsPage && (
+                        <button
+                          onClick={() => {
+                            setShowUserDropdown(false);
+                            setShowDepositModal(true);
+                          }}
+                          className="w-full px-4 py-3 text-left text-white hover:bg-white/10 transition-colors text-sm font-medium flex items-center gap-3 sm:hidden"
+                        >
+                          <Wallet className="w-4 h-4 shrink-0 text-white/70" />
+                          Deposit
+                        </button>
+                      )}
                       <button
                         onClick={() => {
                           setShowUserDropdown(false);
@@ -487,9 +503,10 @@ export default function RexHeader({
                             setShowPolymarketModal(true);
                           }
                         }}
-                        className="w-full px-4 py-3 text-left text-white hover:bg-white/10 transition-colors text-sm font-medium border-t border-white/10"
+                        className="w-full px-4 py-3 text-left text-white hover:bg-white/10 transition-colors text-sm font-medium flex items-center gap-3"
                       >
-                        Open Orders
+                        <ClipboardList className="w-4 h-4 shrink-0 text-white/70" />
+                        My Orders
                       </button>
                     </div>
                   </>
@@ -502,107 +519,76 @@ export default function RexHeader({
         {!isClawV5Page && (
           <div className="w-full flex flex-row sm:flex-row justify-between items-center gap-1 sm:gap-4 pt-6 px-3 sm:px-5">
             <div className="flex flex-col">
-              <h1 className="text-[18px]! font-normal! text-[#F2F2F2]">
+              <h1 className="text-[18px]! font-semibold! text-[#ffc000]">
                 {displayTitle}
               </h1>
-              <p className="text-[14px]! font-normal! text-[#7A7A7A] max-w-45 sm:max-w-full">
+              <p className={`block text-[12px]! sm:text-[14px]! font-normal! text-[#7A7A7A] ${isRexMarketsPage ? "max-w-30" : "max-w-40" } sm:max-w-full`}>
                 {displayDescription}
               </p>
             </div>
 
             {/* Right: Exchange Button & Report History Button */}
             <div className="flex flex-row gap-1 sm:gap-3 items-center">
-              {isRexMarketsPage && (
+              {isRexMarketsPage && !isMarketDetailPage && (
                 <>
-                  <div className="flex items-center gap-1 sm:gap-2">
+                  <div className="inline-flex items-center bg-white/12 p-0.5 rounded-xl">
                     <button
                       onClick={() => setDataSource("all")}
-                      className={`relative font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center px-3 sm:px-4 h-10 rounded-xl ${
+                      className={`font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center px-3 sm:px-4 h-10 rounded-[10px] ${
                         dataSource === "all"
                           ? "bg-[#ffc000] text-black font-semibold"
-                          : "bg-white/12 text-white/70 hover:text-white/90"
+                          : "text-white/70 hover:text-white/90"
                       }`}
                     >
                       <span>All</span>
                     </button>
-
-                    <div className="relative inline-flex items-center">
-                      <div
-                        className="relative flex items-center bg-white/12 p-0.5 w-20.5 sm:w-46.25"
-                        style={{ borderRadius: "12px" }}
+                    <button
+                      onClick={() => setDataSource("kalshi")}
+                        className={`font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-0 sm:gap-1.5 px-3 sm:px-4 h-10 rounded-[10px] ${
+                          dataSource === "kalshi"
+                            ? "bg-[#17cb91] text-black font-semibold"
+                            : "text-white/70 hover:text-white/90"
+                        }`}
                       >
-                        <div
-                          className="absolute top-1 bottom-1 shadow-md"
-                          style={{
-                            left:
-                              dataSource === "polymarket"
-                                ? isMobile
-                                  ? "41px"
-                                  : "83px"
-                                : "1px",
-                            width: isMobile
-                              ? "40px"
-                              : dataSource === "polymarket"
-                                ? "100px"
-                                : "85px",
-                            height: "40px",
-                            borderRadius: "12px",
-                            transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                            willChange: "left, width",
-                            boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
-                            backgroundColor:
-                              dataSource === "polymarket"
-                                ? "#2C59F7"
-                                : "#17cb91",
-                            opacity: dataSource === "all" ? 0 : 1,
-                          }}
+                        <span className="text-white font-bold text-lg">K</span>
+                        <span className="hidden sm:inline ml-1">Kalshi</span>
+                      </button>
+                      <button
+                        onClick={() => setDataSource("polymarket")}
+                        className={`font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-0 sm:gap-1.5 px-3 sm:px-4 h-10 rounded-[10px] ${
+                          dataSource === "polymarket"
+                            ? "bg-[#2C59F7] text-white font-semibold"
+                            : "text-white/70 hover:text-white/90"
+                        }`}
+                      >
+                        <Image
+                          src="/images/polymarket.png"
+                          alt="Polymarket"
+                          width={16}
+                          height={16}
+                          className="w-4 h-4"
                         />
-                        <div className="relative flex items-center justify-center w-full h-full py-0.5 px-0.5 gap-1 sm:gap-2">
-                          <button
-                            onClick={() => setDataSource("kalshi")}
-                            className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-0 sm:gap-1.5 w-10 sm:w-21.25 ${
-                              dataSource === "kalshi"
-                                ? "text-black font-semibold"
-                                : "text-white/70 hover:text-white/90"
-                            }`}
-                            style={{
-                              height: "40px",
-                              borderRadius: "12px",
-                              paddingLeft: "4px",
-                              paddingRight: "4px",
-                            }}
-                          >
-                            <span className="text-white font-bold text-lg">
-                              K
-                            </span>
-                            <span className="hidden sm:inline">Kalshi</span>
-                          </button>
-                          <button
-                            onClick={() => setDataSource("polymarket")}
-                            className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-0 sm:gap-1.5 w-10 sm:w-25 ${
-                              dataSource === "polymarket"
-                                ? "text-white font-semibold"
-                                : "text-white/70 hover:text-white/90"
-                            }`}
-                            style={{
-                              height: "40px",
-                              borderRadius: "12px",
-                              paddingLeft: "4px",
-                              paddingRight: "4px",
-                            }}
-                          >
-                            <Image
-                              src="/images/polymarket.png"
-                              alt="Polymarket"
-                              width={16}
-                              height={16}
-                              className="w-4 h-4"
-                            />
-                            <span className="hidden sm:inline">Polymarket</span>
-                          </button>
-                        </div>
-                      </div>
-                    </div>
+                        <span className="hidden sm:inline ml-1">
+                          Polymarket
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => setDataSource("limitless")}
+                        className={`font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-1 px-3 sm:px-4 h-10 rounded-[10px] ${
+                          dataSource === "limitless"
+                            ? "bg-black text-white font-semibold"
+                            : "text-white/70 hover:text-white/90"
+                        }`}
+                      >
+                        <Image
+                          src="/images/limitless-logo.png"
+                          alt="Limitless logo"
+                          width={16}
+                          height={16}
+                          className="w-4 h-4"
+                        />
+                        <span className="hidden sm:inline">Limitless</span>
+                      </button>
                   </div>
                 </>
               )}
@@ -629,7 +615,7 @@ export default function RexHeader({
                   alt="report history"
                   width={120}
                   height={50}
-                  className="w-25 h-10.25 sm:w-20 sm:h-8.25 md:w-25 md:h-10"
+                  className="w-22 h-10.25 sm:w-20 sm:h-8.25 md:w-25 md:h-10"
                 />
               </button>
             </div>
@@ -655,7 +641,11 @@ export default function RexHeader({
         isOpen={showDepositModal}
         onClose={() => setShowDepositModal(false)}
         defaultPlatform={
-          pathname.startsWith("/rexmarkets/kalshi") ? "kalshi" : "polymarket"
+          pathname.startsWith("/rexmarkets/kalshi")
+            ? "kalshi"
+            : pathname.startsWith("/rexmarkets/limitless")
+              ? "limitless"
+              : "polymarket"
         }
       />
 

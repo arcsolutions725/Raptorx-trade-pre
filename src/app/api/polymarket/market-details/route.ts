@@ -178,9 +178,12 @@ export async function GET(request: NextRequest) {
         console.warn("Failed to parse outcomePrices:", e);
       }
 
-      // Get bid/ask prices
-      const bestBid = market.bestBid || 0;
-      const bestAsk = market.bestAsk || 0;
+      // Get bid/ask prices - Polymarket gamma API returns in 0-1 range
+      const bestBid = Number(market.bestBid ?? 0) || 0;
+      const bestAsk = Number(market.bestAsk ?? 0) || 0;
+      // Convert to cents (0-100) for Bid/Ask Depth display
+      const yesBidCents = bestBid <= 1 ? bestBid * 100 : bestBid;
+      const yesAskCents = bestAsk <= 1 ? bestAsk * 100 : bestAsk;
 
       // Use outcomePrices directly as primary source (matches Polymarket market data exactly)
       // outcomePrices[0] = Yes price, outcomePrices[1] = No price
@@ -297,8 +300,8 @@ export async function GET(request: NextRequest) {
         no_price: noPrice,
         volume: volume,
         volume_24h: volume24hr,
-        yes_bid: bestBid,
-        yes_ask: bestAsk,
+        yes_bid: yesBidCents,
+        yes_ask: yesAskCents,
         liquidity: liquidity,
         open_interest: parseFloat(market.openInterest || "0"),
         status: market.closed ? "closed" : market.active ? "open" : "unopened",

@@ -74,6 +74,13 @@ export async function GET(request: NextRequest) {
   }
 }
 
+// Parse Kalshi fixed-point fields (strings like "10.00" or "0.5600") to number
+function parseFp(value: unknown): number {
+  if (value == null || value === "") return 0;
+  const n = Number(typeof value === "string" ? value.trim() : value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 async function processEventsData(data: any, eventTicker: string, metadataImageUrl?: string) {
   // Extract event and markets from the response; show only active markets (exclude finalized, etc.)
   const event = data.event || {};
@@ -82,27 +89,22 @@ async function processEventsData(data: any, eventTicker: string, metadataImageUr
 
 
   // Transform each market to include all necessary fields
+  // Kalshi API uses fixed-point fields per https://docs.kalshi.com/getting_started/fixed_point_migration
+  // volume/volume_24h are REMOVED; use volume_fp, volume_24h_fp. yes_bid/yes_ask removed; use yes_bid_dollars, yes_ask_dollars.
   const transformedMarkets = markets.map((market: any, index: number) => {
-    // Trade-api v2 events endpoint returns prices in cents (0-100 range)
-    // Use last_price_dollars if available (already in decimal 0-1), otherwise convert from cents
-    // Note: last_price_dollars might be a string, so convert to number
-    const lastPriceCents = Number(market.last_price) || 0;
+    // Prices: prefer *_dollars (0-1), fallback to legacy cents
     const lastPriceDollarsStr = market.last_price_dollars;
-    const lastPriceDollars = lastPriceDollarsStr ? Number(lastPriceDollarsStr) : (lastPriceCents / 100);
-    
-    // Yes price: use last_price_dollars if available, otherwise convert from cents
-    // Ensure it's always a number
-    const yesPrice = Number(lastPriceDollars) || 0;
-    
-    // No price: inverse of yes price
+    const lastPriceCents = Number(market.last_price) || 0;
+    const lastPriceDollars = lastPriceDollarsStr != null ? parseFp(lastPriceDollarsStr) : lastPriceCents / 100;
+    const yesPrice = lastPriceDollars || 0;
     const noPrice = yesPrice > 0 ? Number((1 - yesPrice).toFixed(4)) : 0;
-    
-    // Probability is the yes_price (chance percent value) - they represent the same thing
     const probability = yesPrice;
-    
-    // Bid/Ask values are in cents (0-100 range) from the API - ensure they're numbers
-    const yesBid = Number(market.yes_bid) || 0;
-    const yesAsk = Number(market.yes_ask) || 0;
+
+    // Bid/Ask: use yes_bid_dollars / yes_ask_dollars (0-1), convert to cents (0-100) for our UI
+    const yesBidDollars = parseFp(market.yes_bid_dollars);
+    const yesAskDollars = parseFp(market.yes_ask_dollars);
+    const yesBid = yesBidDollars > 0 ? yesBidDollars * 100 : Number(market.yes_bid) || 0;
+    const yesAsk = yesAskDollars > 0 ? yesAskDollars * 100 : Number(market.yes_ask) || 0;
     
     // Extract candidate name from custom_strike if available
     const candidateName = market.custom_strike?.Candidate || 
@@ -122,6 +124,13 @@ async function processEventsData(data: any, eventTicker: string, metadataImageUr
                      null;
     
     
+    // Volume: use volume_fp / volume_24h_fp (fixed-point strings); legacy volume/volume_24h removed per API
+    const volumeFp = parseFp(market.volume_fp) || Number(market.volume) || 0;
+    const volume24hFp = parseFp(market.volume_24h_fp) || Number(market.volume_24h) || volumeFp;
+    // liquidity_dollars is deprecated and returns "0.0000"; use bid/ask size as depth proxy if needed
+    const liquidityDollars = parseFp(market.liquidity_dollars) || Number(market.liquidity) || 0;
+    const openInterestFp = parseFp(market.open_interest_fp) || Number(market.open_interest) || 0;
+
     return {
       ticker: market.ticker || `market-${index}`,
       market_id: marketId, // Include market ID for price history API
@@ -130,16 +139,14 @@ async function processEventsData(data: any, eventTicker: string, metadataImageUr
       // Prices in dollars (0-1 range) for display
       yes_price: yesPrice,
       no_price: noPrice,
-      // Volume in number of contracts - ensure it's a number
-      volume: Number(market.volume) || 0,
-      // Volume 24h - from trade-api v2 - ensure it's a number
-      volume_24h: Number(market.volume_24h) || Number(market.volume) || 0,
+      // Volume: from volume_fp / volume_24h_fp (contract count)
+      volume: volumeFp,
+      volume_24h: volume24hFp,
       // Bid/Ask in cents (0-100 range) for display as "Bid Depth" and "Ask Depth"
       yes_bid: yesBid,
       yes_ask: yesAsk,
-      // Liquidity from trade-api v2 - ensure it's a number
-      liquidity: Number(market.liquidity) || 0,
-      open_interest: Number(market.open_interest) || 0,
+      liquidity: liquidityDollars,
+      open_interest: openInterestFp,
       status: market.status || "open",
       result: market.result || null,
       // Date/time fields from Kalshi API

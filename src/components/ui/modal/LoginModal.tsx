@@ -11,9 +11,11 @@ const SHOW_PHANTOM_LOGIN = true;
 interface LoginModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Called when login succeeds (e.g. after Privy login). Optional. */
+  onSuccess?: () => void;
 }
 
-export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
+export default function LoginModal({ isOpen, onClose, onSuccess }: LoginModalProps) {
   const { login: privyLogin, ready: privyReady } = usePrivy();
   const {
     connect: phantomConnect,
@@ -54,6 +56,7 @@ export default function LoginModal({ isOpen, onClose }: LoginModalProps) {
     setIsConnecting(true);
     try {
       await privyLogin();
+      onSuccess?.();
       onClose();
     } catch (error) {
       console.error("Privy login error:", error);

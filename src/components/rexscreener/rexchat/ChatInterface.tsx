@@ -11,6 +11,7 @@ import {
   useAppendMessage,
 } from "@/hooks/useReports";
 import { useRegenerateReport } from "@/hooks/useRegenerateReport";
+import { PaywallModal, type PaywallLimitCode } from "@/components/subscription/PaywallModal";
 import { CoinOMetry } from "@/components/CoinOMetry";
 import { HolderAnalyticsComponent } from "@/components/analytics/HolderAnalytics";
 import { BirdeyeSafetyAnalyticsComponent } from "@/components/analytics/BirdeyeSafetyAnalytics";
@@ -83,6 +84,8 @@ export default function ChatInterface({
   const [sending, setSending] = useState(false);
   const [streamingContent, setStreamingContent] = useState("");
   const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallLimitCode, setPaywallLimitCode] = useState<PaywallLimitCode | null>(null);
 
   // BNB Analytics state - now using stored data with fallback to API
   const [holderAnalytics, setHolderAnalytics] =
@@ -979,8 +982,14 @@ export default function ChatInterface({
       setStreamingContent("");
       // Keep shouldAutoScroll true for the current interaction; it will be
       // reset on conversation switch via the effect on reportId
-    } catch (e) {
-      console.error("Chat error:", e);
+    } catch (e: any) {
+      if (e?.status === 402) {
+        const code = (e?.code === "PAID_LIMIT_REACHED" ? "PAID_LIMIT_REACHED" : "FREE_LIMIT_REACHED") as PaywallLimitCode;
+        setPaywallLimitCode(code);
+        setShowPaywall(true);
+      } else {
+        console.error("Chat error:", e);
+      }
     } finally {
       setSending(false);
     }
@@ -1014,6 +1023,7 @@ export default function ChatInterface({
   const msgs = reportData?.conversation?.messages || [];
 
   return (
+    <>
     <div
       className="flex-1 min-w-0 flex flex-col h-full w-full max-w-360 mx-auto overflow-x-hidden min-h-0"
       style={{
@@ -1233,5 +1243,16 @@ export default function ChatInterface({
         </div>
       </div>
     </div>
+    <PaywallModal
+      open={showPaywall}
+      onClose={() => {
+        setShowPaywall(false);
+        setPaywallLimitCode(null);
+      }}
+      context="rexscreener"
+      limitCode={paywallLimitCode ?? undefined}
+      paymentMetadata={{ userId }}
+    />
+  </>
   );
 }

@@ -8,6 +8,10 @@ import { getTweetsSearch } from "@/lib/api/tweet";
 import { detectChain } from "@/utils/detectChain";
 import { getBNBHolderAnalytics } from "@/lib/api/bnbAnalytics";
 import { getBirdeyeSecurityAnalyticsWithMetadata } from "@/lib/api/birdeyeSecurtiy";
+import {
+  checkAndIncrementUsage,
+  type UsageFeature,
+} from "@/lib/subscription/limits";
 
 const systemPrompt = `You are a professional crypto research analyst and technical writer. Your task is to generate a well-structured, comprehensive, and visually appealing technical report about a cryptocurrency project.
 
@@ -182,6 +186,7 @@ export async function POST(request: NextRequest) {
       contractAddress,
       ticker,
       projectName,
+      chain: explicitChainFromBody, // optional: token chain from RexScreener (e.g. "base", "bsc", "solana")
       storeToSystem, // admin-only path
       overwrite, // admin confirm
       forceRefresh = false,
@@ -199,6 +204,23 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: "User not found" }, { status: 401 });
 
     const isAdmin = isAdminEmail(user.email);
+
+    // Subscription & usage: RexScreener technical report generation
+    const usageResult = await checkAndIncrementUsage(
+      userId,
+      "REXSCREENER_REPORT" as UsageFeature,
+    );
+    if (!usageResult.ok) {
+      const code = usageResult.reason;
+      return NextResponse.json(
+        {
+          error: "Report limit reached",
+          code,
+          plan: usageResult.plan,
+        },
+        { status: 402 },
+      );
+    }
     const addr = normAddr(contractAddress);
     const tkr = normTicker(ticker);
 
@@ -382,10 +404,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Auto-detect chain from token data
+    // Auto-detect chain: prefer explicit chain from frontend (e.g. when generating from Base token), else from token data
     const detectedChain = detectChain({
       dexData: (tokenData as any).dexData,
       address: addr,
+      explicitChain: explicitChainFromBody,
     });
 
     const tweetsData = await getTweetsSearch(addr, tkr, projectName, 40);
@@ -452,7 +475,7 @@ export async function POST(request: NextRequest) {
 - Contract Address: ${addr}
 - Ticker: ${tkr}
 - Project Name: ${projectName || "Not provided"}
-- Blockchain: ${detectedChain === "bsc" ? "BNB Smart Chain (BSC)" : "Solana"}
+- Blockchain: ${detectedChain === "bsc" ? "BNB Smart Chain (BSC)" : detectedChain === "base" ? "Base" : detectedChain === "monad" ? "Monad" : "Solana"}
 
 ### DexScreener Data:
 ${JSON.stringify((tokenData as any).dexData, null, 2)}

@@ -97,7 +97,7 @@ function sortTokens(
   });
 }
 
-export type Chain = "solana" | "bsc" | "all";
+export type Chain = "solana" | "bsc" | "base" | "monad" | "all";
 
 export function useTrendingTokens(
   customBody?: Partial<{
@@ -122,7 +122,7 @@ export function useTrendingTokens(
     if (Boolean(customBody?.search_query)) {
       return false;
     }
-    // For chain selection: true only for solana, false for bsc/all
+    // For chain selection: true only for solana, false for bsc/base/all
     const chain = customBody?.chain || "solana";
     return chain === "solana";
   }, [customBody?.search_query, customBody?.chain]);

@@ -32,6 +32,14 @@ import {
   type DFlowPosition,
   type DFlowEmptyOutcomeAccount,
 } from "@/hooks/useDflowPositions";
+import {
+  useLimitlessPortfolioTrades,
+  useLimitlessPortfolioPositions,
+  type LimitlessTrade,
+  type LimitlessPosition,
+} from "@/hooks/useLimitlessPortfolio";
+import { useLimitlessAuth } from "@/hooks/useLimitlessAuth";
+import { useLimitlessRedeem } from "@/hooks/useLimitlessRedeem";
 import { formatCurrency, formatShares, formatPercentage } from "@/utils/format";
 import { DUST_THRESHOLD } from "@/utils/validation";
 import { POLLING_DURATION, POLLING_INTERVAL } from "@/constants/query";
@@ -114,8 +122,14 @@ export default function MarketInfoModal({
   const modalRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
   const tradingContext = useContext(TradingContext);
-  const { eoaAddress } = useWallet();
+  const { eoaAddress, ethersSigner } = useWallet();
   const { derivedSafeAddressFromEoa } = useSafeDeployment(eoaAddress);
+  const {
+    user: limitlessUser,
+    login: limitlessLogin,
+    isLoading: isLimitlessLoginLoading,
+    error: limitlessAuthError,
+  } = useLimitlessAuth(ethersSigner);
   const safeAddress = derivedSafeAddressFromEoa;
   const clobClient = tradingContext?.clobClient || null;
   const relayClient = tradingContext?.relayClient || null;
@@ -141,9 +155,9 @@ export default function MarketInfoModal({
       : null;
   const [isInitializing, setIsInitializing] = useState(false);
   const [loadingMarketId, setLoadingMarketId] = useState<string | null>(null);
-  const [platformTab, setPlatformTab] = useState<"polymarket" | "kalshi">(
-    "polymarket",
-  );
+  const [platformTab, setPlatformTab] = useState<
+    "polymarket" | "kalshi" | "limitless"
+  >("polymarket");
   const [activeTab, setActiveTab] = useState<"trades" | "positions">("trades");
   const [hideDust, setHideDust] = useState(true);
   const [redeemingAsset, setRedeemingAsset] = useState<string | null>(null);
@@ -154,6 +168,9 @@ export default function MarketInfoModal({
     null,
   );
   const [closingAccountAddress, setClosingAccountAddress] = useState<
+    string | null
+  >(null);
+  const [redeemingLimitlessSlug, setRedeemingLimitlessSlug] = useState<
     string | null
   >(null);
   const [pendingVerification, setPendingVerification] = useState<
@@ -533,6 +550,24 @@ export default function MarketInfoModal({
   });
   const kalshiFills = kalshiFillsData?.fills ?? [];
 
+  // Limitless portfolio (trades + positions) when Limitless tab is selected
+  const {
+    data: limitlessTradesData,
+    isLoading: isLoadingLimitlessTrades,
+    error: limitlessTradesError,
+  } = useLimitlessPortfolioTrades({
+    limit: 50,
+    enabled: isOpen && platformTab === "limitless",
+  });
+  const limitlessTrades = limitlessTradesData?.trades ?? [];
+  const {
+    data: limitlessPositions = [],
+    isLoading: isLoadingLimitlessPositions,
+    error: limitlessPositionsError,
+  } = useLimitlessPortfolioPositions({
+    enabled: isOpen && platformTab === "limitless",
+  });
+
   // Fetch positions
   const {
     data: positions = [],
@@ -552,6 +587,8 @@ export default function MarketInfoModal({
   // Position actions
   const { redeemPosition, isRedeeming } = useRedeemPosition();
   const { submitOrder, isSubmitting } = useClobOrder(clobClient, eoaAddress);
+  const { redeem: limitlessRedeem, isRedeeming: isLimitlessRedeemLoading } =
+    useLimitlessRedeem();
 
   // Extract unique market IDs (condition IDs) from trades
   const marketIds = useMemo(() => {
@@ -722,6 +759,47 @@ export default function MarketInfoModal({
     }
   };
 
+  // Limitless: claim winnings after market resolves (CTF redeemPositions on Base)
+  const handleLimitlessClaim = useCallback(
+    async (marketSlug: string) => {
+      if (!eoaAddress) {
+        showErrorNotification("Claim", "Connect your wallet to claim winnings.");
+        return;
+      }
+      if (!marketSlug || marketSlug === "—") return;
+      setRedeemingLimitlessSlug(marketSlug);
+      try {
+        const { hash } = await limitlessRedeem(
+          eoaAddress as `0x${string}`,
+          marketSlug
+        );
+        showSuccessNotification(
+          "Claim winnings",
+          `Success. Tx: ${hash.slice(0, 10)}...`
+        );
+        queryClient.invalidateQueries({
+          queryKey: ["limitless-portfolio-positions"],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["baseBalance", eoaAddress],
+        });
+      } catch (err) {
+        const raw =
+          err instanceof Error ? err.message : "Failed to claim winnings.";
+        const msg =
+          /rejected the request|user denied|user rejected|request was rejected/i.test(
+            raw
+          )
+            ? "User rejected the request."
+            : raw;
+        showErrorNotification("Claim", msg);
+      } finally {
+        setRedeemingLimitlessSlug(null);
+      }
+    },
+    [eoaAddress, limitlessRedeem, queryClient]
+  );
+
   // Handle redeem
   const handleRedeem = async (position: PolymarketPosition) => {
     if (!relayClient) {
@@ -832,7 +910,7 @@ export default function MarketInfoModal({
             </button>
           </div>
 
-          {/* Platform tabs: Polymarket | Kalshi */}
+          {/* Platform tabs: Polymarket | Kalshi | Limitless */}
           <div className="flex border-b border-white/10 sticky top-[73px] bg-[#0D0D0D] z-10 px-4 sm:px-6">
             <button
               onClick={() => setPlatformTab("polymarket")}
@@ -847,7 +925,7 @@ export default function MarketInfoModal({
             <button
               onClick={() => {
                 setPlatformTab("kalshi");
-                setActiveTab("trades"); // Show Trades tab by default when switching to Kalshi
+                setActiveTab("trades");
               }}
               className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
                 platformTab === "kalshi"
@@ -856,6 +934,19 @@ export default function MarketInfoModal({
               }`}
             >
               Kalshi
+            </button>
+            <button
+              onClick={() => {
+                setPlatformTab("limitless");
+                setActiveTab("trades");
+              }}
+              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+                platformTab === "limitless"
+                  ? "border-grey text-white"
+                  : "border-transparent text-gray-400 hover:text-white"
+              }`}
+            >
+              Limitless
             </button>
           </div>
 
@@ -1210,6 +1301,339 @@ export default function MarketInfoModal({
                       </div>
                     </div>
                   )}
+                  </>
+                )}
+              </>
+            ) : platformTab === "limitless" ? (
+              <>
+                {/* Limitless sub-tabs: Trades | Positions */}
+                <div className="flex border-b border-white/10 sticky top-[73px] bg-[#0D0D0D] z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 mb-0">
+                  <button
+                    onClick={() => setActiveTab("trades")}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+                      activeTab === "trades"
+                        ? "border-[#ffc000] text-[#ffc000]"
+                        : "border-transparent text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    Trades
+                  </button>
+                  <button
+                    onClick={() => setActiveTab("positions")}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+                      activeTab === "positions"
+                        ? "border-[#ffc000] text-[#ffc000]"
+                        : "border-transparent text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    Positions
+                  </button>
+                </div>
+
+                {/* Limitless Trades */}
+                {platformTab === "limitless" && activeTab === "trades" && (
+                  <>
+                    {!limitlessUser?.sessionCookie ? (
+                      <div className="text-center py-12 space-y-4">
+                        <p className="text-gray-400">
+                          Sign in to Limitless to view your trade history.
+                        </p>
+                        {!eoaAddress ? (
+                          <p className="text-sm text-amber-400">
+                            Connect your wallet first to sign in to Limitless.
+                          </p>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const result = await limitlessLogin();
+                                if (result) {
+                                  queryClient.invalidateQueries({ queryKey: ["limitless-portfolio-trades"] });
+                                  queryClient.invalidateQueries({ queryKey: ["limitless-portfolio-positions"] });
+                                }
+                              }}
+                              disabled={isLimitlessLoginLoading || !ethersSigner}
+                              className="px-6 py-3 rounded-lg font-semibold text-black bg-[#ffc000] hover:bg-[#ffd000] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {isLimitlessLoginLoading ? (
+                                <span className="flex items-center justify-center gap-2">
+                                  <span className="inline-block w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                                  Signing in...
+                                </span>
+                              ) : (
+                                "Sign in to Limitless"
+                              )}
+                            </button>
+                            {limitlessAuthError && (
+                              <p className="text-sm text-red-400">
+                                {limitlessAuthError.message}
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ) : isLoadingLimitlessTrades ? (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffc000]"></div>
+                      </div>
+                    ) : limitlessTradesError ? (
+                      <div className="text-center py-8">
+                        <p className="text-red-400">
+                          Failed to load Limitless trades. Please try again.
+                        </p>
+                      </div>
+                    ) : limitlessTrades.length === 0 ? (
+                      <div className="text-center py-12">
+                        <p className="text-gray-400 text-lg">No trades found.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="border-b border-white/10">
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Market</th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Side</th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Action</th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Price</th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Size</th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Amount</th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Time</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {limitlessTrades.map((t: LimitlessTrade, i: number) => {
+                              const slugForLink = t.marketSlug ?? t.market ?? "—";
+                              const displayTitle = t.market ?? t.marketSlug ?? "—";
+                              const side = (t.side ?? t.outcome ?? "—").toString();
+                              const actionRaw = (t.action ?? t.strategy ?? "—") as string;
+                              const actionLower = actionRaw.toLowerCase();
+                              const actionBadgeClass =
+                                actionLower === "won"
+                                  ? "bg-green-500/20 text-green-300"
+                                  : actionLower === "lose" || actionLower === "lost"
+                                    ? "bg-red-500/20 text-red-300"
+                                    : "bg-white/10 text-white/90";
+                              const price = t.price != null ? String(t.price) : "—";
+                              const size = t.size ?? "—";
+                              const amountRaw = t.amount;
+                              const amountStr =
+                                amountRaw != null && amountRaw !== ""
+                                  ? (() => {
+                                      const n = typeof amountRaw === "string" ? parseFloat(amountRaw) : Number(amountRaw);
+                                      return Number.isFinite(n) ? `$${n.toFixed(2)}` : String(amountRaw);
+                                    })()
+                                  : "—";
+                              const ts = t.timestamp ?? t.createdAt;
+                              const timeStr =
+                                ts != null
+                                  ? (() => {
+                                      const num = typeof ts === "string" && /^\d+$/.test(ts) ? Number(ts) : Number(ts);
+                                      if (Number.isFinite(num)) return new Date(num * 1000).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+                                      const d = typeof ts === "string" ? new Date(ts) : new Date(Number(ts) * 1000);
+                                      return !Number.isNaN(d.getTime()) ? d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "—";
+                                    })()
+                                  : "—";
+                              return (
+                                <tr key={t.id ?? `limitless-trade-${i}`} className="border-b border-white/5 hover:bg-white/5">
+                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
+                                    {slugForLink !== "—" ? (
+                                      <a
+                                        href={`/rexmarkets/limitless/${encodeURIComponent(slugForLink)}`}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          onClose();
+                                          router.push(`/rexmarkets/limitless/${encodeURIComponent(slugForLink)}`);
+                                        }}
+                                        className="max-w-[200px] truncate block hover:text-[#ffc000] transition-colors underline decoration-dotted"
+                                        title={displayTitle}
+                                      >
+                                        {displayTitle}
+                                      </a>
+                                    ) : (
+                                      displayTitle
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4">
+                                    <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-white/10 text-white">
+                                      {side}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4">
+                                    <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${actionBadgeClass}`}>
+                                      {actionRaw}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">{price}</td>
+                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm" title="Outcome tokens (shares) bought or sold">{String(size)}</td>
+                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm" title="USDC spent or received (after fees)">{amountStr}</td>
+                                  <td className="py-3 px-2 sm:px-4 text-gray-400 text-xs">{timeStr}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Limitless Positions */}
+                {platformTab === "limitless" && activeTab === "positions" && (
+                  <>
+                    {!limitlessUser?.sessionCookie ? (
+                      <div className="text-center py-12 space-y-4">
+                        <p className="text-gray-400">
+                          Sign in to Limitless to view your positions.
+                        </p>
+                        {!eoaAddress ? (
+                          <p className="text-sm text-amber-400">
+                            Connect your wallet first to sign in to Limitless.
+                          </p>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={async () => {
+                                const result = await limitlessLogin();
+                                if (result) {
+                                  queryClient.invalidateQueries({ queryKey: ["limitless-portfolio-trades"] });
+                                  queryClient.invalidateQueries({ queryKey: ["limitless-portfolio-positions"] });
+                                }
+                              }}
+                              disabled={isLimitlessLoginLoading || !ethersSigner}
+                              className="px-6 py-3 rounded-lg font-semibold text-black bg-[#ffc000] hover:bg-[#ffd000] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                            >
+                              {isLimitlessLoginLoading ? (
+                                <span className="flex items-center justify-center gap-2">
+                                  <span className="inline-block w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                                  Signing in...
+                                </span>
+                              ) : (
+                                "Sign in to Limitless"
+                              )}
+                            </button>
+                            {limitlessAuthError && (
+                              <p className="text-sm text-red-400">
+                                {limitlessAuthError.message}
+                              </p>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    ) : isLoadingLimitlessPositions ? (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffc000]"></div>
+                      </div>
+                    ) : limitlessPositionsError ? (
+                      <div className="text-center py-8">
+                        <p className="text-red-400">
+                          Failed to load Limitless positions. Please try again.
+                        </p>
+                      </div>
+                    ) : limitlessPositions.length === 0 ? (
+                      <div className="text-center py-12">
+                        <p className="text-gray-400 text-lg">No positions found.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="border-b border-white/10">
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Market</th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Outcome</th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Size</th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Closed</th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Expiration</th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Claim</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {limitlessPositions.map((p: LimitlessPosition, i: number) => {
+                              const slugForLink = p.marketSlug ?? p.market ?? "—";
+                              const displayTitle = p.market ?? p.marketSlug ?? "—";
+                              const outcome = (p.outcome ?? "—").toString();
+                              const size = p.size ?? p.balance ?? "—";
+                              const closed = p.marketClosed === true ? "Yes" : p.marketClosed === false ? "No" : "—";
+                              const exp = p.expirationDate;
+                              const expiration =
+                                exp != null && exp !== ""
+                                  ? (() => {
+                                      const d = typeof exp === "string" ? new Date(exp) : null;
+                                      return d && !Number.isNaN(d.getTime())
+                                        ? d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })
+                                        : String(exp);
+                                    })()
+                                  : "—";
+                              const canClaim =
+                                closed === "Yes" &&
+                                slugForLink !== "—" &&
+                                !!eoaAddress;
+                              const isClaiming =
+                                redeemingLimitlessSlug === slugForLink ||
+                                isLimitlessRedeemLoading;
+                              return (
+                                <tr key={p.id ?? p.tokenId ?? `limitless-pos-${i}`} className="border-b border-white/5 hover:bg-white/5">
+                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
+                                    {slugForLink !== "—" ? (
+                                      <a
+                                        href={`/rexmarkets/limitless/${encodeURIComponent(slugForLink)}`}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          onClose();
+                                          router.push(`/rexmarkets/limitless/${encodeURIComponent(slugForLink)}`);
+                                        }}
+                                        className="max-w-[200px] truncate block hover:text-[#ffc000] transition-colors underline decoration-dotted"
+                                        title={displayTitle}
+                                      >
+                                        {displayTitle}
+                                      </a>
+                                    ) : (
+                                      displayTitle
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4">
+                                    <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-white/10 text-white">
+                                      {outcome}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">{String(size)}</td>
+                                  <td className="py-3 px-2 sm:px-4 text-white/80 text-xs sm:text-sm">{closed}</td>
+                                  <td className="py-3 px-2 sm:px-4 text-white/80 text-xs sm:text-sm">{expiration}</td>
+                                  <td className="py-3 px-2 sm:px-4">
+                                    {canClaim ? (
+                                      <button
+                                        type="button"
+                                        onClick={() => handleLimitlessClaim(slugForLink)}
+                                        disabled={isClaiming}
+                                        className={`min-w-[80px] px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                                          isClaiming
+                                            ? "bg-amber-600/70 cursor-wait text-white"
+                                            : "bg-[#ffc000] hover:bg-[#ffd000] text-black disabled:opacity-50 disabled:cursor-not-allowed"
+                                        }`}
+                                      >
+                                        {isClaiming ? (
+                                          <span className="flex items-center gap-1.5 justify-center">
+                                            <span className="inline-block w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                                            Claiming...
+                                          </span>
+                                        ) : (
+                                          "Claim"
+                                        )}
+                                      </button>
+                                    ) : (
+                                      <span className="text-gray-500 text-xs">
+                                        {closed !== "Yes" ? "—" : "—"}
+                                      </span>
+                                    )}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
                   </>
                 )}
               </>

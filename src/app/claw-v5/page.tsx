@@ -8,6 +8,7 @@ import Image from "next/image";
 import ChatSidebar from "./_components/chat/ChatSidebar";
 import ChatInput, {
   type PredictionMarketMode,
+  type ClawSelectionContext,
 } from "./_components/chat/ChatInput";
 import { StreamingStatus, ConnectingStatus } from "./_components/chat/Message";
 import RexHeader from "@/components/ui/layout/Header";
@@ -19,6 +20,7 @@ import {
   Chat,
 } from "@/lib/storage/chatStorage";
 import { Loader2, Menu } from "lucide-react";
+import { PaywallModal, type PaywallLimitCode } from "@/components/subscription/PaywallModal";
 
 const STREAMING_COUNTDOWN_START = 20;
 
@@ -50,8 +52,10 @@ export default function ClawV5Page() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [hasFetched, setHasFetched] = useState(false);
   const [prefillText, setPrefillText] = useState<string>("");
-  const [marketMode, setMarketMode] = useState<PredictionMarketMode>("Auto");
+  const [marketMode, setMarketMode] = useState<PredictionMarketMode>("Markets");
   const abortControllerRef = useRef<AbortController | null>(null);
+  const [showPaywall, setShowPaywall] = useState(false);
+  const [paywallLimitCode, setPaywallLimitCode] = useState<PaywallLimitCode | null>(null);
 
   // Countdown 20→0, reset to 20, while sending (same as Prediction Market / chat detail)
   useEffect(() => {
@@ -270,7 +274,7 @@ export default function ClawV5Page() {
   }, []);
 
   const handleSendMessage = useCallback(
-    async (message: string, quotedContent?: string) => {
+    async (message: string, quotedContent?: string, context?: ClawSelectionContext) => {
       if (!currentUserId || !message.trim() || isSending) return;
 
       setIsSending(true);
@@ -316,10 +320,24 @@ export default function ClawV5Page() {
                 role: "user",
                 history: historyForAi,
                 marketMode,
+                ...(context?.cryptoChain && { cryptoChain: context.cryptoChain }),
+                ...(context?.predictionSubmode != null && { predictionSubmode: context.predictionSubmode }),
+                ...(context?.predictionDisplayLevel != null && { predictionDisplayLevel: context.predictionDisplayLevel }),
               }),
               signal: controller.signal,
             },
           );
+
+          if (messageRes.status === 402) {
+            const data = await messageRes.json().catch(() => ({}));
+            const code = (data?.code === "PAID_LIMIT_REACHED" ? "PAID_LIMIT_REACHED" : "FREE_LIMIT_REACHED") as PaywallLimitCode;
+            setPaywallLimitCode(code);
+            setShowPaywall(true);
+            setIsSending(false);
+            setStreamingPhase("");
+            setStreamingStatusLabel("");
+            return;
+          }
 
           if (!messageRes.ok) {
             throw new Error("Failed to send message");
@@ -457,6 +475,7 @@ export default function ClawV5Page() {
       .trim();
 
   return (
+    <>
     <div className="relative w-full h-screen flex flex-col overflow-hidden">
       <div className="flex-1 flex overflow-hidden">
         <div className="h-full flex flex-col w-full">
@@ -528,7 +547,8 @@ export default function ClawV5Page() {
                             stripLeadingLabel(MARKET_SAMPLE_PROMPT),
                           )
                         }
-                        className="bg-[#141414] border border-[#3C3C3C] hover:border-[#FFC000]/40 rounded-2xl p-4 md:p-6 text-left transition-colors w-full shadow-sm"
+                        disabled={!authenticated}
+                        className="bg-[#141414] border border-[#3C3C3C] hover:border-[#FFC000]/40 rounded-2xl p-4 md:p-6 text-left transition-colors w-full shadow-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-[#3C3C3C]"
                       >
                         <div className="flex items-center gap-3 mb-3">
                           <span className="w-11 h-11 flex items-center justify-center overflow-hidden">
@@ -558,7 +578,8 @@ export default function ClawV5Page() {
                             stripLeadingLabel(CRYPTO_SAMPLE_PROMPT),
                           )
                         }
-                        className="bg-[#141414] border border-[#3C3C3C] hover:border-[#FFC000]/40 rounded-2xl p-4 md:p-6 text-left transition-colors w-full shadow-sm"
+                        disabled={!authenticated}
+                        className="bg-[#141414] border border-[#3C3C3C] hover:border-[#FFC000]/40 rounded-2xl p-4 md:p-6 text-left transition-colors w-full shadow-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-[#3C3C3C]"
                       >
                         <div className="flex items-center gap-3 mb-3">
                           <span className="w-11 h-11 flex items-center justify-center overflow-hidden">
@@ -595,6 +616,8 @@ export default function ClawV5Page() {
                 prefillText={prefillText}
                 marketMode={marketMode}
                 onMarketModeChange={setMarketMode}
+                disabled={!authenticated}
+                disabledPlaceholder="Sign in to chat"
               />
             </div>
           </div>
@@ -604,5 +627,16 @@ export default function ClawV5Page() {
         </div>
       </div>
     </div>
+    <PaywallModal
+      open={showPaywall}
+      onClose={() => {
+        setShowPaywall(false);
+        setPaywallLimitCode(null);
+      }}
+      context="claw"
+      limitCode={paywallLimitCode}
+      paymentMetadata={currentUserId ? { userId: currentUserId } : undefined}
+    />
+    </>
   );
 }

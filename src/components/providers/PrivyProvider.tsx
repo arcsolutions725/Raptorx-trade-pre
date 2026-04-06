@@ -3,9 +3,10 @@
 import { PrivyProvider } from "@privy-io/react-auth";
 import { toSolanaWalletConnectors } from "@privy-io/react-auth/solana";
 import { addRpcUrlOverrideToChain } from "@privy-io/chains";
-import { polygon } from "viem/chains";
+import { polygon, base } from "viem/chains";
 import { createSolanaRpc, createSolanaRpcSubscriptions } from "@solana/kit";
 import { POLYGON_RPC_URL } from "@/constants/polymarket";
+import { BASE_RPC_URL } from "@/constants/api";
 import { ReactNode } from "react";
 
 const SOLANA_RPC_URL =
@@ -73,6 +74,7 @@ export function PrivyProviderWrapper({ children }: PrivyProviderWrapperProps) {
         defaultChain: polygon,
         supportedChains: [
           addRpcUrlOverrideToChain(polygon, POLYGON_RPC_URL as string),
+          addRpcUrlOverrideToChain(base, BASE_RPC_URL as string),
           {
             id: 56,
             name: "BNB Smart Chain",

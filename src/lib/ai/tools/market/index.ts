@@ -147,8 +147,12 @@ async function getPolymarketDetailsDirect(args: { slug?: string; event_id?: stri
     const outcomes = safeJsonArray(market?.outcomes);
     const outcomePrices = safeJsonArray(market?.outcomePrices);
 
-    const bestBid = Number(market?.bestBid ?? 0) || 0;
-    const bestAsk = Number(market?.bestAsk ?? 0) || 0;
+    // Polymarket gamma API returns bestBid/bestAsk in 0-1 range
+    const bestBidRaw = Number(market?.bestBid ?? 0) || 0;
+    const bestAskRaw = Number(market?.bestAsk ?? 0) || 0;
+    // Convert to cents (0-100) for Bid/Ask Depth display
+    const yesBidCents = bestBidRaw <= 1 ? bestBidRaw * 100 : bestBidRaw;
+    const yesAskCents = bestAskRaw <= 1 ? bestAskRaw * 100 : bestAskRaw;
 
     // outcomePrices[0]=Yes, outcomePrices[1]=No (0..1)
     let yesPrice: number;
@@ -163,8 +167,8 @@ async function getPolymarketDetailsDirect(args: { slug?: string; event_id?: stri
       } else if (Number.isFinite(parsedYes) && parsedYes >= 0 && parsedYes <= 1) {
         yesPrice = parsedYes;
         noPrice = 1 - yesPrice;
-      } else if (bestBid > 0 && bestAsk > 0) {
-        yesPrice = (bestBid + bestAsk) / 2;
+      } else if (bestBidRaw > 0 && bestAskRaw > 0) {
+        yesPrice = (bestBidRaw + bestAskRaw) / 2;
         noPrice = 1 - yesPrice;
       } else {
         yesPrice = Number(market?.lastTradePrice ?? 0) || 0;
@@ -175,15 +179,15 @@ async function getPolymarketDetailsDirect(args: { slug?: string; event_id?: stri
       if (Number.isFinite(parsedYes) && parsedYes >= 0 && parsedYes <= 1) {
         yesPrice = parsedYes;
         noPrice = 1 - yesPrice;
-      } else if (bestBid > 0 && bestAsk > 0) {
-        yesPrice = (bestBid + bestAsk) / 2;
+      } else if (bestBidRaw > 0 && bestAskRaw > 0) {
+        yesPrice = (bestBidRaw + bestAskRaw) / 2;
         noPrice = 1 - yesPrice;
       } else {
         yesPrice = Number(market?.lastTradePrice ?? 0) || 0;
         noPrice = 1 - yesPrice;
       }
-    } else if (bestBid > 0 && bestAsk > 0) {
-      yesPrice = (bestBid + bestAsk) / 2;
+    } else if (bestBidRaw > 0 && bestAskRaw > 0) {
+      yesPrice = (bestBidRaw + bestAskRaw) / 2;
       noPrice = 1 - yesPrice;
     } else {
       yesPrice = Number(market?.lastTradePrice ?? 0) || 0;
@@ -215,8 +219,8 @@ async function getPolymarketDetailsDirect(args: { slug?: string; event_id?: stri
       no_price: noPrice,
       volume,
       volume_24h: volume24hr,
-      yes_bid: bestBid,
-      yes_ask: bestAsk,
+      yes_bid: yesBidCents,
+      yes_ask: yesAskCents,
       liquidity,
       open_interest: Number(market?.openInterest ?? 0) || 0,
       status: market?.closed ? "closed" : market?.active ? "open" : "unopened",
