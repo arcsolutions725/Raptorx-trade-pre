@@ -93,7 +93,7 @@ export default function RenameChatModal({
             value={newTitle}
             onChange={(e) => setNewTitle(e.target.value)}
             disabled={isSaving}
-            className="w-full bg-[#262626] border border-[#3C3C3C] text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#FFC000] mb-3 text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full bg-[#262626] border border-[#3C3C3C] text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#FFC000] mb-3 text-base disabled:opacity-50 disabled:cursor-not-allowed"
             placeholder="Enter chat title"
           />
 

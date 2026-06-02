@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
+import { sortLimitlessMarketsByVolumeDesc } from "@/lib/limitless/sortMarketsByVolume";
 
 // Transform Limitless API response to market format
 // Based on actual API response: { id, logo, slug, tags, title, prices, status, volume, volumeFormatted }
@@ -35,8 +36,8 @@ function transformLimitlessMarket(market: any): any {
     title: market.title || "",
     subtitle: market.tags?.[0] || "",
     description: "",
-    image: market.logo || null,
-    icon: market.logo || null,
+    image: market.logo || market.imageUrl || null,
+    icon: market.logo || market.imageUrl || null,
     active,
     closed,
     archived,
@@ -57,21 +58,35 @@ function transformLimitlessMarket(market: any): any {
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    
-    const limit = parseInt(searchParams.get("limit") || "25");
-    const page = parseInt(searchParams.get("page") || "1");
-    const searchQuery = searchParams.get("q") || searchParams.get("search") || undefined;
 
-    // Build URL for Limitless API - using /markets/active endpoint
-    const baseUrl = "https://api.limitless.exchange/markets/active";
+    const limit = parseInt(searchParams.get("limit") || "25", 10);
+    const page = parseInt(searchParams.get("page") || "1", 10);
+    const searchQuery =
+      searchParams.get("q") ||
+      searchParams.get("search") ||
+      searchParams.get("query") ||
+      undefined;
+    const trimmedQuery = searchQuery?.trim() ?? "";
+
+    /**
+     * Text search: GET /markets/search — required `query`, optional `limit`, `page`, `similarityThreshold`.
+     * Browse: GET /markets/active — do not send `q` here (returns 400).
+     * @see https://api.limitless.exchange/api-v1 (Markets → GET /markets/search)
+     */
+    const baseUrl = trimmedQuery
+      ? "https://api.limitless.exchange/markets/search"
+      : "https://api.limitless.exchange/markets/active";
+
     const params = new URLSearchParams({
       page: page.toString(),
       limit: limit.toString(),
     });
-
-    // Only send search query if present
-    if (searchQuery && searchQuery.trim()) {
-      params.append("q", searchQuery.trim());
+    if (trimmedQuery) {
+      params.set("query", trimmedQuery);
+      const sim = searchParams.get("similarityThreshold");
+      if (sim != null && sim.trim() !== "") {
+        params.set("similarityThreshold", sim.trim());
+      }
     }
 
     const url = `${baseUrl}?${params.toString()}`;
@@ -90,22 +105,29 @@ export async function GET(request: NextRequest) {
     }
 
     const data = await response.json();
-    
-    // Response structure: { data: [...] }
+
+    // /markets/active: { data: [...], totalMarketsCount }
+    // /markets/search: { markets: [...], totalMarketsCount }
     let marketsArray: any[] = [];
-    if (data.data && Array.isArray(data.data)) {
+    if (Array.isArray(data.markets)) {
+      marketsArray = data.markets;
+    } else if (data.data && Array.isArray(data.data)) {
       marketsArray = data.data;
     } else if (Array.isArray(data)) {
       marketsArray = data;
     }
 
-    const markets = marketsArray
-      .map(transformLimitlessMarket)
-      .filter((m: any) => m !== null);
+    const markets = sortLimitlessMarketsByVolumeDesc(
+      marketsArray.map(transformLimitlessMarket).filter((m: any) => m !== null),
+    );
 
-    // Determine hasMore: if we got exactly the limit, there might be more
-    const hasMore = markets.length === limit;
-    const totalCount = data.total || data.count || data.totalCount || markets.length;
+    const totalCount =
+      typeof data.totalMarketsCount === "number"
+        ? data.totalMarketsCount
+        : data.total || data.count || data.totalCount || markets.length;
+
+    const hasMore =
+      markets.length === limit && page * limit < totalCount;
 
     return NextResponse.json({
       markets,

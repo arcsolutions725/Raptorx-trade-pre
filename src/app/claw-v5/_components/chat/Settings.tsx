@@ -70,7 +70,7 @@ export default function Settings({
         <textarea
           value={editedContent}
           onChange={(e) => setEditedContent(e.target.value)}
-          className="w-full bg-[#1a1a1a] text-white p-2 rounded border border-[#3a3a3a] focus:outline-none focus:ring-1 focus:ring-[#FFC000] mb-2"
+          className="w-full bg-[#1a1a1a] text-white p-2 rounded border border-[#3a3a3a] focus:outline-none focus:ring-1 focus:ring-[#FFC000] mb-2 text-base"
           rows={4}
         />
         <div className="flex gap-2 justify-end">

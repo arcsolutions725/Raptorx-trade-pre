@@ -1,10 +1,12 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
+import { normalizeKalshiEventTicker } from "@/lib/kalshi/normalizeEventTicker";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const eventTicker = searchParams.get("event_ticker");
+    const rawTicker = searchParams.get("event_ticker");
+    const eventTicker = normalizeKalshiEventTicker(rawTicker);
 
     if (!eventTicker) {
       return NextResponse.json(
@@ -15,10 +17,10 @@ export async function GET(request: NextRequest) {
 
     // Use the trade-api v2 events endpoint as per Kalshi API documentation
     // https://api.elections.kalshi.com/trade-api/v2/events/{event_ticker}
-    const eventsUrl = `https://api.elections.kalshi.com/trade-api/v2/events/${eventTicker}`;
+    const eventsUrl = `https://api.elections.kalshi.com/trade-api/v2/events/${encodeURIComponent(eventTicker)}`;
 
     // Fetch event metadata to get image_url
-    const metadataUrl = `https://api.elections.kalshi.com/trade-api/v2/events/${eventTicker}/metadata`;
+    const metadataUrl = `https://api.elections.kalshi.com/trade-api/v2/events/${encodeURIComponent(eventTicker)}/metadata`;
 
     // Fetch both event data and metadata in parallel
     const [eventsResponse, metadataResponse] = await Promise.all([

@@ -11,6 +11,8 @@ import {
   kalshiPrompt,
   polymarketPrompt,
   limitlessPrompt,
+  myriadPrompt,
+  predictfunPrompt,
   predictionMarketsPrompt,
   cryptoChainAddendum,
 } from "@/lib/ai/prompts";
@@ -23,8 +25,17 @@ import {
   fetchRexmarketsMarketDetails,
   inferRexmarketsProviderFromText,
   runMarketToolAgent,
+  type RexmarketsProvider,
 } from "@/lib/ai/tools/market";
-import { runCryptoToolAgent, detectCryptoToolIntent } from "@/lib/ai/tools/crypto";
+import { normalizeKalshiEventTicker } from "@/lib/kalshi/normalizeEventTicker";
+import {
+  runCryptoToolAgent,
+  detectCryptoToolIntent,
+  isAddressDrivenTechnicalIntent,
+  resolveTokenFromQuery,
+  fetchTechnicalReportStream,
+  stripTickerPrefix,
+} from "@/lib/ai/tools/crypto";
 import {
   isTopPredictionMarketsIntent,
   extractTopMarketsCategory,
@@ -99,11 +110,23 @@ function normalizeAndDedupeUrls(urls: string[], limit = 12): string[] {
   return out;
 }
 
-async function streamToText(stream: AsyncIterable<any>): Promise<string> {
+async function streamOpenRouterDeltasToClient(
+  stream: AsyncIterable<any>,
+  controller: ReadableStreamDefaultController<Uint8Array>,
+  encoder: TextEncoder,
+  phase: "research" | "draft",
+): Promise<string> {
   let out = "";
   for await (const chunk of stream) {
     const content = chunk?.choices?.[0]?.delta?.content;
-    if (content) out += content;
+    if (content) {
+      out += content;
+      controller.enqueue(
+        encoder.encode(
+          JSON.stringify({ type: "thinkingDelta", phase, text: content }) + "\n",
+        ),
+      );
+    }
   }
   return out;
 }
@@ -134,6 +157,35 @@ function extractReportContextFromHistory(
     }
   }
   return null;
+}
+
+type ClawCryptoChainUi = "solana" | "ethereum" | "base" | "bnb" | "monad";
+
+function trendingChainHintFromUi(
+  chain: ClawCryptoChainUi | undefined,
+): "solana" | "bsc" | "base" | "ethereum" | "monad" | "all" | undefined {
+  if (!chain) return undefined;
+  if (chain === "bnb") return "bsc";
+  if (chain === "ethereum") return "ethereum";
+  return chain;
+}
+
+function reportExplicitChainFromUi(
+  chain: ClawCryptoChainUi | undefined,
+): string | undefined {
+  if (!chain) return undefined;
+  if (chain === "ethereum") return "ethereum";
+  return chain === "bnb" ? "bsc" : chain;
+}
+
+function rexmarketsProviderFromClawUi(
+  marketMode: "Markets" | "Crypto" | "Kalshi" | "Polymarket" | undefined,
+  predictionDisplayLevel: "category" | "provider" | undefined,
+): RexmarketsProvider | undefined {
+  if (predictionDisplayLevel !== "provider") return undefined;
+  if (marketMode === "Kalshi") return "kalshi";
+  if (marketMode === "Polymarket") return "polymarket";
+  return undefined;
 }
 
 // POST /api/claw-v5/chats/[id]/messages - Add a message and get AI response
@@ -167,8 +219,8 @@ export async function POST(
       role?: "user" | "assistant";
       history?: Array<{ role: "user" | "assistant"; content: string }>;
       marketMode?: "Markets" | "Crypto" | "Kalshi" | "Polymarket";
-      cryptoChain?: "solana" | "base" | "bnb";
-      predictionSubmode?: "polymarket" | "kalshi" | "limitless";
+      cryptoChain?: ClawCryptoChainUi;
+      predictionSubmode?: "polymarket" | "kalshi" | "limitless" | "myriad" | "predictfun";
       predictionDisplayLevel?: "category" | "provider";
     } = body;
 
@@ -285,16 +337,20 @@ export async function POST(
           );
 
           const sendStatus = (
-            phase: "markets" | "research" | "draft" | "synth"
+            phase: "markets" | "research" | "draft" | "synth" | "report",
+            labelOverride?: string,
           ) => {
-            const label =
+            const defaultLabel =
               phase === "markets"
                 ? "Searching in RaptorX…"
-                : phase === "research"
-                ? "Web searching official sources…"
-                : phase === "draft"
-                  ? "Drafting response…"
-                  : "Finalizing answer…";
+                : phase === "report"
+                  ? "Generating technical report…"
+                  : phase === "research"
+                    ? "Web searching official sources…"
+                    : phase === "draft"
+                      ? "Drafting response…"
+                      : "Finalizing answer…";
+            const label = labelOverride ?? defaultLabel;
             controller.enqueue(
               encoder.encode(
                 JSON.stringify({ type: "status", phase, label }) + "\n"
@@ -315,27 +371,48 @@ export async function POST(
           let rexLink = extractRexmarketsLink(content);
           if (!rexLink && baseUrl) {
             const sameOriginRe = new RegExp(
-              `${baseUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/rexmarkets/(polymarket|kalshi)/([^\\s/?#.,;:!)+]+)`,
+              `${baseUrl.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}/rexmarkets/(polymarket|kalshi|limitless|myriad|predict-fun)/([^\\s/?#.,;:!)+]+)`,
               "i",
             );
             const sameMatch = content.match(sameOriginRe);
             if (sameMatch) {
+              const seg = sameMatch[1].toLowerCase();
+              const p = (
+                seg === "predict-fun" ? "predictfun" : seg
+              ) as RexmarketsProvider;
+              const rawId = sameMatch[2];
               rexLink = {
-                provider: sameMatch[1].toLowerCase() as "polymarket" | "kalshi",
-                id: sameMatch[2],
+                provider: p,
+                id: p === "kalshi" ? normalizeKalshiEventTicker(rawId) : rawId,
                 url: sameMatch[0],
               };
             }
           }
           const directMarketLink = extractDirectMarketLink(content, baseUrl);
           const marketLink = rexLink ?? directMarketLink;
+
+          const forcedUiCryptoChain: ClawCryptoChainUi | undefined =
+            marketMode === "Crypto" ? cryptoChain : undefined;
+          const trendingHintForSelectedChain =
+            trendingChainHintFromUi(forcedUiCryptoChain);
+
+          // Avoid a long silent gap while `classifyQuestionDomain` runs (LLM call for non-obvious queries).
+          // The client otherwise shows only "Connecting…" + countdown until the first status event.
+          const needsDomainClassify =
+            !marketLink && marketMode !== "Crypto";
+          if (needsDomainClassify) {
+            sendStatus("report", "Understanding your question…");
+          }
+
           const domain: QuestionDomain = marketLink
             ? "market"
-            : await classifyQuestionDomain({
-                openRouter,
-                model: DEFAULT_CHAT_MODEL,
-                text: content,
-              });
+            : marketMode === "Crypto"
+              ? "crypto"
+              : await classifyQuestionDomain({
+                  openRouter,
+                  model: DEFAULT_CHAT_MODEL,
+                  text: content,
+                });
           const basePrompt = (() => {
             if (marketMode === "Crypto") {
               const chainAdd = cryptoChain ? cryptoChainAddendum(cryptoChain) : "";
@@ -351,6 +428,8 @@ export async function POST(
             }
             if (marketMode === "Markets") {
               if (predictionSubmode === "limitless") return limitlessPrompt;
+              if (predictionSubmode === "myriad") return myriadPrompt;
+              if (predictionSubmode === "predictfun") return predictfunPrompt;
               return internetMarketsPrompt;
             }
             return domain === "crypto" ? cryptoPrompt : regularPrompt;
@@ -359,7 +438,11 @@ export async function POST(
           try {
             // Top prediction markets intent: show cards for "top/hottest markets" regardless of domain.
             // Run first so "Give me the top 5 hottest on Kalshi and Polymarket" always shows cards.
-            if (!marketLink && isTopPredictionMarketsIntent(content)) {
+            if (
+              !marketLink &&
+              marketMode !== "Crypto" &&
+              isTopPredictionMarketsIntent(content)
+            ) {
               sendStatus("markets");
               const category = extractTopMarketsCategory(content);
               const limit = extractTopMarketsLimit(content);
@@ -369,9 +452,15 @@ export async function POST(
                   ? ("kalshi" as const)
                   : marketMode === "Polymarket"
                     ? ("polymarket" as const)
-                    : (marketMode === "Markets" || marketMode === "Crypto"
+                    : marketMode === "Markets" && predictionSubmode === "limitless"
+                      ? ("limitless" as const)
+                      : marketMode === "Markets" && predictionSubmode === "myriad"
+                        ? ("myriad" as const)
+                      : marketMode === "Markets" && predictionSubmode === "predictfun"
+                        ? ("predictfun" as const)
+                      : marketMode === "Markets" || marketMode === "Crypto"
                         ? inferProviderFromTopMarketsQuery(content)
-                        : undefined);
+                        : undefined;
               const result = await fetchTopPredictionMarkets(baseUrl, {
                 ...(category ? { category } : {}),
                 limit,
@@ -380,7 +469,10 @@ export async function POST(
               topMarketsPayload = {
                 kind: "top_markets",
                 polymarket: result.polymarket,
+                limitless: result.limitless,
                 kalshi: result.kalshi,
+                myriad: result.myriad ?? [],
+                predictfun: result.predictfun ?? [],
                 ...(result.message ? { message: result.message } : {}),
                 ...(result.categoryList ? { categoryList: result.categoryList } : {}),
               };
@@ -411,7 +503,22 @@ export async function POST(
                   },
                 ];
               } else {
-                const onlyProvider = inferRexmarketsProviderFromText(content);
+                const uiRexProvider = rexmarketsProviderFromClawUi(
+                  marketMode,
+                  predictionDisplayLevel,
+                );
+                const marketsSinglePlatformProvider: RexmarketsProvider | undefined =
+                  marketMode === "Markets" && predictionSubmode === "limitless"
+                    ? "limitless"
+                    : marketMode === "Markets" && predictionSubmode === "myriad"
+                      ? "myriad"
+                      : marketMode === "Markets" && predictionSubmode === "predictfun"
+                        ? "predictfun"
+                        : undefined;
+                const onlyProvider =
+                  inferRexmarketsProviderFromText(content) ??
+                  uiRexProvider ??
+                  marketsSinglePlatformProvider;
                 const agentOut = await runMarketToolAgent(
                   openRouter,
                   DEFAULT_CHAT_MODEL,
@@ -453,6 +560,33 @@ export async function POST(
                           },
                         }
                       : {}),
+                    ...(rexEmbeds.find((e) => e.provider === "limitless")
+                      ? {
+                          limitless: {
+                            details: rexEmbeds.find(
+                              (e) => e.provider === "limitless"
+                            )?.marketDetails,
+                          },
+                        }
+                      : {}),
+                    ...(rexEmbeds.find((e) => e.provider === "myriad")
+                      ? {
+                          myriad: {
+                            details: rexEmbeds.find(
+                              (e) => e.provider === "myriad"
+                            )?.marketDetails,
+                          },
+                        }
+                      : {}),
+                    ...(rexEmbeds.find((e) => e.provider === "predictfun")
+                      ? {
+                          predictfun: {
+                            details: rexEmbeds.find(
+                              (e) => e.provider === "predictfun"
+                            )?.marketDetails,
+                          },
+                        }
+                      : {}),
                   };
                 } else {
                   raptorxMarketData = null;
@@ -476,40 +610,33 @@ export async function POST(
           // was conservative and did not label the question as "crypto".
           try {
             const cryptoIntent = detectCryptoToolIntent(content);
+            // Default UI sends marketMode "Markets"; we still must run token/report tools when the
+            // message is clearly a token query. In Prediction tabs, only run for pasted addresses so
+            // tickers like "TRUMP" do not steal market Q&A.
+            const inPredictionMarketUi =
+              marketMode === "Kalshi" || marketMode === "Polymarket";
+            const tokenUiAllowsCryptoTools =
+              marketMode === "Crypto" ||
+              marketMode === "Markets" ||
+              marketMode === undefined;
             const shouldRunCryptoTools =
-              // Only run crypto tools when the user is explicitly in Crypto mode
-              // or when there is no explicit market mode and the domain/intent
-              // clearly points to a crypto token query. This prevents cases where
-              // Kalshi/Polymarket market titles like "When will Bitcoin cross 100k again?"
-              // get misinterpreted as a BNB token named "100k" when the user is
-              // actually asking about a prediction market.
-              (marketMode === "Crypto" ||
-                (!marketMode &&
-                  (domain === "crypto" || cryptoIntent !== null)));
+              (cryptoIntent !== null || domain === "crypto") &&
+              tokenUiAllowsCryptoTools &&
+              (!inPredictionMarketUi ||
+                isAddressDrivenTechnicalIntent(cryptoIntent)) &&
+              // Deep Analysis on Rex Markets embeds includes "analysis" + $? prices (e.g. $53.815),
+              // which otherwise triggers a RexScreener technical report on nonsense tickers like "53".
+              !marketLink;
 
             if (shouldRunCryptoTools) {
-              const out = await runCryptoToolAgent({
-                openRouter,
-                model: DEFAULT_CHAT_MODEL,
-                baseUrl,
-                userId: chat.userId,
-                userText: content,
-                // Always fetch a fresh report for claw-v5 to avoid stale data.
-                forceRefresh: true,
-              });
-              cryptoToolData = out;
+              // Immediate phase so the client never sits on "Connecting…" with only the countdown
+              // while tools run (crypto domain skips the Pass 0 `markets` status).
+              sendStatus("report", "Gathering crypto context…");
 
-              if (out?.kind === "indicator") {
-                const embedPayload = {
-                  kind: "indicator",
-                  token: out.token,
-                  analysis: out.analysis,
-                  question: content,
-                };
-                cryptoEmbedsText = `\n\n\`\`\`cryptotech\n${JSON.stringify(
-                  embedPayload
-                )}\n\`\`\`\n`;
-              } else if (out?.kind === "technical_report") {
+              const buildTechnicalReportEmbed = (out: {
+                token: any;
+                report: any;
+              }) => {
                 const reportMd = String(out?.report?.report || "").trim();
                 const embedPayload = {
                   kind: "technical_report",
@@ -534,6 +661,118 @@ export async function POST(
                 cryptoEmbedsText = `\n\n\`\`\`cryptotech\n${JSON.stringify(
                   embedPayload
                 )}\n\`\`\`\n`;
+              };
+
+              if (cryptoIntent?.kind === "technical_report") {
+                const resolveChainHint:
+                  | "solana"
+                  | "bsc"
+                  | "base"
+                  | "ethereum"
+                  | "monad"
+                  | "all" =
+                  trendingHintForSelectedChain ??
+                  (cryptoIntent.chainHint === "bsc"
+                    ? "bsc"
+                    : cryptoIntent.chainHint === "solana"
+                      ? "solana"
+                      : cryptoIntent.chainHint === "ethereum"
+                        ? "ethereum"
+                      : "all");
+                const token = await resolveTokenFromQuery({
+                  baseUrl,
+                  rawTokenQuery: cryptoIntent.rawTokenQuery,
+                  chainHint: resolveChainHint,
+                });
+                if (!token) {
+                  cryptoToolData = {
+                    kind: "needs_token",
+                    reason:
+                      "I couldn’t resolve the token. Please provide a token mint/contract address or a clearer ticker (e.g. $SOL, $WIF, or the mint address).",
+                  };
+                } else {
+                  sendStatus("report");
+                  const ticker = (
+                    token.symbol ||
+                    stripTickerPrefix(cryptoIntent.rawTokenQuery) ||
+                    ""
+                  ).toString();
+                  const report = await fetchTechnicalReportStream({
+                    userId: chat.userId,
+                    contractAddress: token.tokenAddress,
+                    ticker,
+                    projectName: token.name,
+                    forceRefresh: false,
+                    explicitChain:
+                      reportExplicitChainFromUi(
+                        forcedUiCryptoChain ??
+                          (cryptoChain as ClawCryptoChainUi | undefined),
+                      ),
+                    onToken: (d) => {
+                      controller.enqueue(
+                        encoder.encode(
+                          JSON.stringify({ type: "reportDelta", text: d }) +
+                            "\n"
+                        )
+                      );
+                    },
+                  });
+                  const displayToken = {
+                    ...token,
+                    tokenAddress: report.contractAddress || token.tokenAddress,
+                    chainId: report.chain || token.chainId,
+                    symbol: report.ticker || token.symbol,
+                    name: report.projectName ?? token.name,
+                  };
+                  cryptoToolData = {
+                    kind: "technical_report",
+                    intent: cryptoIntent,
+                    token: displayToken,
+                    report,
+                  };
+                  buildTechnicalReportEmbed({
+                    token: displayToken,
+                    report,
+                  });
+                }
+              } else {
+                if (detectCryptoToolIntent(content)?.kind === "technical_report") {
+                  sendStatus("report");
+                }
+                const out = await runCryptoToolAgent({
+                  openRouter,
+                  model: DEFAULT_CHAT_MODEL,
+                  baseUrl,
+                  userId: chat.userId,
+                  userText: content,
+                  forceRefresh: false,
+                  forcedUiCryptoChain,
+                  onTechnicalReportToken: (d) => {
+                    controller.enqueue(
+                      encoder.encode(
+                        JSON.stringify({ type: "reportDelta", text: d }) + "\n",
+                      ),
+                    );
+                  },
+                });
+                cryptoToolData = out;
+
+                if (out?.kind === "indicator") {
+                  const embedPayload = {
+                    kind: "indicator",
+                    token: out.token,
+                    analysis: out.analysis,
+                    question: content,
+                  };
+                  cryptoEmbedsText = `\n\n\`\`\`cryptotech\n${JSON.stringify(
+                    embedPayload
+                  )}\n\`\`\`\n`;
+                } else if (out?.kind === "technical_report") {
+                  buildTechnicalReportEmbed({
+                    token: out.token,
+                    report: out.report,
+                  });
+                }
               }
             }
           } catch (err) {
@@ -551,7 +790,7 @@ export async function POST(
             sendStatus("research");
             try {
               const researchStream = await openRouter.chat.send({
-                model: "openai/gpt-4o-search-preview",  //openai/gpt-4o-mini-search-preview
+                model: "openai/gpt-4o-search-preview", //openai/gpt-4o-mini-search-preview
                 messages: [
                   {
                     role: "system" as const,
@@ -563,7 +802,14 @@ export async function POST(
                 stream: true,
                 streamOptions: { includeUsage: true },
               });
-              webResearchNotes = (await streamToText(researchStream)).trim();
+              webResearchNotes = (
+                await streamOpenRouterDeltasToClient(
+                  researchStream,
+                  controller,
+                  encoder,
+                  "research",
+                )
+              ).trim();
             } catch (err) {
               console.error("Claw v5 web research pass failed:", err);
               webResearchNotes = "";
@@ -585,7 +831,14 @@ export async function POST(
                 stream: true,
                 streamOptions: { includeUsage: true },
               });
-              modelDraft = (await streamToText(draftStream)).trim();
+              modelDraft = (
+                await streamOpenRouterDeltasToClient(
+                  draftStream,
+                  controller,
+                  encoder,
+                  "draft",
+                )
+              ).trim();
             } catch (err) {
               console.error("Claw v5 default model pass failed:", err);
               modelDraft = "";
@@ -594,6 +847,11 @@ export async function POST(
 
           // Pass 3: synthesis (streamed to client); skip when top-markets-only
           sendStatus("synth");
+          if (!isTopMarketsOnly) {
+            controller.enqueue(
+              encoder.encode(JSON.stringify({ type: "synthStart" }) + "\n"),
+            );
+          }
 
           const cryptoReportNoDupAddendum =
             cryptoToolData?.kind === "technical_report"
@@ -601,7 +859,7 @@ export async function POST(
 - A full technical report has already been rendered for the user in a dedicated report card UI. DO NOT reprint or restate the report in full.
 - Instead, write a concise, high-signal answer to the user's message using the report as background context.
 - If the user asked for a "full report" or "analysis", reply with 5-10 bullet "Key takeaways" + 3-5 "Risks / Watchouts", and invite a follow-up question.
-- If the user asked about Twitter/X sentiment, public opinion, community chatter, or "what are people saying", focus ONLY on Community Chatter + Individual Tweets insights from the report (summarize, do not quote long blocks).
+- If the user asked about Twitter/X sentiment, public opinion, community chatter, or "what are people saying", focus ONLY on Community Chatter + Top Tweets insights from the report (summarize, do not quote long blocks).
 - If the user asked a narrow question (e.g. safety, holders, liquidity), answer using ONLY the relevant section(s) and keep it short.`
               : "";
 
@@ -656,7 +914,13 @@ export async function POST(
                 ? ("kalshi" as const)
                 : marketMode === "Polymarket"
                   ? ("polymarket" as const)
-                  : inferProviderFromTopMarketsQuery(content);
+                  : marketMode === "Markets" && predictionSubmode === "limitless"
+                    ? ("limitless" as const)
+                    : marketMode === "Markets" && predictionSubmode === "myriad"
+                      ? ("myriad" as const)
+                    : marketMode === "Markets" && predictionSubmode === "predictfun"
+                      ? ("predictfun" as const)
+                    : inferProviderFromTopMarketsQuery(content);
             const topMarketsCaption = buildTopMarketsSuggestMessage({
               category: topMarketsCategory,
               provider: topMarketsProvider,
@@ -671,7 +935,7 @@ export async function POST(
             const synthesisUserContent = [
               `User question:\n${content}`,
               raptorxMarketData
-                ? `\n\nRaptorX market data (Kalshi/Polymarket):\n${JSON.stringify(
+                ? `\n\nRaptorX market data (Kalshi/Polymarket/Limitless/Myriad/Predict.fun):\n${JSON.stringify(
                     raptorxMarketData
                   )}`
                 : "",
@@ -730,7 +994,15 @@ export async function POST(
               const sourcesList = merged
                 .map((u) => `- [${u}](${u})`)
                 .join("\n");
-              fullAiResponse += `\n\n---\n\nSources:\n${sourcesList}\n`;
+              const sourcesAppend = `\n\n---\n\nSources:\n${sourcesList}\n`;
+              fullAiResponse += sourcesAppend;
+              // Stream the same text so the client’s running buffer matches the final `aiMessage`
+              // (avoids a visible “restart” when auto-appended Sources were never chunked).
+              controller.enqueue(
+                encoder.encode(
+                  JSON.stringify({ type: "chunk", content: sourcesAppend }) + "\n"
+                )
+              );
             }
           }
 

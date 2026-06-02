@@ -4,13 +4,47 @@ import { X } from "lucide-react";
 import { SwapWidget } from "@/components/swap/SwapWidget";
 import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
 import { useEthereumWalletAddress } from "@/hooks/useEthereumWalletAddress";
+import { detectChain } from "@/utils/detectChain";
 
-function resolveForceChain(chainId?: string): "solana" | "bsc" | undefined {
-  const c = String(chainId || "").toLowerCase();
-  if (!c) return undefined;
-  if (c.includes("bsc") || c.includes("bnb") || c === "56") return "bsc";
-  if (c.includes("sol")) return "solana";
-  return undefined;
+/**
+ * Map a Claw cryptotech payload to the chain flag SwapWidget expects so LiFi gets
+ * fromChain/fromToken (native) + toToken pre-filled for Base, Monad, BNB, and Solana.
+ */
+function resolveSwapChainFromPayload(payload: any | null): {
+  forceChain: "solana" | "bsc" | "ethereum" | "base" | "monad" | undefined;
+} {
+  if (!payload) return { forceChain: undefined };
+  const token = payload?.token ?? null;
+  const explicitRaw =
+    token?.chainId ??
+    token?.chain ??
+    payload?.report?.chain ??
+    payload?.metadata?.chain ??
+    (payload?.report as { metadata?: { chain?: string } } | undefined)?.metadata
+      ?.chain ??
+    payload?.dexData?.chainId ??
+    payload?.dexData?.chain;
+
+  if (explicitRaw != null && String(explicitRaw).trim() !== "") {
+    const normalized = detectChain({ explicitChain: String(explicitRaw) });
+    return { forceChain: normalized };
+  }
+
+  const addr = String(
+    token?.tokenAddress ||
+      token?.contractAddress ||
+      payload?.report?.contractAddress ||
+      payload?.metadata?.contractAddress ||
+      "",
+  ).trim();
+  if (addr.startsWith("0x") && addr.length === 42) {
+    // EVM address without chain metadata — default to Ethereum mainnet.
+    return { forceChain: "ethereum" };
+  }
+  if (addr.length >= 32) {
+    return { forceChain: "solana" };
+  }
+  return { forceChain: undefined };
 }
 
 export function CryptoSwapPanel({
@@ -26,15 +60,22 @@ export function CryptoSwapPanel({
 }) {
   const token = payload?.token ?? null;
   const tokenAddress: string | null =
-    token?.tokenAddress || token?.contractAddress || null;
-  const forceChain = resolveForceChain(token?.chainId);
+    token?.tokenAddress ||
+    token?.contractAddress ||
+    payload?.report?.contractAddress ||
+    payload?.metadata?.contractAddress ||
+    null;
+  const { forceChain } = resolveSwapChainFromPayload(payload);
 
   const { solanaAddress } = useSolanaWalletAddress();
   const { ethereumAddress } = useEthereumWalletAddress();
   const walletAddress =
     forceChain === "solana"
       ? solanaAddress
-      : forceChain === "bsc"
+      : forceChain === "bsc" ||
+          forceChain === "ethereum" ||
+          forceChain === "base" ||
+          forceChain === "monad"
         ? ethereumAddress
         : null;
 
@@ -52,7 +93,7 @@ export function CryptoSwapPanel({
       <div className="h-full">
         {isOpen ? (
           <SwapWidget
-            key={`swap-${tokenAddress || "none"}`}
+            key={`swap-${forceChain ?? "auto"}-${tokenAddress || "none"}`}
             currentUserId={currentUserId}
             toTokenAddress={tokenAddress}
             forceChain={forceChain}

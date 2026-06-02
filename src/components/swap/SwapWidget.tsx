@@ -18,21 +18,27 @@ import { getHeliusRpcUrl } from "@/lib/rpc";
 interface SwapWidgetProps {
   currentUserId: string;
   toTokenAddress?: string | null;
-  forceChain?: "solana" | "bsc" | "base" | "monad";
+  forceChain?: "solana" | "bsc" | "ethereum" | "base" | "monad";
   walletAddress?: string | null;
 }
 
 type HandlerRefs = {
   currentUserId: string | undefined;
   toTokenAddress: string | null | undefined;
-  resolvedChain: "solana" | "bsc" | "base" | "monad" | undefined;
+  resolvedChain:
+    | "solana"
+    | "bsc"
+    | "ethereum"
+    | "base"
+    | "monad"
+    | undefined;
   walletAddress: string | null | undefined;
 };
 
 function resolveChain(
-  forceChain: "solana" | "bsc" | "base" | "monad" | undefined,
+  forceChain: "solana" | "bsc" | "ethereum" | "base" | "monad" | undefined,
   _toTokenAddress: string | null | undefined,
-): "solana" | "bsc" | "base" | "monad" | undefined {
+): "solana" | "bsc" | "ethereum" | "base" | "monad" | undefined {
   // If a chain is explicitly forced (Solana, BSC, Base, Monad), respect it.
   // Otherwise, let the LiFi widget pick the appropriate chain based on the token.
   if (forceChain) return forceChain;
@@ -286,6 +292,8 @@ export function SwapWidget({
         chain:
           chain === "bsc"
             ? "bnb"
+            : chain === "ethereum"
+              ? "ethereum"
             : chain === "base"
               ? "base"
               : "solana",
@@ -425,6 +433,37 @@ export function SwapWidget({
                   fromChain: 56,
                   fromToken: "0x0000000000000000000000000000000000000000",
                   toChain: 56,
+                  toToken: toTokenAddress ? toTokenAddress : undefined,
+                }}
+              />
+            </ClientOnly>
+          </div>
+        )}
+
+        {/* Explicit Ethereum configuration */}
+        {resolvedChain === "ethereum" && (
+          <div className="w-full p-0">
+            <ClientOnly
+              fallback={
+                <div className="flex items-center justify-center h-full">
+                  <WidgetSkeleton
+                    config={{
+                      ...baseWidgetConfig,
+                      toToken: toTokenAddress ? toTokenAddress : undefined,
+                    }}
+                  />
+                </div>
+              }
+            >
+              <LiFiWidget
+                key={`lifi-ethereum-${toTokenAddress || "none"}`}
+                integrator="huntonraptor"
+                fee={0.01}
+                config={{
+                  ...baseWidgetConfig,
+                  fromChain: 1,
+                  fromToken: "0x0000000000000000000000000000000000000000",
+                  toChain: 1,
                   toToken: toTokenAddress ? toTokenAddress : undefined,
                 }}
               />

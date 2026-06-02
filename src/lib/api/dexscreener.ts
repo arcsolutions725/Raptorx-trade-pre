@@ -70,17 +70,54 @@ export async function getDexscreenerData(
       return { error: "No DexScreener data found" };
     }
 
-    // Sort pairs by 24h trading volume (highest first)
-    // const sortedPairs = [...data.pairs].sort(
-    //   (a, b) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0)
-    // );
+    const sortedPairs = [...data.pairs].sort(
+      (a, b) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0)
+    );
 
-    // Pick the highest volume pair
-    const bestPair = data.pairs[0];
+    const bestPair = sortedPairs[0];
 
     return bestPair;
   } catch (err: any) {
     console.error("DexScreener API Error:", err.message || err);
     return { error: "Failed to fetch DexScreener data" };
+  }
+}
+
+const MAX_PAIR_CREATED_SKEW_SEC = 86_400;
+
+/**
+ * Earliest `pairCreatedAt` across DexScreener pools for this token (seconds since epoch).
+ * Used when Birdeye omits creation time (common for some Golden/Pump registry tokens).
+ */
+export async function tryDexscreenerEarliestPairCreatedSeconds(
+  contractAddress: string,
+): Promise<number | undefined> {
+  const addr = contractAddress?.trim();
+  if (!addr) return undefined;
+  const maxSec = Math.floor(Date.now() / 1000) + MAX_PAIR_CREATED_SKEW_SEC;
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 8000);
+  try {
+    const res = await fetch(
+      `${DEXSCREENER_BASE}/latest/dex/tokens/${encodeURIComponent(addr)}`,
+      { cache: "no-store", signal: ctrl.signal },
+    );
+    if (!res.ok) return undefined;
+    const data: DexScreenerTokenProfile = await res.json();
+    if (!data?.pairs?.length) return undefined;
+    let earliest: number | undefined;
+    for (const p of data.pairs) {
+      const raw = p?.pairCreatedAt;
+      if (typeof raw !== "number" || !Number.isFinite(raw)) continue;
+      const sec = raw > 1e12 ? Math.floor(raw / 1000) : Math.floor(raw);
+      if (sec > 946684800 && sec <= maxSec) {
+        if (earliest === undefined || sec < earliest) earliest = sec;
+      }
+    }
+    return earliest;
+  } catch {
+    return undefined;
+  } finally {
+    clearTimeout(timer);
   }
 }

@@ -1,43 +1,131 @@
 // app/api/trending/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
+import { enrichWithCreation } from "@/lib/birdeyeTokenCreationInfo";
 
 export const dynamic = "force-dynamic";
 
 // ------- Upstreams -------
-const BIRDEYE_TOKENLIST = "https://public-api.birdeye.so/defi/tokenlist";
-const BIRDEYE_CREATION =
-  "https://public-api.birdeye.so/defi/token_creation_info";
-const BIRDEYE_TOKEN_OVERVIEW =
-  "https://public-api.birdeye.so/defi/token_overview";
-const JUP_VERIFIED_URL = "https://lite-api.jup.ag/tokens/v2/tag?query=verified";
+/** Uniblock Direct API (Birdeye provider) for token list + token data used by screener table. */
+const UNIBLOCK_BIRDEYE_BASE = "https://api.uniblock.dev/direct/v1/Birdeye";
+/** Token list: V3 (Base / EVM + Solana). */
+const BIRDEYE_TOKENLIST_V3 = `${UNIBLOCK_BIRDEYE_BASE}/defi/v3/token/list`;
+const BIRDEYE_V3_SEARCH = `${UNIBLOCK_BIRDEYE_BASE}/defi/v3/search`;
+const BIRDEYE_TOKEN_OVERVIEW = `${UNIBLOCK_BIRDEYE_BASE}/defi/token_overview`;
+/** Jupiter Tokens V2 — full verified catalog (one response; avoids Birdeye list rate limits). */
+const JUP_TAG_VERIFIED_PRIMARY =
+  "https://api.jup.ag/tokens/v2/tag?query=verified";
+const JUP_TAG_VERIFIED_LITE =
+  "https://lite-api.jup.ag/tokens/v2/tag?query=verified";
 
-// Birdeye hard cap
-const BIRDEYE_PAGE_MAX = 50; // Birdeye requires 1..50
+// Birdeye token list V3: https://docs.birdeye.so/reference/get-defi-v3-token-list
+const BIRDEYE_V3_LIST_MAX = 100; // limit 1..100
+const BIRDEYE_V3_OFFSET_LIMIT_MAX_SUM = 10000; // offset + limit <= 10000
 
-// ------- Known fallbacks -------
-// WSOL / NATIVE_MINT (approximate: Solana mainnet-beta genesis, 2020-03-16T00:00:00Z)
-const KNOWN_CREATION_TIMES: Record<string, number> = {
-  so11111111111111111111111111111111111111112: 1584316800,
+/** Legacy V1 sort_by → V3 sort_by */
+const BIRDEYE_V3_SORT_LEGACY: Record<string, string> = {
+  mc: "market_cap",
+  v24hUSD: "volume_24h_usd",
+  v24hChangePercent: "volume_24h_change_percent",
+  liquidity: "liquidity",
 };
+
+const BIRDEYE_V3_SORT_ALLOWED = new Set([
+  "liquidity",
+  "market_cap",
+  "fdv",
+  "recent_listing_time",
+  "last_trade_unix_time",
+  "holder",
+  "volume_1m_usd",
+  "volume_5m_usd",
+  "volume_30m_usd",
+  "volume_1h_usd",
+  "volume_2h_usd",
+  "volume_4h_usd",
+  "volume_8h_usd",
+  "volume_24h_usd",
+  "volume_7d_usd",
+  "volume_30d_usd",
+  "volume_1m_change_percent",
+  "volume_5m_change_percent",
+  "volume_30m_change_percent",
+  "volume_1h_change_percent",
+  "volume_2h_change_percent",
+  "volume_4h_change_percent",
+  "volume_8h_change_percent",
+  "volume_24h_change_percent",
+  "volume_7d_change_percent",
+  "volume_30d_change_percent",
+  "price_change_1m_percent",
+  "price_change_5m_percent",
+  "price_change_30m_percent",
+  "price_change_1h_percent",
+  "price_change_2h_percent",
+  "price_change_4h_percent",
+  "price_change_8h_percent",
+  "price_change_24h_percent",
+  "price_change_7d_percent",
+  "price_change_30d_percent",
+  "trade_1m_count",
+  "trade_5m_count",
+  "trade_30m_count",
+  "trade_1h_count",
+  "trade_2h_count",
+  "trade_4h_count",
+  "trade_8h_count",
+  "trade_24h_count",
+  "trade_7d_count",
+  "trade_30d_count",
+]);
+
+function birdeyeV3SortBy(fromClient: string): string {
+  if (BIRDEYE_V3_SORT_LEGACY[fromClient]) {
+    return BIRDEYE_V3_SORT_LEGACY[fromClient];
+  }
+  if (BIRDEYE_V3_SORT_ALLOWED.has(fromClient)) return fromClient;
+  return "volume_24h_usd";
+}
+
+function clampBirdeyeV3OffsetLimit(
+  offset: number,
+  limit: number
+): { offset: number; limit: number } {
+  const o = Math.max(
+    0,
+    Math.min(Math.floor(offset), BIRDEYE_V3_OFFSET_LIMIT_MAX_SUM - 1)
+  );
+  const maxLimit = Math.max(1, BIRDEYE_V3_OFFSET_LIMIT_MAX_SUM - o);
+  const l = Math.min(
+    Math.max(1, Math.floor(limit)),
+    BIRDEYE_V3_LIST_MAX,
+    maxLimit
+  );
+  return { offset: o, limit: l };
+}
 
 // ------- Types -------
 type ListOk = {
   ok: true;
   tokens: any[];
   meta: {
-    total: number;
+    /** V3 often omits global total; use hasNext + offset for pagination */
+    total: number | undefined;
     updateUnixTime: number | null;
     updateTime: string | null;
+    hasNext?: boolean;
+    /** Actual limit sent to Birdeye (after offset+limit clamp) */
+    pageLimit: number;
   };
 };
 type ListErr = { ok: false; error: string; status: number };
 type ListResult = ListOk | ListErr;
 
 // ------- Caches -------
-const CREATION_CACHE = new Map<string, number | null>();
-const JUP_VERIFIED_TTL_MS = 10 * 60 * 1000; // 10 min
-let JUP_VERIFIED_CACHE: { set: Set<string>; expiresAt: number } | null = null;
+/** Cache normalized Jupiter verified rows (shared by set + Solana verified table). */
+const JUP_VERIFIED_CATALOG_TTL_MS = 2 * 60 * 1000; // 2 min — large payload; lowers repeat traffic
+let jupiterVerifiedCatalogCache: { rows: any[]; expiresAt: number } | null =
+  null;
 
 // BNB verified tokens cache (Trust Wallet + PancakeSwap lists)
 const BNB_VERIFIED_TTL_MS = 10 * 60 * 1000; // 10 min
@@ -69,15 +157,74 @@ function createLimiter(concurrency: number) {
   };
 }
 
+function coerceFiniteNumber(v: unknown): number | undefined {
+  if (typeof v === "number" && Number.isFinite(v)) return v;
+  if (typeof v === "string") {
+    const s = v.trim();
+    if (!s) return undefined;
+    const n = Number(s);
+    if (Number.isFinite(n)) return n;
+  }
+  return undefined;
+}
+
+/** Drop absurd FDV/manipulation rows (huge mcap vs negligible liquidity). */
+function passesSearchLiquiditySanity(t: any): boolean {
+  const mc = coerceFiniteNumber(t?.marketCap) ?? 0;
+  const liq = coerceFiniteNumber(t?.liquidityUsd) ?? 0;
+  if (!(mc > 0)) return true;
+  if (mc >= 1e12 && liq < 5000) return false;
+  if (
+    mc >= 1e9 &&
+    liq >= 0 &&
+    liq < 200 &&
+    mc / Math.max(liq, 1e-12) > 5e7
+  ) {
+    return false;
+  }
+  if (mc > 5e7 && liq > 0 && liq < 40) return false;
+  return true;
+}
+
+function shouldKeepTickerSearchRow(row: any, chainFetch: string): boolean {
+  const chain = String(chainFetch || "solana").toLowerCase();
+  if (chain === "solana") {
+    // Solana search must only return Birdeye-verified rows.
+    return row?.verified === true;
+  }
+  if (chain === "all") {
+    // When searching all chains, enforce verified only for Solana rows.
+    const rowChain = String(row?.chainId ?? "").toLowerCase();
+    if (rowChain === "solana") return row?.verified === true;
+  }
+  // EVM chains: do not apply external trust/scam lists in ticker search.
+  return true;
+}
+
+function applyTickerSearchResultFilter(rows: any[], chainFetch: string): any[] {
+  if (!rows.length) return [];
+  const sane = rows.filter(passesSearchLiquiditySanity);
+  if (!sane.length) return [];
+  return sane.filter((row) => shouldKeepTickerSearchRow(row, chainFetch));
+}
+
 function filterValidMarketCap(tokens: any[], chain: string): any[] {
-  // For BNB and Base (EVM), filter out tokens with market cap of 0 or null/undefined
-  if (chain === "bsc" || chain === "base") {
+  if (
+    chain === "bsc" ||
+    chain === "base" ||
+    chain === "monad" ||
+    chain === "ethereum"
+  ) {
     return tokens.filter((token) => {
-      const mc = token?.marketCap;
-      return mc !== null && mc !== undefined && mc > 0;
+      const mc = coerceFiniteNumber(token?.marketCap);
+      if (mc !== undefined && mc > 0) return true;
+      if (chain === "bsc") return false;
+      const liq = coerceFiniteNumber(token?.liquidityUsd);
+      if (liq !== undefined && liq > 0) return true;
+      const vol = coerceFiniteNumber(token?.totalVolume?.["24h"]);
+      return vol !== undefined && vol > 0;
     });
   }
-  // For other chains, return tokens as-is
   return tokens;
 }
 
@@ -85,6 +232,20 @@ function toInt(val: any, def: number, min = 0, max = Number.MAX_SAFE_INTEGER) {
   const n = Number.parseInt(String(val), 10);
   if (Number.isFinite(n)) return Math.min(max, Math.max(min, n));
   return def;
+}
+
+/** Solana mints are base58 and case-sensitive; lowercasing breaks Birdeye (400). EVM = lowercase. */
+function tokenAddressLookupKey(chain: string, address: string): string {
+  const a = String(address || "").trim();
+  if (!a) return "";
+  return chain === "solana" ? a : a.toLowerCase();
+}
+
+/** Param value for Birdeye `address` query (preserve valid Solana casing). */
+function birdeyeTokenAddressParam(chain: string, address: string): string {
+  const a = String(address || "").trim();
+  if (!a) return a;
+  return chain === "solana" ? a : a.toLowerCase();
 }
 
 function dedupeByAddress(items: any[]) {
@@ -105,50 +266,41 @@ function dedupeByAddress(items: any[]) {
 // ------- Normalizers -------
 function normalizeBirdeyeTokenOverview(data: any, chain: string) {
   const address = data?.address ?? data?.mint ?? null;
-  const price = typeof data?.price === "number" ? data.price : undefined;
+  const price = coerceFiniteNumber(data?.price);
 
   const marketCap =
-    typeof data?.mc === "number"
-      ? data.mc
-      : typeof data?.marketCap === "number"
-      ? data.marketCap
-      : typeof data?.realMc === "number"
-      ? data.realMc
-      : undefined;
+    coerceFiniteNumber(data?.mc) ??
+    coerceFiniteNumber(data?.market_cap) ??
+    coerceFiniteNumber(data?.marketCap) ??
+    coerceFiniteNumber(data?.realMc);
 
-  const liquidityUsd =
-    typeof data?.liquidity === "number" ? data.liquidity : undefined;
+  const liquidityUsd = coerceFiniteNumber(data?.liquidity);
 
   const v24hUSD =
-    typeof data?.v24hUSD === "number"
-      ? data.v24hUSD
-      : typeof data?.volume24hUSD === "number"
-      ? data.volume24hUSD
-      : undefined;
+    coerceFiniteNumber(data?.v24hUSD) ??
+    coerceFiniteNumber(data?.volume24hUSD) ??
+    coerceFiniteNumber(data?.volume_24h_usd);
 
   const priceChange24h =
-    typeof data?.priceChange24hPercent === "number"
-      ? data.priceChange24hPercent
-      : typeof data?.priceChange24h === "number"
-      ? data.priceChange24h
-      : undefined;
+    coerceFiniteNumber(data?.price_change_24h_percent) ??
+    coerceFiniteNumber(data?.priceChange24hPercent) ??
+    coerceFiniteNumber(data?.priceChange24h);
 
-  const lastTradeUnixTime =
-    typeof data?.lastTradeUnixTime === "number"
-      ? data.lastTradeUnixTime
-      : undefined;
+  const volumeChange24h =
+    coerceFiniteNumber(data?.volume_24h_change_percent) ??
+    coerceFiniteNumber(data?.v24hChangePercent);
 
-  // Try to get creation time from various fields (Birdeye might include it in overview for some chains)
+  const lastTradeUnixTime = coerceFiniteNumber(data?.lastTradeUnixTime);
+
   const createdAt =
-    typeof data?.createdAt === "number"
-      ? data.createdAt
-      : typeof data?.creationTime === "number"
-      ? data.creationTime
-      : typeof data?.creationTimestamp === "number"
-      ? data.creationTimestamp
-      : typeof data?.deployTime === "number"
-      ? data.deployTime
-      : undefined;
+    coerceFiniteNumber(data?.createdAt) ??
+    coerceFiniteNumber(data?.creationTime) ??
+    coerceFiniteNumber(data?.creationTimestamp) ??
+    coerceFiniteNumber(data?.deployTime);
+
+  const decimalsRawOv = coerceFiniteNumber(data?.decimals);
+  const decimalsOv =
+    decimalsRawOv !== undefined ? Math.trunc(decimalsRawOv) : undefined;
 
   return {
     chainId: chain,
@@ -156,7 +308,7 @@ function normalizeBirdeyeTokenOverview(data: any, chain: string) {
     name: data?.name ?? undefined,
     uniqueName: null,
     symbol: data?.symbol ?? undefined,
-    decimals: typeof data?.decimals === "number" ? data.decimals : undefined,
+    decimals: decimalsOv,
     logo: data?.logoURI ?? data?.logo ?? undefined,
 
     usdPrice: price,
@@ -164,67 +316,72 @@ function normalizeBirdeyeTokenOverview(data: any, chain: string) {
     liquidityUsd,
 
     pricePercentChange: { "24h": priceChange24h },
+    volumePercentChange: { "24h": volumeChange24h },
     totalVolume: { "24h": v24hUSD },
 
     createdAt, // Try from overview first, then enriched via creation_info
     lastTradeUnixTime,
 
-    rank: typeof data?.rank === "number" ? data.rank : undefined,
+    rank: coerceFiniteNumber(data?.rank),
   } as any;
 }
 
 function normalizeTokenlistToken(t: any, chain: string) {
   const address = t?.address ?? t?.mint ?? null;
-  const price = typeof t?.price === "number" ? t.price : undefined;
+  const price = coerceFiniteNumber(t?.price);
 
   const marketCap =
-    typeof t?.mc === "number"
-      ? t.mc
-      : typeof t?.marketcap === "number"
-      ? t.marketcap
-      : typeof t?.fdv === "number"
-      ? t.fdv
-      : undefined;
+    coerceFiniteNumber(t?.mc) ??
+    coerceFiniteNumber(t?.market_cap) ??
+    coerceFiniteNumber(t?.marketcap) ??
+    coerceFiniteNumber(t?.fdv);
 
-  const liquidityUsd =
-    typeof t?.liquidity === "number" ? t.liquidity : undefined;
+  const liquidityUsd = coerceFiniteNumber(t?.liquidity);
 
   const v24hUSD =
-    typeof t?.v24hUSD === "number"
-      ? t.v24hUSD
-      : typeof t?.volume24hUSD === "number"
-      ? t.volume24hUSD
-      : undefined;
+    coerceFiniteNumber(t?.v24hUSD) ??
+    coerceFiniteNumber(t?.volume24hUSD) ??
+    coerceFiniteNumber(t?.volume_24h_usd);
 
   const priceChange24h =
-    typeof t?.v24hChangePercent === "number"
-      ? t.v24hChangePercent
-      : typeof t?.price24hChangePercent === "number"
-      ? t.price24hChangePercent
-      : undefined;
+    coerceFiniteNumber(t?.price_change_24h_percent) ??
+    coerceFiniteNumber(t?.price24hChangePercent) ??
+    coerceFiniteNumber(t?.priceChange24hPercent) ??
+    coerceFiniteNumber(t?.priceChange24h);
+
+  const volumeChange24h =
+    coerceFiniteNumber(t?.volume_24h_change_percent) ??
+    coerceFiniteNumber(t?.v24hChangePercent);
 
   const lastTradeUnixTime =
-    typeof t?.lastTradeUnixTime === "number" ? t.lastTradeUnixTime : undefined;
+    coerceFiniteNumber(t?.lastTradeUnixTime) ??
+    coerceFiniteNumber(t?.last_trade_unix_time);
 
-  // Try to get creation time from various fields
   const createdAt =
-    typeof t?.createdAt === "number"
-      ? t.createdAt
-      : typeof t?.creationTime === "number"
-      ? t.creationTime
-      : typeof t?.creationTimestamp === "number"
-      ? t.creationTimestamp
-      : typeof t?.deployTime === "number"
-      ? t.deployTime
-      : undefined;
+    coerceFiniteNumber(t?.createdAt) ??
+    coerceFiniteNumber(t?.creationTime) ??
+    coerceFiniteNumber(t?.creationTimestamp) ??
+    coerceFiniteNumber(t?.deployTime) ??
+    coerceFiniteNumber(t?.recent_listing_time);
+
+  const decimalsRaw = coerceFiniteNumber(t?.decimals);
+  const decimals =
+    decimalsRaw !== undefined ? Math.trunc(decimalsRaw) : undefined;
+
+  const verified =
+    typeof t?.verified === "boolean"
+      ? t.verified
+      : typeof t?.is_verified === "boolean"
+        ? t.is_verified
+        : undefined;
 
   return {
     chainId: chain,
     tokenAddress: address || undefined,
     name: t?.name ?? undefined,
     uniqueName: null,
-    symbol: t?.symbol ?? undefined,
-    decimals: typeof t?.decimals === "number" ? t.decimals : undefined,
+    symbol: t?.symbol ?? t?.symbols ?? undefined,
+    decimals,
     logo: t?.logoURI ?? t?.logo_uri ?? undefined,
 
     usdPrice: price,
@@ -232,13 +389,264 @@ function normalizeTokenlistToken(t: any, chain: string) {
     liquidityUsd,
 
     pricePercentChange: { "24h": priceChange24h },
+    volumePercentChange: { "24h": volumeChange24h },
     totalVolume: { "24h": v24hUSD },
 
-    createdAt, // Try from tokenlist, then enriched via creation_info
+    createdAt,
     lastTradeUnixTime,
 
-    rank: typeof t?.rank === "number" ? t.rank : undefined,
+    rank: coerceFiniteNumber(t?.rank),
+    verified,
   } as any;
+}
+
+function volumeFromJupiterStats(stats: any): number | undefined {
+  if (!stats || typeof stats !== "object") return undefined;
+  const b = coerceFiniteNumber(stats.buyVolume);
+  const s = coerceFiniteNumber(stats.sellVolume);
+  const sum = (b ?? 0) + (s ?? 0);
+  return sum > 0 ? sum : undefined;
+}
+
+/** Map Jupiter Tokens V2 tag row → same shape as Birdeye token list rows for downstream enrich/sort. */
+function normalizeJupiterVerifiedToken(j: any): any | null {
+  const id = j?.id;
+  if (!id || typeof id !== "string") return null;
+
+  const s5 = j?.stats5m;
+  const s1h = j?.stats1h;
+  const s6h = j?.stats6h;
+  const s24 = j?.stats24h;
+
+  let createdAt: number | undefined;
+  const fp = j?.firstPool?.createdAt;
+  if (typeof fp === "string") {
+    const ms = Date.parse(fp);
+    if (Number.isFinite(ms)) createdAt = Math.floor(ms / 1000);
+  }
+
+  let lastTradeUnixTime: number | undefined;
+  if (typeof j?.updatedAt === "string") {
+    const ms = Date.parse(j.updatedAt);
+    if (Number.isFinite(ms)) lastTradeUnixTime = Math.floor(ms / 1000);
+  }
+
+  const mcap = coerceFiniteNumber(j?.mcap);
+  const fdv = coerceFiniteNumber(j?.fdv);
+
+  return {
+    chainId: "solana",
+    tokenAddress: id,
+    name: j?.name,
+    symbol: j?.symbol,
+    decimals:
+      typeof j?.decimals === "number" && Number.isFinite(j.decimals)
+        ? Math.trunc(j.decimals)
+        : undefined,
+    logo: j?.icon,
+    usdPrice: coerceFiniteNumber(j?.usdPrice),
+    marketCap: mcap ?? fdv,
+    fdv,
+    liquidityUsd: coerceFiniteNumber(j?.liquidity),
+    holders:
+      typeof j?.holderCount === "number" && Number.isFinite(j.holderCount)
+        ? Math.trunc(j.holderCount)
+        : undefined,
+    verified: true,
+    pricePercentChange: {
+      "1h": coerceFiniteNumber(s1h?.priceChange),
+      "24h": coerceFiniteNumber(s24?.priceChange),
+    },
+    volumePercentChange: {
+      "1h": coerceFiniteNumber(s1h?.volumeChange),
+      "24h": coerceFiniteNumber(s24?.volumeChange),
+    },
+    totalVolume: {
+      "5m": volumeFromJupiterStats(s5),
+      "1h": volumeFromJupiterStats(s1h),
+      "6h": volumeFromJupiterStats(s6h),
+      "24h": volumeFromJupiterStats(s24),
+    },
+    createdAt,
+    lastTradeUnixTime,
+  } as any;
+}
+
+function trendingMetricForV3Sort(row: any, sortV3: string): number {
+  const tv = row?.totalVolume ?? {};
+  const ppc = row?.pricePercentChange ?? {};
+  const vpc = row?.volumePercentChange ?? {};
+  const ck = sortV3;
+
+  if (ck === "liquidity") return row?.liquidityUsd ?? 0;
+  if (ck === "market_cap") return row?.marketCap ?? 0;
+  if (ck === "fdv") return row?.fdv ?? row?.marketCap ?? 0;
+  if (ck === "recent_listing_time") return row?.createdAt ?? 0;
+  if (ck === "last_trade_unix_time") return row?.lastTradeUnixTime ?? 0;
+  if (ck === "holder") return row?.holders ?? 0;
+
+  if (ck.startsWith("volume_") && ck.endsWith("_usd")) {
+    if (ck.includes("24h") || ck.includes("7d") || ck.includes("30d"))
+      return tv?.["24h"] ?? 0;
+    if (ck.includes("1h") || ck.includes("2h"))
+      return tv?.["1h"] ?? tv?.["6h"] ?? 0;
+    if (ck.includes("30m") || ck.includes("5m") || ck.includes("1m"))
+      return tv?.["5m"] ?? 0;
+    if (ck.includes("4h") || ck.includes("8h")) return tv?.["6h"] ?? 0;
+    return tv?.["24h"] ?? 0;
+  }
+
+  if (ck.startsWith("price_change_") && ck.endsWith("_percent")) {
+    if (ck.includes("24h") || ck.includes("7d") || ck.includes("30d"))
+      return ppc?.["24h"] ?? 0;
+    if (ck.includes("1h") || ck.includes("2h") || ck.includes("4h"))
+      return ppc?.["1h"] ?? ppc?.["24h"] ?? 0;
+    return ppc?.["24h"] ?? 0;
+  }
+
+  if (ck.startsWith("volume_") && ck.endsWith("_change_percent")) {
+    if (ck.includes("24h") || ck.includes("7d") || ck.includes("30d"))
+      return vpc?.["24h"] ?? 0;
+    if (ck.includes("1h")) return vpc?.["1h"] ?? vpc?.["24h"] ?? 0;
+    return vpc?.["24h"] ?? 0;
+  }
+
+  if (ck.startsWith("trade_") && ck.endsWith("_count")) return 0;
+
+  return tv?.["24h"] ?? row?.marketCap ?? 0;
+}
+
+function sortTrendingRowsForV3(
+  rows: any[],
+  sortV3: string,
+  sort_type: "asc" | "desc"
+) {
+  const mul = sort_type === "asc" ? 1 : -1;
+  rows.sort((a, b) => {
+    const va = trendingMetricForV3Sort(a, sortV3);
+    const vb = trendingMetricForV3Sort(b, sortV3);
+    if (va !== vb) return mul * (va > vb ? 1 : va < vb ? -1 : 0);
+    const ma = a?.marketCap ?? 0;
+    const mb = b?.marketCap ?? 0;
+    if (ma !== mb) return mul * (ma > mb ? 1 : ma < mb ? -1 : 0);
+    return String(a?.tokenAddress ?? "").localeCompare(
+      String(b?.tokenAddress ?? "")
+    );
+  });
+}
+
+async function getJupiterVerifiedCatalogNormalized(): Promise<any[] | null> {
+  const now = Date.now();
+  if (
+    jupiterVerifiedCatalogCache &&
+    jupiterVerifiedCatalogCache.expiresAt > now
+  ) {
+    return jupiterVerifiedCatalogCache.rows;
+  }
+
+  const apiKey = process.env.JUPITER_API_KEY || process.env.JUP_API_KEY || "";
+
+  const tryFetch = async (
+    url: string,
+    headers: Record<string, string>
+  ): Promise<any[] | null> => {
+    try {
+      const res = await fetch(url, { cache: "no-store", headers });
+      if (!res.ok) return null;
+      const json = await res.json();
+      return Array.isArray(json) && json.length ? json : null;
+    } catch {
+      return null;
+    }
+  };
+
+  let raw: any[] | null = null;
+  if (apiKey) {
+    raw = await tryFetch(JUP_TAG_VERIFIED_PRIMARY, {
+      "x-api-key": apiKey,
+    });
+  }
+  if (!raw?.length) {
+    raw = await tryFetch(JUP_TAG_VERIFIED_LITE, {});
+  }
+  if (!raw?.length) return null;
+
+  const rows = raw
+    .map((j) => normalizeJupiterVerifiedToken(j))
+    .filter(Boolean) as any[];
+
+  jupiterVerifiedCatalogCache = {
+    rows,
+    expiresAt: now + JUP_VERIFIED_CATALOG_TTL_MS,
+  };
+  return rows;
+}
+
+async function getJupiterVerifiedSet(): Promise<Set<string>> {
+  const rows = await getJupiterVerifiedCatalogNormalized();
+  if (!rows?.length) return new Set();
+  return new Set(
+    rows
+      .map((r) => String(r?.tokenAddress || "").toLowerCase())
+      .filter(Boolean)
+  );
+}
+
+async function loadSolanaVerifiedPageFromJupiter(opts: {
+  offset: number;
+  limit: number;
+  sort_by: string;
+  sort_type: "asc" | "desc";
+  min_liquidity: number;
+  include_creation: boolean;
+  creation_concurrency: number;
+  apiKey: string;
+}): Promise<{
+  finalItems: any[];
+  catalogTotal: number;
+  filteredTotal: number;
+} | null> {
+  const {
+    offset,
+    limit,
+    sort_by,
+    sort_type,
+    min_liquidity,
+    include_creation,
+    creation_concurrency,
+    apiKey,
+  } = opts;
+
+  const catalog = await getJupiterVerifiedCatalogNormalized();
+  if (!catalog?.length) return null;
+
+  const filtered = catalog.filter(
+    (n) => (n?.liquidityUsd ?? 0) >= min_liquidity
+  );
+  const sortV3 = birdeyeV3SortBy(sort_by);
+  const sorted = [...filtered];
+  sortTrendingRowsForV3(sorted, sortV3, sort_type);
+
+  const pageItems = sorted.slice(offset, offset + limit);
+  const withPricePct = await enrichTokenlistPricePercent24h(
+    pageItems,
+    "solana",
+    apiKey
+  );
+  const enriched = include_creation
+    ? await enrichWithCreation(
+        withPricePct,
+        "solana",
+        apiKey,
+        creation_concurrency
+      )
+    : withPricePct;
+
+  return {
+    finalItems: dedupeByAddress(enriched),
+    catalogTotal: catalog.length,
+    filteredTotal: sorted.length,
+  };
 }
 
 // ------- Upstream fetchers -------
@@ -263,27 +671,40 @@ async function fetchBirdeyeTokenlist(opts: {
     apiKey,
   } = opts;
 
-  // Clamp to Birdeye's required range 1..50
-  const cappedLimit = Math.min(Math.max(1, limit), BIRDEYE_PAGE_MAX);
+  const sortV3 = birdeyeV3SortBy(sort_by);
+  const { offset: off, limit: lim } = clampBirdeyeV3OffsetLimit(offset, limit);
 
-  const url = new URL(BIRDEYE_TOKENLIST);
-  url.searchParams.set("sort_by", sort_by);
+  const url = new URL(BIRDEYE_TOKENLIST_V3);
+  url.searchParams.set("sort_by", sortV3);
   url.searchParams.set("sort_type", sort_type);
-  url.searchParams.set("offset", String(offset));
-  url.searchParams.set("limit", String(cappedLimit));
-  url.searchParams.set("min_liquidity", String(Math.max(0, min_liquidity)));
+  url.searchParams.set("offset", String(off));
+  url.searchParams.set("limit", String(lim));
+  if (min_liquidity > 0) {
+    url.searchParams.set("min_liquidity", String(min_liquidity));
+  }
   url.searchParams.set("ui_amount_mode", ui_amount_mode);
 
   try {
-    const res = await fetch(url.toString(), {
-      method: "GET",
-      headers: {
-        accept: "application/json",
-        "x-chain": chain,
-        "X-API-KEY": apiKey,
-      },
-      cache: "no-store",
-    });
+    let res: Response | null = null;
+    for (let attempt = 0; attempt < 3; attempt++) {
+      res = await fetch(url.toString(), {
+        method: "GET",
+        headers: {
+          accept: "application/json",
+          "x-chain": chain,
+          "x-api-key": apiKey,
+        },
+        cache: "no-store",
+      });
+      if (res.status === 429 && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 400 * (attempt + 1)));
+        continue;
+      }
+      break;
+    }
+    if (!res) {
+      return { ok: false, error: "Birdeye fetch failed", status: 500 };
+    }
 
     if (!res.ok) {
       const text = await res.text().catch(() => "");
@@ -304,14 +725,40 @@ async function fetchBirdeyeTokenlist(opts: {
     }
 
     const data = json?.data ?? {};
-    const tokens: any[] = Array.isArray(data?.tokens) ? data.tokens : [];
+    const tokens: any[] = Array.isArray(data?.items)
+      ? data.items
+      : Array.isArray(data?.tokens)
+        ? data.tokens
+        : [];
+
+    const hasNextFromApi =
+      typeof data?.hasNext === "boolean"
+        ? data.hasNext
+        : typeof data?.has_next === "boolean"
+          ? data.has_next
+          : undefined;
+    const hasNext =
+      typeof hasNextFromApi === "boolean"
+        ? hasNextFromApi
+        : tokens.length >= lim;
+
+    const totalExact =
+      typeof data?.total === "number" && Number.isFinite(data.total)
+        ? data.total
+        : undefined;
+    const totalMeta =
+      totalExact ??
+      (!hasNext ? off + tokens.length : undefined);
+
     return {
       ok: true,
       tokens,
       meta: {
-        total: typeof data?.total === "number" ? data.total : tokens.length,
+        total: totalMeta,
         updateUnixTime: data?.updateUnixTime ?? null,
         updateTime: data?.updateTime ?? null,
+        hasNext,
+        pageLimit: lim,
       },
     };
   } catch (err: any) {
@@ -320,36 +767,6 @@ async function fetchBirdeyeTokenlist(opts: {
       error: String(err?.message || err || "Network error"),
       status: 500,
     };
-  }
-}
-
-async function getJupiterVerifiedSet(): Promise<Set<string>> {
-  const now = Date.now();
-  if (JUP_VERIFIED_CACHE && JUP_VERIFIED_CACHE.expiresAt > now) {
-    return JUP_VERIFIED_CACHE.set;
-  }
-  try {
-    const res = await fetch(JUP_VERIFIED_URL, { cache: "no-store" });
-    if (!res.ok) throw new Error(`Jupiter HTTP ${res.status}`);
-    // Endpoint returns an array; each item can be a string or object
-    const arr = (await res.json()) as Array<any>;
-    const mints = new Set<string>();
-    for (const it of arr) {
-      const mint =
-        typeof it === "string"
-          ? it
-          : it?.id ||
-            it?.mint ||
-            it?.address ||
-            it?.mintAddress ||
-            it?.tokenMint;
-      if (mint && typeof mint === "string") mints.add(mint.toLowerCase());
-    }
-    JUP_VERIFIED_CACHE = { set: mints, expiresAt: now + JUP_VERIFIED_TTL_MS };
-    return mints;
-  } catch {
-    // fallback: stale cache or empty set (no filtering)
-    return JUP_VERIFIED_CACHE?.set ?? new Set<string>();
   }
 }
 
@@ -423,36 +840,310 @@ async function getBnbVerifiedSet(): Promise<Set<string>> {
   }
 }
 
-// ------- Jupiter search (by ticker / keyword) -------
-async function fetchJupiterMintsByQuery(query: string): Promise<string[]> {
-  const url = `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(
-    query
-  )}`;
+/** Birdeye `chain` query param for /defi/v3/search (not always same as `x-chain` token routes). */
+function birdeyeSearchChainQuery(chain: string): string {
+  const c = (chain || "solana").toLowerCase();
+  if (c === "bsc" || c === "56") return "bsc";
+  if (c === "base" || c === "8453") return "base";
+  if (c === "ethereum" || c === "eth" || c === "1") return "ethereum";
+  if (c === "monad" || c === "10143") return "monad";
+  if (c === "all") return "all";
+  return "solana";
+}
 
-  try {
-    const res = await fetch(url, { method: "GET", cache: "no-store" });
-    if (!res.ok) throw new Error(`Jupiter HTTP ${res.status}`);
-    const arr = (await res.json()) as Array<any>;
+function extractBirdeyeSearchTokenRows(json: any): any[] {
+  const items =
+    json?.data?.items ??
+    json?.data?.data?.items ??
+    json?.items ??
+    (Array.isArray(json?.data) ? json.data : null);
+  if (!Array.isArray(items)) return [];
 
-    // pick possible mint fields; Jupiter returns "id" as mint most of the time
-    const mints = new Set<string>();
-    for (const it of arr) {
-      const mint =
-        it?.id ||
-        it?.mint ||
-        it?.address ||
-        it?.mintAddress ||
-        it?.tokenMint ||
-        null;
-      if (mint && typeof mint === "string") {
-        mints.add(mint);
+  const out: any[] = [];
+  for (const block of items) {
+    if (block?.type === "token" && Array.isArray(block?.result)) {
+      for (const r of block.result) {
+        if (r && typeof r === "object" && r.address) out.push(r);
       }
     }
-    return Array.from(mints);
-  } catch (e) {
-    console.warn("Jupiter search error:", e);
-    return [];
   }
+  return out;
+}
+
+/**
+ * Fuzzy token search by name/symbol via Uniblock → Birdeye v3/search.
+ * Tries multiple sort/search modes — some keywords (e.g. "core") return empty for marketcap-only.
+ */
+async function fetchBirdeyeSearchTokenResults(opts: {
+  keyword: string;
+  chain: string;
+  apiKey: string;
+  limit?: number;
+  offset?: number;
+  sort_by?: string;
+  /** Birdeye `verify_token=true` (Solana + `chain=all`) + post-filters for EVM. */
+  verifiedOnly?: boolean;
+}): Promise<any[]> {
+  const keyword = String(opts.keyword || "").trim();
+  if (!keyword || keyword.length < 2) return [];
+
+  const chainQ = birdeyeSearchChainQuery(opts.chain);
+  const verifiedOnly = opts.verifiedOnly !== false;
+  const lim = Math.min(Math.max(1, Math.floor(opts.limit ?? 20)), 20);
+  const off = Math.max(0, Math.floor(opts.offset ?? 0));
+
+  const hintSort = opts.sort_by?.trim();
+  const strategies: Array<{
+    sort_by: string;
+    search_by: string;
+    search_mode: string;
+  }> = [
+    ...(hintSort
+      ? [{ sort_by: hintSort, search_by: "combination", search_mode: "fuzzy" }]
+      : []),
+    { sort_by: "volume_24h_usd", search_by: "combination", search_mode: "fuzzy" },
+    { sort_by: "marketcap", search_by: "symbol", search_mode: "exact" },
+    { sort_by: "volume_24h_usd", search_by: "name", search_mode: "fuzzy" },
+  ];
+
+  const seenStrategies = new Set<string>();
+  const dedupedStrategies = strategies.filter((s) => {
+    const k = `${s.sort_by}|${s.search_by}|${s.search_mode}`;
+    if (seenStrategies.has(k)) return false;
+    seenStrategies.add(k);
+    return true;
+  });
+
+  const xChain = chainQ === "all" ? "solana" : chainQ;
+
+  for (const strat of dedupedStrategies) {
+    const searchBy = strat.search_by;
+    const searchMode = strat.search_mode;
+    const sortBy = strat.sort_by;
+    const url = new URL(BIRDEYE_V3_SEARCH);
+    url.searchParams.set("keyword", keyword);
+    url.searchParams.set("chain", chainQ);
+    url.searchParams.set("target", "token");
+    url.searchParams.set("search_mode", searchMode);
+    url.searchParams.set("search_by", searchBy);
+    url.searchParams.set("sort_by", sortBy);
+    url.searchParams.set("sort_type", "desc");
+    url.searchParams.set("limit", String(lim));
+    url.searchParams.set("offset", String(off));
+    if (chainQ === "solana" || chainQ === "all") {
+      url.searchParams.set("ui_amount_mode", "scaled");
+    }
+    if (verifiedOnly && (chainQ === "solana" || chainQ === "all")) {
+      url.searchParams.set("verify_token", "true");
+    }
+
+    try {
+      const headers: Record<string, string> = {
+        accept: "application/json",
+        "x-api-key": opts.apiKey,
+        "x-chain": xChain,
+      };
+
+      const res = await fetch(url.toString(), {
+        method: "GET",
+        headers,
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+      const json = (await res.json()) as any;
+      if (json?.success === false) continue;
+      const rows = extractBirdeyeSearchTokenRows(json);
+      if (rows.length) return rows;
+    } catch (e) {
+      console.warn("Birdeye v3 search error:", e);
+    }
+  }
+
+  return [];
+}
+
+/**
+ * Fetches up to `takeCount` v3/search rows starting at Birdeye `startOffset`.
+ * API caps limit at 20 per request — uses sequential chunk(s), typically 1–2 calls for 25 rows.
+ */
+async function fetchBirdeyeSearchWindow(opts: {
+  keyword: string;
+  chain: string;
+  apiKey: string;
+  startOffset: number;
+  takeCount: number;
+  sort_by?: string;
+  verifiedOnly?: boolean;
+}): Promise<any[]> {
+  const takeCount = Math.max(0, Math.floor(opts.takeCount));
+  if (takeCount === 0) return [];
+  const out: any[] = [];
+  let o = Math.max(0, Math.floor(opts.startOffset));
+  const sortBy = opts.sort_by || "marketcap";
+  const verifiedOnly = opts.verifiedOnly !== false;
+
+  while (out.length < takeCount) {
+    const need = takeCount - out.length;
+    const pageLen = Math.min(20, need);
+    const batch = await fetchBirdeyeSearchTokenResults({
+      keyword: opts.keyword,
+      chain: opts.chain,
+      apiKey: opts.apiKey,
+      limit: pageLen,
+      offset: o,
+      sort_by: sortBy,
+      verifiedOnly,
+    });
+    if (!batch.length) break;
+    for (const r of batch) {
+      if (out.length >= takeCount) break;
+      out.push(r);
+    }
+    if (batch.length < pageLen) break;
+    o += batch.length;
+  }
+  return out;
+}
+
+function chainFromBirdeyeSearchNetwork(net: unknown): string {
+  const n = String(net || "solana").toLowerCase();
+  if (n === "solana") return "solana";
+  if (n === "bsc" || n === "bnb") return "bsc";
+  if (n === "base") return "base";
+  if (n === "ethereum" || n === "eth") return "ethereum";
+  if (n === "monad") return "monad";
+  return "solana";
+}
+
+function sortRowsByMarketCapThenLiquidity(rows: any[]): any[] {
+  return [...rows].sort(
+    (a, b) =>
+      (b.marketCap ?? 0) - (a.marketCap ?? 0) ||
+      (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0)
+  );
+}
+
+const TRENDING_SEARCH_FETCH_CHUNK = 60;
+
+/**
+ * Pulls enough upstream `v3/search` rows, then filters to trusted + liquidity-sane
+ * so a full page still has `limit` items when the API interleaves garbage.
+ */
+async function collectTickerSearchPage(opts: {
+  keyword: string;
+  apiKey: string;
+  birdeyeOffset: number;
+  limit: number;
+  chainFetch: string;
+  normalizeRows: (rows: any[]) => any[];
+  sort_by?: string;
+}): Promise<{ items: any[]; hasMore: boolean }> {
+  const want = opts.limit + 1;
+  const acc: any[] = [];
+  const seen = new Set<string>();
+  let cursor = opts.birdeyeOffset;
+  let exhausted = false;
+  let loops = 0;
+
+  while (acc.length < want && !exhausted && loops < 16) {
+    loops++;
+    const rows = await fetchBirdeyeSearchWindow({
+      keyword: opts.keyword,
+      chain: opts.chainFetch,
+      apiKey: opts.apiKey,
+      startOffset: cursor,
+      takeCount: TRENDING_SEARCH_FETCH_CHUNK,
+      sort_by: opts.sort_by ?? "marketcap",
+      verifiedOnly: true,
+    });
+    if (!rows.length) {
+      exhausted = true;
+      break;
+    }
+    cursor += rows.length;
+
+    let normalized = opts.normalizeRows(rows);
+    normalized = dedupeByAddress(normalized);
+    normalized = sortRowsByMarketCapThenLiquidity(normalized);
+    const finalized = applyTickerSearchResultFilter(normalized, opts.chainFetch);
+
+    for (const it of finalized) {
+      const k = tokenAddressLookupKey(
+        String(it.chainId ?? ""),
+        String(it.tokenAddress ?? "")
+      );
+      if (!k || seen.has(k)) continue;
+      seen.add(k);
+      acc.push(it);
+      if (acc.length >= want) break;
+    }
+
+    if (rows.length < TRENDING_SEARCH_FETCH_CHUNK) exhausted = true;
+  }
+
+  const hasMore = acc.length > opts.limit;
+  return { items: acc.slice(0, opts.limit), hasMore };
+}
+
+async function buildSolanaTickerSearchPage(
+  search_query: string,
+  apiKey: string,
+  limit: number,
+  offset: number
+): Promise<{ items: any[]; hasMore: boolean }> {
+  return collectTickerSearchPage({
+    keyword: search_query,
+    apiKey,
+    birdeyeOffset: offset,
+    limit,
+    chainFetch: "solana",
+    sort_by: "marketcap",
+    normalizeRows: (rows) =>
+      rows.map((r) => normalizeTokenlistToken(r, "solana")),
+  });
+}
+
+async function buildAllChainsTickerSearchPage(
+  search_query: string,
+  apiKey: string,
+  limit: number,
+  offset: number
+): Promise<{ items: any[]; hasMore: boolean }> {
+  return collectTickerSearchPage({
+    keyword: search_query,
+    apiKey,
+    birdeyeOffset: offset,
+    limit,
+    chainFetch: "all",
+    sort_by: "marketcap",
+    normalizeRows: (rows) =>
+      rows.map((r) =>
+        normalizeTokenlistToken(r, chainFromBirdeyeSearchNetwork(r?.network))
+      ),
+  });
+}
+
+async function tickerSearchRowsFromBirdeyeV3Paged(
+  search_query: string,
+  chain: string,
+  apiKey: string,
+  limit: number,
+  offset: number
+): Promise<{ items: any[]; hasMore: boolean }> {
+  return collectTickerSearchPage({
+    keyword: search_query,
+    apiKey,
+    birdeyeOffset: offset,
+    limit,
+    chainFetch: chain,
+    sort_by: "marketcap",
+    normalizeRows: (rows) => {
+      let normalized = rows.map((t) => normalizeTokenlistToken(t, chain));
+      let filtered = filterValidMarketCap(normalized, chain);
+      if (!filtered.length && normalized.length) filtered = normalized;
+      return filtered;
+    },
+  });
 }
 
 // ------- Batch Birdeye Overview fetch for mints -------
@@ -473,135 +1164,102 @@ async function fetchOverviewsForMints(opts: {
   return out.filter(Boolean);
 }
 
-// True mint birth time (token_creation_info) for SOLANA ONLY
-async function fetchCreationInfo(
-  address: string,
-  chain: string,
-  apiKey: string,
-  timeoutMs = 7000,
-  maxRetries = 2
-): Promise<number | undefined> {
-  if (!address) return undefined;
-
-  // For BSC/BNB chain, fall back to Birdeye creation API like other chains
-
-  // Known special-case (e.g., WSOL)
-  const known = KNOWN_CREATION_TIMES[address.toLowerCase()];
-  if (typeof known === "number") {
-    CREATION_CACHE.set(address, known);
-    return known;
-  }
-
-  // Cache
-  if (CREATION_CACHE.has(address)) {
-    const v = CREATION_CACHE.get(address);
-    return v === null ? undefined : v;
-  }
-
-  const url = `${BIRDEYE_CREATION}?address=${encodeURIComponent(address)}`;
-
-  const tryOnce = async () => {
-    const ctrl = new AbortController();
-    const timer = setTimeout(() => ctrl.abort(), timeoutMs);
-    try {
-      const res = await fetch(url, {
-        method: "GET",
-        headers: {
-          accept: "application/json",
-          "x-chain": chain,
-          "X-API-KEY": apiKey,
-        },
-        signal: ctrl.signal,
-        cache: "no-store",
-      });
-
-      if (res.status === 404) {
-        CREATION_CACHE.set(address, null); // permanent miss
-        return undefined;
-      }
-      if (!res.ok) {
-        // transient (429/5xx) — don't poison cache
-        return undefined;
-      }
-
-      const json = (await res.json()) as any;
-      const ts = json?.data?.blockUnixTime;
-      const created = typeof ts === "number" ? ts : undefined;
-
-      // sanity: after 2000-01-01 and in the past
-      const nowSec = Math.floor(Date.now() / 1000);
-      if (
-        typeof created === "number" &&
-        created > 946684800 &&
-        created <= nowSec
-      ) {
-        CREATION_CACHE.set(address, created);
-        return created;
-      }
-      return undefined;
-    } catch {
-      return undefined;
-    } finally {
-      clearTimeout(timer);
-    }
-  };
-
-  let out = await tryOnce();
-  let attempts = 0;
-  while (out === undefined && attempts < maxRetries) {
-    attempts++;
-    await new Promise((r) => setTimeout(r, 250 * attempts)); // 250ms, then 500ms
-    out = await tryOnce();
-  }
-
-  return out; // only cache successes above
+function hasUsableCreationTimestamp(ts: unknown): boolean {
+  return typeof ts === "number" && Number.isFinite(ts) && ts > 946684800;
 }
 
-// ------- Enrichment (optimized) -------
-async function enrichWithCreation(
+/**
+ * Token list responses only include v24hChangePercent (volume). Real 24h price % lives on
+ * token_overview — without this merge, Mcap/Price columns have no % while Vol does.
+ * Also merges `createdAt` from overview when the list omits it (reduces extra creation_info calls).
+ */
+async function enrichTokenlistPricePercent24h(
   items: any[],
   chain: string,
-  apiKey: string,
-  concurrency = 6
-) {
-  // Early return if no items
+  apiKey: string
+): Promise<any[]> {
   if (!items.length) return items;
 
-  const limiter = createLimiter(concurrency);
+  const need = items.filter(
+    (n) =>
+      n?.tokenAddress &&
+      (n?.pricePercentChange?.["24h"] == null ||
+        !Number.isFinite(n.pricePercentChange["24h"]) ||
+        !hasUsableCreationTimestamp(n?.createdAt))
+  );
+  if (!need.length) return items;
 
-  // Filter and dedupe addresses in one pass
-  const addressSet = new Set<string>();
-  const validItems = items.filter((item) => {
-    const addr = item?.tokenAddress;
-    if (!addr || addressSet.has(addr)) return false;
-    addressSet.add(addr);
-    return true;
-  });
+  const mintList: string[] = [];
+  const mintSeen = new Set<string>();
+  for (const n of need) {
+    const raw = String(n.tokenAddress || "").trim();
+    if (!raw) continue;
+    const dedupeKey = tokenAddressLookupKey(chain, raw);
+    if (!dedupeKey || mintSeen.has(dedupeKey)) continue;
+    mintSeen.add(dedupeKey);
+    mintList.push(birdeyeTokenAddressParam(chain, raw));
+  }
+  if (!mintList.length) return items;
 
-  if (!validItems.length) return items;
-
-  const addresses = Array.from(addressSet);
-  const times = await Promise.all(
-    addresses.map((addr) =>
-      limiter(() => fetchCreationInfo(addr, chain, apiKey))
+  const limiter = createLimiter(8);
+  const pairs = await Promise.all(
+    mintList.map((mint) =>
+      limiter(async () => {
+        const data = await fetchBirdeyeTokenOverview(mint, chain, apiKey);
+        return { mint, data };
+      })
     )
   );
 
-  const byAddr = new Map<string, number | undefined>();
-  addresses.forEach((addr, i) => byAddr.set(addr, times[i]));
+  const byAddrPrice = new Map<string, number>();
+  const byAddrCreated = new Map<string, number>();
+  for (const { mint, data } of pairs) {
+    if (!data) continue;
+    const norm = normalizeBirdeyeTokenOverview(data, chain);
+    const keyFromMint = tokenAddressLookupKey(chain, mint);
+    const keys: string[] = [];
+    if (keyFromMint) keys.push(keyFromMint);
+    const ret = norm?.tokenAddress;
+    if (ret) {
+      const k2 = tokenAddressLookupKey(chain, ret);
+      if (k2 && k2 !== keyFromMint) keys.push(k2);
+    }
+    if (!keys.length) continue;
 
-  return items.map((it) => {
-    const addr = it?.tokenAddress as string | undefined;
-    if (!addr) return it;
-    const createdFromCreationInfo = byAddr.get(addr);
-    return {
-      ...it,
-      // Prefer creation_info, but keep existing createdAt if creation_info fails
-      createdAt:
-        typeof createdFromCreationInfo === "number"
-          ? createdFromCreationInfo
-          : it?.createdAt ?? undefined,
-    };
+    const p24 = norm?.pricePercentChange?.["24h"];
+    if (typeof p24 === "number" && Number.isFinite(p24)) {
+      for (const k of keys) byAddrPrice.set(k, p24);
+    }
+    const ca = norm?.createdAt;
+    if (hasUsableCreationTimestamp(ca)) {
+      for (const k of keys) byAddrCreated.set(k, ca as number);
+    }
+  }
+
+  if (!byAddrPrice.size && !byAddrCreated.size) return items;
+
+  return items.map((row) => {
+    const key = tokenAddressLookupKey(chain, String(row?.tokenAddress || ""));
+    const p24 = key ? byAddrPrice.get(key) : undefined;
+    const createdFromOv = key ? byAddrCreated.get(key) : undefined;
+
+    let next = row;
+    if (p24 != null) {
+      next = {
+        ...next,
+        pricePercentChange: {
+          ...(next.pricePercentChange || {}),
+          "24h": p24,
+        },
+      };
+    }
+    if (
+      createdFromOv != null &&
+      !hasUsableCreationTimestamp(next?.createdAt)
+    ) {
+      next = { ...next, createdAt: createdFromOv };
+    }
+    return next;
   });
 }
 
@@ -623,7 +1281,7 @@ async function fetchBirdeyeTokenOverview(
       headers: {
         accept: "application/json",
         "x-chain": chain,
-        "X-API-KEY": apiKey,
+        "x-api-key": apiKey,
       },
       cache: "no-store",
     });
@@ -647,62 +1305,6 @@ async function fetchBirdeyeTokenOverview(
   }
 }
 
-// ------- Search by ticker in Birdeye tokenlist (optimized) -------
-// Note: This function is kept for potential future use but currently replaced by Jupiter search + Birdeye overview approach
-// eslint-disable-next-line @typescript-eslint/no-unused-vars
-async function searchTokenByTicker(
-  ticker: string,
-  chain: string,
-  apiKey: string,
-  maxPages = 20 // Reduced from 4000 for performance
-): Promise<any[]> {
-  const searchTicker = ticker.toLowerCase();
-  const results: any[] = [];
-  let offset = 0;
-  const pageSize = BIRDEYE_PAGE_MAX; // 50
-  const maxResults = 100; // Cap total results for performance
-
-  for (let page = 0; page < maxPages && results.length < maxResults; page++) {
-    const listed = await fetchBirdeyeTokenlist({
-      chain,
-      limit: pageSize,
-      offset,
-      sort_by: "v24hUSD",
-      sort_type: "desc",
-      min_liquidity: 100,
-      ui_amount_mode: "scaled",
-      apiKey,
-    });
-
-    if (!listed.ok || !listed.tokens.length) {
-      break;
-    }
-
-    // Filter tokens that match the ticker (optimized with early break)
-    for (const token of listed.tokens) {
-      if (results.length >= maxResults) break;
-      const symbol = (token?.symbol || "").toLowerCase();
-      if (symbol === searchTicker) {
-        results.push(token);
-      }
-    }
-
-    // Early termination: if we found matches and they're becoming sparse, stop
-    if (results.length > 0 && page > 2) {
-      break;
-    }
-
-    // If we got fewer tokens than page size, we've reached the end
-    if (listed.tokens.length < pageSize) {
-      break;
-    }
-
-    offset += listed.tokens.length;
-  }
-
-  return results;
-}
-
 // ------- Search Handler -------
 async function handleTokenSearch(opts: {
   search_query: string;
@@ -710,6 +1312,7 @@ async function handleTokenSearch(opts: {
   chain: string;
   apiKey: string;
   limit: number;
+  offset: number;
   include_creation: boolean;
   creation_concurrency: number;
 }): Promise<NextResponse> {
@@ -719,34 +1322,48 @@ async function handleTokenSearch(opts: {
     chain,
     apiKey,
     limit,
+    offset,
     include_creation,
     creation_concurrency,
   } = opts;
 
   try {
     let searchResults: any[] = [];
+    /** Ticker search: false when Birdeye returned a full page+1 probe (more rows exist). */
+    let searchExhausted = true;
 
     if (search_type === "address") {
-      // If chain is "all", detect based on address pattern (0x... => bsc; could be base too, default bsc for now)
-      const targetChain =
-        chain === "all"
-          ? /^0x[a-fA-F0-9]{40}$/.test(search_query.trim())
-            ? "bsc"
-            : "solana"
-          : chain;
+      const q = search_query.trim();
+      const isEvm = /^0x[a-fA-F0-9]{40}$/.test(q);
 
-      // Direct address lookup using Birdeye token overview on the resolved chain
-      const tokenData = await fetchBirdeyeTokenOverview(
-        search_query,
-        targetChain,
-        apiKey
-      );
+      let targetChain: string;
+      let tokenData: any | null = null;
+
+      if (chain !== "all") {
+        targetChain = chain;
+        tokenData = await fetchBirdeyeTokenOverview(q, targetChain, apiKey);
+      } else if (isEvm) {
+        // Try EVM chains in order — previously only BSC, which mis-resolved Base contracts.
+        targetChain = "bsc";
+        const evmCandidates = ["ethereum", "bsc", "base", "monad"] as const;
+        for (const c of evmCandidates) {
+          const data = await fetchBirdeyeTokenOverview(q, c, apiKey);
+          if (data) {
+            tokenData = data;
+            targetChain = c;
+            break;
+          }
+        }
+      } else {
+        targetChain = "solana";
+        tokenData = await fetchBirdeyeTokenOverview(q, targetChain, apiKey);
+      }
 
       if (!tokenData) {
         return NextResponse.json({
           items: [],
           uniqueCount: 0,
-          offset: 0,
+          offset,
           limit,
           chain: targetChain,
           upstreamTotal: 0,
@@ -758,215 +1375,58 @@ async function handleTokenSearch(opts: {
         });
       }
 
-      // Convert Birdeye token overview to trending token format
       const searchResult = normalizeBirdeyeTokenOverview(tokenData, targetChain);
       searchResults = [searchResult];
     } else if (search_type === "ticker") {
-      if (chain === "bsc") {
-        // BNB chain: resolve by scanning Birdeye tokenlist for exact symbol matches
-        const listed = await searchTokenByTicker(search_query, chain, apiKey, 10);
-        const normalized = listed.map((t) => normalizeTokenlistToken(t, chain));
-        const filtered = filterValidMarketCap(normalized, chain);
-        searchResults = dedupeByAddress(filtered).slice(0, limit);
-      } else if (chain === "base") {
-        // Base chain: Birdeye tokenlist search
-        const listed = await searchTokenByTicker(search_query, chain, apiKey, 10);
-        const normalized = listed.map((t) => normalizeTokenlistToken(t, chain));
-        const filtered = filterValidMarketCap(normalized, chain);
-        searchResults = dedupeByAddress(filtered).slice(0, limit);
-      } else if (chain === "all") {
-        // ALL chains: fetch Solana, BNB, Base in parallel and merge
-        const [solResults, bnbListed, baseListed] = await Promise.all([
-          (async () => {
-            const jupMints = await fetchJupiterMintsByQuery(search_query);
-            if (jupMints.length === 0) return [] as any[];
-
-            const jupResultsRaw = await (async () => {
-              const url = `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(
-                search_query
-              )}`;
-              try {
-                const r = await fetch(url, { cache: "no-store" });
-                if (!r.ok) return [];
-                return (await r.json()) as Array<any>;
-              } catch {
-                return [];
-              }
-            })();
-
-            const target = search_query.toLowerCase();
-            const exactMintOrder: string[] = [];
-            const fuzzyMintOrder: string[] = [];
-            const seen = new Set<string>();
-            for (const it of jupResultsRaw) {
-              const mint =
-                it?.id ||
-                it?.mint ||
-                it?.address ||
-                it?.mintAddress ||
-                it?.tokenMint ||
-                null;
-              if (!mint || seen.has(mint)) continue;
-              seen.add(mint);
-              const sym = String(it?.symbol ?? "").toLowerCase();
-              const name = String(it?.name ?? "").toLowerCase();
-              if (sym === target) exactMintOrder.push(mint);
-              else if (sym.includes(target) || name.includes(target))
-                fuzzyMintOrder.push(mint);
-            }
-            const leftovers = jupMints.filter(
-              (m) => !exactMintOrder.includes(m) && !fuzzyMintOrder.includes(m)
-            );
-            const orderedMints = [
-              ...exactMintOrder,
-              ...fuzzyMintOrder,
-              ...leftovers,
-            ];
-            const overviews = await fetchOverviewsForMints({
-              mints: orderedMints.slice(0, Math.max(limit * 3, 30)),
-              chain: "solana",
-              apiKey,
-              concurrency: 8,
-            });
-            const normalized = overviews.map((d) =>
-              normalizeBirdeyeTokenOverview(d, "solana")
-            );
-            const byAddr = new Map<string, any>();
-            for (const n of normalized) {
-              const addr = (n?.tokenAddress || "").toLowerCase();
-              if (addr && !byAddr.has(addr)) byAddr.set(addr, n);
-            }
-            const ordered = orderedMints
-              .map((m) => byAddr.get(m.toLowerCase()))
-              .filter(Boolean) as any[];
-            return ordered;
-          })(),
-          (async () => {
-            const listed = await searchTokenByTicker(
-              search_query,
-              "bsc",
-              apiKey,
-              10
-            );
-            const normalized = listed.map((t) =>
-              normalizeTokenlistToken(t, "bsc")
-            );
-            const filtered = filterValidMarketCap(normalized, "bsc");
-            return dedupeByAddress(filtered);
-          })(),
-          (async () => {
-            const listed = await searchTokenByTicker(
-              search_query,
-              "base",
-              apiKey,
-              10
-            );
-            const normalized = listed.map((t) =>
-              normalizeTokenlistToken(t, "base")
-            );
-            const filtered = filterValidMarketCap(normalized, "base");
-            return dedupeByAddress(filtered);
-          })(),
-        ]);
-
-        const combined = [...baseListed, ...bnbListed, ...solResults];
-        searchResults = combined.slice(0, Math.max(limit, 25));
-      } else {
-        // Solana and others: use Jupiter search + Birdeye overview
-        const jupMints = await fetchJupiterMintsByQuery(search_query);
-
-        if (jupMints.length === 0) {
-          return NextResponse.json({
-            items: [],
-            uniqueCount: 0,
-            offset: 0,
-            limit,
-            chain,
-            upstreamTotal: 0,
-            exhausted: true,
-            searchQuery: search_query,
-            searchType: search_type,
-            searchResults: true,
-            message: `No tokens found from Jupiter search for: ${search_query}`,
-          });
-        }
-
-        const jupResultsRaw = await (async () => {
-          const url = `https://lite-api.jup.ag/tokens/v2/search?query=${encodeURIComponent(
-            search_query
-          )}`;
-          try {
-            const r = await fetch(url, { cache: "no-store" });
-            if (!r.ok) return [];
-            return (await r.json()) as Array<any>;
-          } catch {
-            return [];
-          }
-        })();
-
-        const target = search_query.toLowerCase();
-        const exactMintOrder: string[] = [];
-        const fuzzyMintOrder: string[] = [];
-        const seen = new Set<string>();
-        for (const it of jupResultsRaw) {
-          const mint =
-            it?.id ||
-            it?.mint ||
-            it?.address ||
-            it?.mintAddress ||
-            it?.tokenMint ||
-            null;
-          if (!mint || seen.has(mint)) continue;
-          seen.add(mint);
-
-          const sym = String(it?.symbol ?? "").toLowerCase();
-          const name = String(it?.name ?? "").toLowerCase();
-
-          if (sym === target) exactMintOrder.push(mint);
-          else if (sym.includes(target) || name.includes(target))
-            fuzzyMintOrder.push(mint);
-        }
-
-        const leftovers = jupMints.filter(
-          (m) => !exactMintOrder.includes(m) && !fuzzyMintOrder.includes(m)
-        );
-        const orderedMints = [...exactMintOrder, ...fuzzyMintOrder, ...leftovers];
-
-        const overviews = await fetchOverviewsForMints({
-          mints: orderedMints.slice(0, Math.max(limit * 3, 30)),
+      if (
+        chain === "bsc" ||
+        chain === "base" ||
+        chain === "monad" ||
+        chain === "ethereum"
+      ) {
+        const page = await tickerSearchRowsFromBirdeyeV3Paged(
+          search_query,
           chain,
           apiKey,
-          concurrency: 8,
-        });
-
-        if (overviews.length === 0) {
-          return NextResponse.json({
-            items: [],
-            uniqueCount: 0,
-            offset: 0,
-            limit,
-            chain,
-            upstreamTotal: 0,
-            exhausted: true,
-            searchQuery: search_query,
-            searchType: search_type,
-            searchResults: true,
-            message: `No Birdeye overviews for Jupiter results: ${search_query}`,
-          });
-        }
-
-        const normalized = overviews.map((d) =>
-          normalizeBirdeyeTokenOverview(d, chain)
+          limit,
+          offset
         );
-        const byAddr = new Map<string, any>();
-        for (const n of normalized) {
-          const addr = (n?.tokenAddress || "").toLowerCase();
-          if (addr && !byAddr.has(addr)) byAddr.set(addr, n);
-        }
-        const ordered = orderedMints
-          .map((m) => byAddr.get(m.toLowerCase()))
-          .filter(Boolean) as any[];
-        searchResults = ordered.slice(0, limit);
+        searchResults = page.items;
+        searchExhausted = !page.hasMore;
+      } else if (chain === "all") {
+        const page = await buildAllChainsTickerSearchPage(
+          search_query,
+          apiKey,
+          limit,
+          offset
+        );
+        searchResults = page.items;
+        searchExhausted = !page.hasMore;
+      } else {
+        const page = await buildSolanaTickerSearchPage(
+          search_query,
+          apiKey,
+          limit,
+          offset
+        );
+        searchResults = page.items;
+        searchExhausted = !page.hasMore;
+      }
+
+      if (!searchResults.length) {
+        return NextResponse.json({
+          items: [],
+          uniqueCount: 0,
+          offset,
+          limit,
+          chain,
+          upstreamTotal: offset,
+          exhausted: true,
+          searchQuery: search_query,
+          searchType: search_type,
+          searchResults: true,
+          message: `No tokens found for: ${search_query}`,
+        });
       }
     }
 
@@ -987,11 +1447,15 @@ async function handleTokenSearch(opts: {
       return bLiquidity - aLiquidity; // Higher liquidity first
     });
 
-    // Optionally enrich with creation time
+    const creationChain =
+      sortedResults[0]?.chainId != null
+        ? String(sortedResults[0].chainId)
+        : chain;
+
     const enrichedResults = include_creation
       ? await enrichWithCreation(
           sortedResults,
-          chain,
+          creationChain,
           apiKey,
           creation_concurrency
         )
@@ -1000,11 +1464,13 @@ async function handleTokenSearch(opts: {
     return NextResponse.json({
       items: enrichedResults,
       uniqueCount: enrichedResults.length,
-      offset: 0,
+      offset,
       limit,
-      chain,
-      upstreamTotal: enrichedResults.length,
-      exhausted: true,
+      chain: search_type === "address" ? creationChain : chain,
+      upstreamTotal: searchExhausted
+        ? offset + enrichedResults.length
+        : undefined,
+      exhausted: searchExhausted,
       searchQuery: search_query,
       searchType: search_type,
       searchResults: true,
@@ -1047,17 +1513,19 @@ async function handleMixedChainTokens(opts: {
     apiKey,
   } = opts;
 
-  // Proportional split across three chains
-  const perChain = Math.ceil(limit / 3);
+  // Proportional split across four chains
+  const perChain = Math.ceil(limit / 4);
   const solanaLimit = perChain;
   const bnbLimit = perChain;
+  const ethereumLimit = perChain;
   const baseLimit = perChain;
-  const solanaOffset = Math.floor(offset / 3);
-  const bnbOffset = Math.floor(offset / 3);
-  const baseOffset = Math.floor(offset / 3);
+  const solanaOffset = Math.floor(offset / 4);
+  const bnbOffset = Math.floor(offset / 4);
+  const ethereumOffset = Math.floor(offset / 4);
+  const baseOffset = Math.floor(offset / 4);
 
-  // Fetch all three chains in parallel
-  const [solanaTokens, bnbTokens, baseTokens] = await Promise.all([
+  // Fetch all four chains in parallel
+  const [solanaTokens, bnbTokens, ethereumTokens, baseTokens] = await Promise.all([
     fetchChainTokens({
       chain: "solana",
       limit: solanaLimit,
@@ -1085,6 +1553,19 @@ async function handleMixedChainTokens(opts: {
       apiKey,
     }),
     fetchChainTokens({
+      chain: "ethereum",
+      limit: ethereumLimit,
+      offset: ethereumOffset,
+      sort_by,
+      sort_type,
+      min_liquidity,
+      ui_amount_mode,
+      include_creation,
+      creation_concurrency,
+      verified_only,
+      apiKey,
+    }),
+    fetchChainTokens({
       chain: "base",
       limit: baseLimit,
       offset: baseOffset,
@@ -1099,15 +1580,17 @@ async function handleMixedChainTokens(opts: {
     }),
   ]);
 
-  // Interleave: round-robin solana, bnb, base
+  // Interleave: round-robin base, ethereum, bnb, solana
   const mixed: any[] = [];
   const maxLength = Math.max(
     solanaTokens.length,
     bnbTokens.length,
+    ethereumTokens.length,
     baseTokens.length
   );
   for (let i = 0; i < maxLength; i++) {
     if (i < baseTokens.length) mixed.push(baseTokens[i]);
+    if (i < ethereumTokens.length) mixed.push(ethereumTokens[i]);
     if (i < bnbTokens.length) mixed.push(bnbTokens[i]);
     if (i < solanaTokens.length) mixed.push(solanaTokens[i]);
   }
@@ -1121,6 +1604,7 @@ async function handleMixedChainTokens(opts: {
       chain: "all",
       chainDistribution: {
         solana: solanaTokens.length,
+        ethereum: ethereumTokens.length,
         bnb: bnbTokens.length,
         base: baseTokens.length,
       },
@@ -1160,20 +1644,31 @@ async function fetchChainTokens(opts: {
   } = opts;
 
   try {
-    // Get verified set based on chain (Base has no verified list; treat like unverified)
+    // Get verified set based on chain (Base/Ethereum/Monad have no verified list here)
     let verifiedSet: Set<string> | null = null;
     if (verified_only) {
       if (chain === "solana") {
+        const jPage = await loadSolanaVerifiedPageFromJupiter({
+          offset,
+          limit,
+          sort_by,
+          sort_type,
+          min_liquidity,
+          include_creation,
+          creation_concurrency,
+          apiKey,
+        });
+        if (jPage) return jPage.finalItems;
         verifiedSet = await getJupiterVerifiedSet();
       } else if (chain === "bsc") {
         verifiedSet = await getBnbVerifiedSet();
       }
-      // base: no verified list, verifiedSet stays null so we return all
+      // base/ethereum/monad: no verified list, verifiedSet stays null so we return all
     }
 
     const collected: any[] = [];
     let birdeyeOffset = offset;
-    const batchLimit = Math.min(BIRDEYE_PAGE_MAX, limit * 2);
+    const batchLimit = Math.min(BIRDEYE_V3_LIST_MAX, limit);
     const maxBatches = 5;
     let batches = 0;
 
@@ -1209,15 +1704,22 @@ async function fetchChainTokens(opts: {
 
       collected.push(...marketCapFiltered);
 
-      if (listed.tokens.length < batchLimit) break;
+      if (listed.meta.hasNext === false) break;
+      if (listed.tokens.length < listed.meta.pageLimit) break;
       birdeyeOffset += listed.tokens.length;
+      if (birdeyeOffset >= BIRDEYE_V3_OFFSET_LIMIT_MAX_SUM) break;
     }
 
     // Enrich with creation info
     const pageItems = collected.slice(0, limit);
+    const withPricePct = await enrichTokenlistPricePercent24h(
+      pageItems,
+      chain,
+      apiKey
+    );
     const enriched = include_creation
-      ? await enrichWithCreation(pageItems, chain, apiKey, creation_concurrency)
-      : pageItems;
+      ? await enrichWithCreation(withPricePct, chain, apiKey, creation_concurrency)
+      : withPricePct;
 
     return dedupeByAddress(enriched);
   } catch (error) {
@@ -1281,10 +1783,10 @@ export async function POST(request: NextRequest) {
   const search_query = body?.search_query as string | undefined;
   const search_type = body?.search_type as "ticker" | "address" | undefined;
 
-  const apiKey = process.env.BIRDEYE_API_KEY;
+  const apiKey = process.env.UNIBLOCK_API_KEY;
   if (!apiKey) {
     return NextResponse.json(
-      { error: "Missing BIRDEYE_API_KEY" },
+      { error: "Missing UNIBLOCK_API_KEY" },
       { status: 500 }
     );
   }
@@ -1297,6 +1799,7 @@ export async function POST(request: NextRequest) {
       chain,
       apiKey,
       limit,
+      offset,
       include_creation,
       creation_concurrency,
     });
@@ -1318,20 +1821,73 @@ export async function POST(request: NextRequest) {
     });
   }
 
+  // Solana + verified: serve from Jupiter catalog (cached) — avoids hammering Birdeye /token/list (429).
+  if (chain === "solana" && verified_only) {
+    const jPage = await loadSolanaVerifiedPageFromJupiter({
+      offset,
+      limit,
+      sort_by,
+      sort_type,
+      min_liquidity,
+      include_creation,
+      creation_concurrency,
+      apiKey,
+    });
+    if (jPage) {
+      const res = NextResponse.json(
+        {
+          items: jPage.finalItems,
+          uniqueCount: jPage.finalItems.length,
+          offset,
+          limit,
+          chain,
+          updateUnixTime: undefined,
+          updateTime: undefined,
+          min_liquidity,
+          sort_by,
+          sort_type,
+          ui_amount_mode,
+          verified_only,
+          force_full_scan,
+          upstreamTotal: jPage.filteredTotal,
+          verifiedTotal: jPage.filteredTotal,
+          jupVerifiedTotal: jPage.catalogTotal,
+          filteredTotal: jPage.filteredTotal,
+          verifiedTotalFiltered: jPage.filteredTotal,
+          verifiedTotalLowerBound: null,
+          exhausted: true,
+        },
+        { status: 200 }
+      );
+      res.headers.set("Cache-Control", "no-store");
+      return res;
+    }
+  }
+
   // Get verified set based on chain
   let verifiedSet: Set<string> | null = null;
   let verifiedTotal: number | undefined;
 
   if (chain === "solana") {
-    const jupVerifiedSet = await getJupiterVerifiedSet();
-    verifiedSet = verified_only ? jupVerifiedSet : null;
-    verifiedTotal = jupVerifiedSet.size;
+    if (verified_only) {
+      const jupVerifiedSet = await getJupiterVerifiedSet();
+      verifiedSet = jupVerifiedSet;
+      verifiedTotal = jupVerifiedSet.size;
+    } else {
+      verifiedSet = null;
+      verifiedTotal = undefined;
+    }
   } else if (chain === "bsc") {
-    const bnbVerifiedSet = await getBnbVerifiedSet();
-    verifiedSet = verified_only ? bnbVerifiedSet : null;
-    verifiedTotal = bnbVerifiedSet.size;
-  } else if (chain === "base") {
-    // Base: no verified list; show all tokens
+    if (verified_only) {
+      const bnbVerifiedSet = await getBnbVerifiedSet();
+      verifiedSet = bnbVerifiedSet;
+      verifiedTotal = bnbVerifiedSet.size;
+    } else {
+      verifiedSet = null;
+      verifiedTotal = undefined;
+    }
+  } else if (chain === "base" || chain === "monad" || chain === "ethereum") {
+    // Base / Monad / Ethereum: no verified list; show all tokens
     verifiedSet = null;
     verifiedTotal = undefined;
   }
@@ -1347,13 +1903,23 @@ export async function POST(request: NextRequest) {
   // Walk Birdeye pages until we have enough FILTERED items to satisfy offset+limit,
   // or until exhausted (or keep going if force_full_scan is true).
   let birdeyeOffset = 0;
-  const batchLimit = BIRDEYE_PAGE_MAX; // 50
   const maxBatches = needVerifiedTotal ? 9999 : 40; // safety valves
   let batches = 0;
   let exhausted = false;
+  const targetListLen = offset + limit;
 
   while (batches < maxBatches) {
+    if (!needVerifiedTotal && collected.length >= targetListLen) break;
     batches++;
+
+    const remainingSlots = targetListLen - collected.length;
+    const batchLimit =
+      needPostFilterPagination && verifiedSet
+        ? BIRDEYE_V3_LIST_MAX
+        : Math.min(
+            BIRDEYE_V3_LIST_MAX,
+            Math.max(1, remainingSlots)
+          );
 
     const listed = await fetchBirdeyeTokenlist({
       chain,
@@ -1401,24 +1967,42 @@ export async function POST(request: NextRequest) {
     }
 
     // If we only need enough for this page (fast path), stop early
-    if (!needVerifiedTotal && collected.length >= offset + limit) break;
+    if (!needVerifiedTotal && collected.length >= targetListLen) break;
 
-    // If fewer than batchLimit tokens returned, upstream exhausted
-    if (listed.tokens.length < batchLimit) {
+    if (listed.meta.hasNext === false || !listed.tokens.length) {
+      exhausted = true;
+      break;
+    }
+    if (listed.tokens.length < listed.meta.pageLimit) {
       exhausted = true;
       break;
     }
 
     birdeyeOffset += listed.tokens.length;
+    if (birdeyeOffset >= BIRDEYE_V3_OFFSET_LIMIT_MAX_SUM) {
+      exhausted = true;
+      break;
+    }
   }
 
   // Slice the filtered collection for this page
   const pageItems = collected.slice(offset, offset + limit);
 
+  const pageWithPricePct = await enrichTokenlistPricePercent24h(
+    pageItems,
+    chain,
+    apiKey
+  );
+
   // Optional: Creation enrichment on the page slice only
   const enriched = include_creation
-    ? await enrichWithCreation(pageItems, chain, apiKey, creation_concurrency)
-    : pageItems;
+    ? await enrichWithCreation(
+        pageWithPricePct,
+        chain,
+        apiKey,
+        creation_concurrency
+      )
+    : pageWithPricePct;
 
   const finalItems = dedupeByAddress(enriched);
 

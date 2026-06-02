@@ -1,12 +1,31 @@
 "use client";
 
-import { useEffect, useRef, useState, useContext } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
+import { GoldenTeamUpdatesEditor } from "@/components/golden-report/GoldenTeamUpdatesEditor";
 import { ReferralShare } from "@/components/leaderboard/ReferralInput";
 import copy from "copy-to-clipboard";
-import { Copy, Check } from "lucide-react";
+import { Copy, Check, RefreshCw } from "lucide-react";
 import { useWallet } from "@/contexts/WalletContext";
 import { usePolymarketDepositAddresses } from "@/hooks/usePolymarketDepositAddresses";
 import useSafeDeployment from "@/hooks/useSafeDeployment";
+import {
+  showErrorNotification,
+  showSuccessNotification,
+} from "@/components/ui/notification";
+import {
+  clearGoldenEditorCache,
+  isGoldenEditorCacheFresh,
+  readGoldenEditorCache,
+  writeGoldenEditorCache,
+  type GoldenEditorProjectCache,
+} from "@/lib/goldenReportEditorCache";
+import { canonicalTeamUpdatesMarkdown } from "@/lib/goldenReportEditorSerialization";
 
 type User = {
   id: string;
@@ -41,6 +60,22 @@ const truncateAddress = (address: string) => {
   return `${address.slice(0, 6)}...${address.slice(-4)}`;
 };
 
+function pickGoldenIx(
+  projects: GoldenEditorProjectCache[],
+  prevAddr?: string | null,
+  prevChain?: string | null,
+) {
+  let nextIx = 0;
+  if (prevAddr && projects.length > 0) {
+    const found = projects.findIndex(
+      (pr) =>
+        pr.contractAddress === prevAddr && pr.chain === prevChain,
+    );
+    if (found >= 0) nextIx = found;
+  }
+  return nextIx;
+}
+
 export default function AccountModal({
   isOpen,
   onClose,
@@ -49,10 +84,26 @@ export default function AccountModal({
   isLoggingOut,
   onLogout,
 }: AccountModalProps) {
-  const [activeTab, setActiveTab] = useState<"profile" | "referral">("profile");
+  const [activeTab, setActiveTab] = useState<
+    "profile" | "goldenReport" | "referral"
+  >("profile");
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const [goldenProjects, setGoldenProjects] = useState<
+    GoldenEditorProjectCache[]
+  >([]);
+  const [goldenLoading, setGoldenLoading] = useState(false);
+  const [goldenIx, setGoldenIx] = useState(0);
+  const [goldenDraft, setGoldenDraft] = useState("");
+  const [goldenSaving, setGoldenSaving] = useState(false);
+  const [goldenRefreshing, setGoldenRefreshing] = useState(false);
+
+  const goldenProjectsRef = useRef(goldenProjects);
+  const goldenIxRef = useRef(goldenIx);
+  goldenProjectsRef.current = goldenProjects;
+  goldenIxRef.current = goldenIx;
 
   const { eoaAddress } = useWallet();
   const { derivedSafeAddressFromEoa } = useSafeDeployment(eoaAddress);
@@ -92,6 +143,198 @@ export default function AccountModal({
       }
     };
   }, []);
+
+  const fetchGoldenEditorFromNetwork = useCallback(
+    async (userId: string, opts?: { showLoading?: boolean }) => {
+      const showLoading = opts?.showLoading !== false;
+      const prevList = goldenProjectsRef.current;
+      const prevIx = goldenIxRef.current;
+      const prevAddr = prevList[prevIx]?.contractAddress;
+      const prevChain = prevList[prevIx]?.chain;
+
+      if (showLoading) setGoldenLoading(true);
+      try {
+        const res = await fetch("/api/golden-reports/editor", {
+          headers: { "x-user-id": userId },
+          cache: "no-store",
+        });
+        const data = await res.json().catch(() => ({}));
+        const projects: GoldenEditorProjectCache[] = Array.isArray(
+          data?.projects,
+        )
+          ? data.projects
+          : [];
+
+        const nextIx = pickGoldenIx(projects, prevAddr, prevChain);
+        writeGoldenEditorCache(userId, projects, Date.now());
+        setGoldenProjects(projects);
+        setGoldenIx(nextIx);
+        setGoldenDraft(projects[nextIx]?.teamUpdatesContent ?? "");
+        return true;
+      } catch {
+        if (showLoading) {
+          setGoldenProjects([]);
+          setGoldenDraft("");
+        }
+        return false;
+      } finally {
+        if (showLoading) setGoldenLoading(false);
+      }
+    },
+    [],
+  );
+
+  const handleRefreshGoldenUpdates = async () => {
+    if (!currentUser?.id || goldenRefreshing) return;
+
+    if (goldenPublishDirty) {
+      const shouldDiscard = window.confirm(
+        "You have unsaved Team Updates changes. Refreshing will replace the editor with the latest published content. Continue?",
+      );
+      if (!shouldDiscard) return;
+    }
+
+    setGoldenRefreshing(true);
+    try {
+      const ok = await fetchGoldenEditorFromNetwork(currentUser.id, {
+        showLoading: false,
+      });
+      if (!ok) {
+        showErrorNotification(
+          "Could not refresh",
+          "Failed to fetch the latest Team Updates. Please try again.",
+          { position: "top-right" },
+        );
+        return;
+      }
+      showSuccessNotification(
+        "Team updates refreshed",
+        "Loaded the latest Team Updates from the database.",
+        { position: "top-right" },
+      );
+    } finally {
+      setGoldenRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== "goldenReport" || !currentUser?.id) return;
+    const uid = currentUser.id;
+    const cached = readGoldenEditorCache(uid);
+
+    if (cached && isGoldenEditorCacheFresh(cached)) {
+      const projects = cached.projects;
+      if (projects.length === 0) {
+        void fetchGoldenEditorFromNetwork(uid, { showLoading: true });
+        return;
+      }
+      const prevAddr = goldenProjectsRef.current[goldenIxRef.current]?.contractAddress;
+      const prevChain = goldenProjectsRef.current[goldenIxRef.current]?.chain;
+      const nextIx = pickGoldenIx(projects, prevAddr, prevChain);
+      setGoldenProjects(projects);
+      setGoldenIx(nextIx);
+      setGoldenDraft(projects[nextIx]?.teamUpdatesContent ?? "");
+      return;
+    }
+
+    if (cached && !isGoldenEditorCacheFresh(cached)) {
+      const projects = cached.projects;
+      const prevAddr = goldenProjectsRef.current[goldenIxRef.current]?.contractAddress;
+      const prevChain = goldenProjectsRef.current[goldenIxRef.current]?.chain;
+      const nextIx = pickGoldenIx(projects, prevAddr, prevChain);
+      setGoldenProjects(projects);
+      setGoldenIx(nextIx);
+      setGoldenDraft(projects[nextIx]?.teamUpdatesContent ?? "");
+      void fetchGoldenEditorFromNetwork(uid, { showLoading: false });
+      return;
+    }
+
+    void fetchGoldenEditorFromNetwork(uid, { showLoading: true });
+  }, [isOpen, activeTab, currentUser?.id, fetchGoldenEditorFromNetwork]);
+
+  useEffect(() => {
+    const p = goldenProjects[goldenIx];
+    if (p) setGoldenDraft(p.teamUpdatesContent ?? "");
+  }, [goldenIx, goldenProjects]);
+
+  const goldenSavedMarkdown =
+    goldenProjects[goldenIx]?.teamUpdatesContent ?? "";
+  const goldenPublishDirty = useMemo(
+    () =>
+      canonicalTeamUpdatesMarkdown(goldenDraft) !==
+      canonicalTeamUpdatesMarkdown(goldenSavedMarkdown),
+    [goldenDraft, goldenSavedMarkdown],
+  );
+
+  const handlePublishTeamUpdates = async () => {
+    const p = goldenProjects[goldenIx];
+    if (!currentUser?.id || !p) return;
+    if (!goldenPublishDirty) return;
+    setGoldenSaving(true);
+    try {
+      const res = await fetch("/api/golden-reports/editor", {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": currentUser.id,
+        },
+        body: JSON.stringify({
+          contractAddress: p.contractAddress,
+          chain: p.chain,
+          content: goldenDraft,
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok || data?.ok === false) {
+        const err =
+          typeof data?.error === "string" ? data.error : "Publish failed.";
+        showErrorNotification("Could not publish", err, {
+          position: "top-right",
+        });
+        return;
+      }
+      showSuccessNotification(
+        "Team updates published",
+        "RexScreener reports will show the latest under Team Updates.",
+        { position: "top-right" },
+      );
+      const updated = data?.project as
+        | GoldenEditorProjectCache
+        | undefined;
+      if (updated && currentUser?.id) {
+        setGoldenProjects((prev) => {
+          const next = prev.map((row) =>
+            row.contractAddress === updated.contractAddress &&
+            row.chain === updated.chain
+              ? {
+                  ...row,
+                  teamUpdatesContent:
+                    updated.teamUpdatesContent ?? row.teamUpdatesContent,
+                  teamUpdatesPublishedAt:
+                    updated.teamUpdatesPublishedAt != null
+                      ? String(updated.teamUpdatesPublishedAt)
+                      : row.teamUpdatesPublishedAt,
+                }
+              : row,
+          );
+          writeGoldenEditorCache(currentUser.id, next, Date.now());
+          return next;
+        });
+        setGoldenDraft(
+          typeof updated.teamUpdatesContent === "string"
+            ? updated.teamUpdatesContent
+            : "",
+        );
+      }
+    } catch {
+      const err = "Publish failed.";
+      showErrorNotification("Could not publish", err, {
+        position: "top-right",
+      });
+    } finally {
+      setGoldenSaving(false);
+    }
+  };
 
   // Handle click outside
   useEffect(() => {
@@ -154,10 +397,11 @@ export default function AccountModal({
           </div>
 
           {/* Tabs */}
-          <div className="flex space-x-1 mx-4 mt-4 bg-[#141414] p-1 rounded-lg">
+          <div className="flex gap-1 mx-4 mt-4 bg-[#141414] p-1 rounded-lg">
             <button
+              type="button"
               onClick={() => setActiveTab("profile")}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              className={`min-w-0 flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${
                 activeTab === "profile"
                   ? "bg-[#ffc000] text-black"
                   : "text-gray-400 hover:text-white"
@@ -166,8 +410,20 @@ export default function AccountModal({
               Profile
             </button>
             <button
+              type="button"
+              onClick={() => setActiveTab("goldenReport")}
+              className={`min-w-0 flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${
+                activeTab === "goldenReport"
+                  ? "bg-[#ffc000] text-black"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Golden Report
+            </button>
+            <button
+              type="button"
               onClick={() => setActiveTab("referral")}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              className={`min-w-0 flex-1 py-2 px-2 sm:px-3 rounded-md text-xs sm:text-sm font-medium transition-colors ${
                 activeTab === "referral"
                   ? "bg-[#ffc000] text-black"
                   : "text-gray-400 hover:text-white"
@@ -409,6 +665,88 @@ export default function AccountModal({
                   </div>
                 )}
 
+                {/* Golden Report — team updates (authorized editors only) */}
+                {activeTab === "goldenReport" && (
+                  <div className="space-y-4">
+                    {goldenLoading ? (
+                      <div className="flex justify-center py-12">
+                        <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#ffc000] border-t-transparent" />
+                      </div>
+                    ) : goldenProjects.length > 0 ? (
+                      <div className="space-y-3">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <h6 className="text-[14px]! font-medium!">
+                            <span className="text-[#ffc000] font-medium!">Golden Report</span> (Team updates)
+                          </h6>
+                          <button
+                            type="button"
+                            onClick={() => void handleRefreshGoldenUpdates()}
+                            disabled={goldenRefreshing || goldenSaving}
+                            className="inline-flex items-center justify-center p-1 text-white/90 transition hover:text-white disabled:cursor-not-allowed disabled:opacity-50"
+                            title="Refresh latest team updates from database"
+                            aria-label="Refresh Team Updates"
+                          >
+                            <RefreshCw
+                              className={`h-4 w-4 ${goldenRefreshing ? "animate-spin" : ""}`}
+                            />
+                          </button>
+                        </div>
+                        {goldenProjects.length > 1 ? (
+                          <label className="mb-2 block text-xs text-gray-400">
+                            Project
+                            <select
+                              value={goldenIx}
+                              onChange={(e) => {
+                                const next = Number(e.target.value);
+                                const proj = goldenProjects[next];
+                                setGoldenIx(next);
+                                setGoldenDraft(proj?.teamUpdatesContent ?? "");
+                              }}
+                              className="mt-1 w-full rounded-md border border-white/15 bg-black/40 px-2 py-2 text-sm text-white"
+                            >
+                              {goldenProjects.map((proj, i) => (
+                                <option
+                                  key={`${proj.chain}:${proj.contractAddress}`}
+                                  value={i}
+                                >
+                                  {proj.contractAddress.slice(0, 6)}…
+                                  {proj.contractAddress.slice(-4)} (
+                                  {proj.chain})
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                        ) : null}
+                        <div className="mb-3">
+                          <GoldenTeamUpdatesEditor
+                            documentKey={`${goldenProjects[goldenIx]?.contractAddress ?? ""}-${goldenProjects[goldenIx]?.chain ?? ""}-${goldenProjects[goldenIx]?.teamUpdatesPublishedAt ?? ""}`}
+                            markdown={goldenDraft}
+                            onMarkdownChange={setGoldenDraft}
+                            placeholder="Share the latest official update for token holders…"
+                            disabled={goldenSaving}
+                          />
+                        </div>
+                        <div className="flex flex-wrap items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => void handlePublishTeamUpdates()}
+                            disabled={goldenSaving || !goldenPublishDirty}
+                            className="rounded-lg bg-[#ffc000] px-4 py-2 text-sm font-semibold text-black transition hover:bg-[#ffd000] disabled:cursor-not-allowed disabled:opacity-60 disabled:hover:bg-[#ffc000]"
+                          >
+                            {goldenSaving ? "Publishing…" : "Publish"}
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <p className="rounded-lg border border-white/10 bg-white/5 p-4 text-center text-sm text-gray-400">
+                        No Golden Report projects are linked to your account
+                        email. If you should have access, ask the RaptorX team to
+                        add your email for your project&apos;s contract.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Referral Tab */}
                 {activeTab === "referral" && (
                   <div className="space-y-4">
@@ -429,7 +767,10 @@ export default function AccountModal({
           {/* Footer */}
           <div className="p-4 border-t border-gray-700">
             <button
-              onClick={onLogout}
+              onClick={() => {
+                if (currentUser?.id) clearGoldenEditorCache(currentUser.id);
+                onLogout();
+              }}
               disabled={isLoggingOut}
               className={`w-full flex items-center justify-center gap-2 px-4 py-3 rounded-lg transition ${
                 isLoggingOut

@@ -69,6 +69,14 @@ export type MarketDetails = {
   prices?: (number | string)[];
   description?: string;
   liquidity?: number;
+  /** Myriad / extra provider payload */
+  slug?: string;
+  myriadNetworkId?: number;
+  myriadMarketId?: number;
+  /** Myriad: 0 = AMM, 1 = order book (CLOB). */
+  myriadExecutionMode?: number;
+  myriadIsOrderBook?: boolean;
+  rawEventData?: unknown;
 };
 
 export function useMarketDetails(eventTicker: string | null, eventId?: string | null, slug?: string | null) {
@@ -78,7 +86,7 @@ export function useMarketDetails(eventTicker: string | null, eventId?: string | 
   const query = useQuery({
     queryKey: ["market-details", eventTicker, eventId, slug, dataSource, pathname],
     queryFn: async () => {
-      if (!eventTicker && !slug) return null;
+      if (!eventTicker && !slug && !eventId) return null;
 
       // Detect route inside queryFn to use current pathname value
       // Check pathname directly to ensure we use the most up-to-date value
@@ -86,6 +94,8 @@ export function useMarketDetails(eventTicker: string | null, eventId?: string | 
       const isKalshiRoute = currentPathname?.startsWith("/rexmarkets/kalshi/");
       const isPolymarketRoute = currentPathname?.startsWith("/rexmarkets/polymarket/");
       const isLimitlessRoute = currentPathname?.startsWith("/rexmarkets/limitless/");
+      const isMyriadRoute = currentPathname?.startsWith("/rexmarkets/myriad/");
+      const isPredictFunRoute = currentPathname?.startsWith("/rexmarkets/predict-fun/");
 
       // Determine which API endpoint to use
       let apiPath: string;
@@ -118,10 +128,25 @@ export function useMarketDetails(eventTicker: string | null, eventId?: string | 
           return null;
         }
       }
+      // Myriad market detail by slug
+      else if (isMyriadRoute) {
+        const s = slug || eventTicker;
+        if (!s) return null;
+        apiPath = `/api/myriad/market-details?slug=${encodeURIComponent(s)}`;
+      }
+      else if (isPredictFunRoute) {
+        const id = eventTicker || slug || eventId;
+        if (!id) return null;
+        apiPath = `/api/predictfun/market-details?id=${encodeURIComponent(id)}`;
+      }
       // If slug is provided, check dataSource to determine API
       else if (slug) {
         if (dataSource === "limitless") {
           apiPath = `/api/limitless/market-details?slug=${encodeURIComponent(slug)}`;
+        } else if (dataSource === "myriad") {
+          apiPath = `/api/myriad/market-details?slug=${encodeURIComponent(slug)}`;
+        } else if (dataSource === "predictfun") {
+          apiPath = `/api/predictfun/market-details?id=${encodeURIComponent(slug)}`;
         } else {
           // Default to Polymarket for slug (slug is Polymarket-specific)
           apiPath = `/api/polymarket/market-details?slug=${encodeURIComponent(slug)}`;
@@ -181,7 +206,7 @@ export function useMarketDetails(eventTicker: string | null, eventId?: string | 
 
       return res.json() as Promise<MarketDetails>;
     },
-    enabled: !!(eventTicker || slug),
+    enabled: !!(eventTicker || slug || eventId),
     staleTime: 30_000,
   });
 

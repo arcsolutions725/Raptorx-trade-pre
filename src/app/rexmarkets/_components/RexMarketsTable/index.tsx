@@ -11,7 +11,8 @@ type RexMarketsTableProps = {
   onMarketSelected?: (
     eventTicker: string,
     marketTitle: string,
-    totalVolume: number
+    totalVolume: number,
+    eventId?: string
   ) => void;
 };
 

@@ -84,13 +84,13 @@ Analyze sentiment from Twitter, community channels, and user chatter based on th
 
 Example style: "The community on X are bullishly rallying around $AURA. 24-hour timeline shows activity that has picked up where engagement has 5X'd with people calling for all sorts of high valuations. While the majority of emotions are bullishly high, some request to exercise caution due to bundling, etc."
 
-## 5. Individual Tweets
+## 5. Top Tweets
 Show the **5 most relevant tweets** based on engagement from the provided tweets data. For each tweet, format as:
 **@Username:** Tweet content
 - Extract individual tweets from the tweetsData array provided
 - Include usernames, tweet content, and media when available
 - Prioritize tweets containing the ticker, contract address, or project name
-- If no tweets provided, state "No tweet data available for analysis"
+- If no tweets in input, write one brief line that tweet cards load from live data when the user refreshes the report (do not use the phrase "No tweet data available for analysis")
 
 ## 6. Coin-O-Metry
 Present key statistics in a structured format:
@@ -179,6 +179,238 @@ async function awardReportPoints(userId: string) {
   });
 }
 
+/** RexScreener / Rex Pilot cache: same shape as a freshly generated report (incl. `tweets` for Claw embed). */
+async function buildJsonFromCachedReportRow(opts: {
+  userId: string;
+  addr: string;
+  effectiveTicker: string;
+  projectName?: string;
+  content: string;
+  dexData: any;
+  tweetsData: any;
+  holdersData: any;
+  securityData: any;
+  storedChain?: string | null;
+  source: string;
+}) {
+  const {
+    userId,
+    addr,
+    effectiveTicker,
+    projectName,
+    content,
+    dexData,
+    tweetsData,
+    holdersData,
+    securityData,
+    storedChain,
+    source,
+  } = opts;
+
+  const reportChain = detectChain({
+    dexData: dexData as any,
+    address: addr,
+    explicitChain: storedChain ?? undefined,
+  });
+
+  const holderAnalytics =
+    reportChain === "bsc" ? holdersData ?? null : null;
+  const securityAnalytics =
+    reportChain === "bsc" ? securityData ?? null : null;
+
+  const tweetsArr = Array.isArray(tweetsData) ? tweetsData : [];
+  const tweetsPayload = {
+    success: true as const,
+    data: tweetsArr,
+  };
+
+  const created = await prisma.report.create({
+    data: {
+      userId,
+      contractAddress: addr,
+      ticker: effectiveTicker,
+      chain: reportChain,
+      projectName: projectName ?? undefined,
+      content,
+      dexData: dexData ?? undefined,
+      tweetsData: tweetsArr.length ? tweetsData ?? undefined : undefined,
+      securityData:
+        reportChain === "bsc" ? securityData ?? undefined : undefined,
+      holdersData:
+        reportChain === "bsc" ? holdersData ?? undefined : undefined,
+      conversation: { create: {} },
+    },
+    include: {
+      conversation: {
+        select: { id: true, createdAt: true, updatedAt: true },
+      },
+    },
+  });
+
+  await awardReportPoints(userId);
+
+  return {
+    success: true,
+    source,
+    report: content,
+    tokenData: {
+      dexData: dexData ?? null,
+      coingeckoData: null,
+    },
+    tweets: tweetsPayload,
+    tweetsAnalyzed: tweetsArr.length,
+    holderAnalytics,
+    securityAnalytics,
+    metadata: {
+      contractAddress: addr,
+      ticker: effectiveTicker,
+      projectName: created.projectName ?? null,
+      generatedAt: new Date().toISOString(),
+      chain: reportChain,
+      dataSourcesUsed: {
+        dexScreener: !!dexData,
+        coinGecko: false,
+        tweets: tweetsArr.length > 0,
+      },
+    },
+    saved: {
+      reportId: created.id,
+      conversationId: created.conversation?.id ?? null,
+      createdAt: created.createdAt,
+    },
+  };
+}
+
+async function tryReuseExistingReport(opts: {
+  userId: string;
+  addr: string;
+  tkr: string;
+  projectName?: string;
+}) {
+  const { userId, addr, tkr, projectName } = opts;
+
+  let sysReport = await prisma.systemReport.findFirst({
+    where: {
+      contractAddress: { equals: addr, mode: "insensitive" },
+      ticker: { equals: tkr, mode: "insensitive" },
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (!sysReport) {
+    sysReport = await prisma.systemReport.findFirst({
+      where: {
+        contractAddress: { equals: addr, mode: "insensitive" },
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+  }
+  if (sysReport) {
+    return buildJsonFromCachedReportRow({
+      userId,
+      addr,
+      effectiveTicker: normTicker(sysReport.ticker),
+      projectName: sysReport.projectName ?? projectName,
+      content: sysReport.content,
+      dexData: sysReport.dexData,
+      tweetsData: sysReport.tweetsData,
+      holdersData: sysReport.holdersData,
+      securityData: sysReport.securityData,
+      storedChain: sysReport.chain,
+      source: "systemreports",
+    });
+  }
+
+  let userReport = await prisma.report.findFirst({
+    where: {
+      contractAddress: { equals: addr, mode: "insensitive" },
+      ticker: { equals: tkr, mode: "insensitive" },
+      userId,
+    },
+    orderBy: { updatedAt: "desc" },
+  });
+  if (!userReport) {
+    userReport = await prisma.report.findFirst({
+      where: {
+        contractAddress: { equals: addr, mode: "insensitive" },
+        userId,
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+  }
+  if (userReport) {
+    return buildJsonFromCachedReportRow({
+      userId,
+      addr,
+      effectiveTicker: normTicker(userReport.ticker),
+      projectName: userReport.projectName ?? projectName,
+      content: userReport.content,
+      dexData: userReport.dexData,
+      tweetsData: userReport.tweetsData,
+      holdersData: userReport.holdersData,
+      securityData: userReport.securityData,
+      storedChain: userReport.chain,
+      source: "cached-user-report",
+    });
+  }
+
+  return null;
+}
+
+/** Cached JSON responses must use SSE when the client sent `stream: true`, or the reader never sees `done`. */
+function streamCryptoReportAsSse(cached: {
+  success?: boolean;
+  source?: string;
+  report?: string;
+  saved?: unknown;
+  metadata?: unknown;
+  tweetsAnalyzed?: number;
+}) {
+  const encoder = new TextEncoder();
+  const sse = new ReadableStream<Uint8Array>({
+    async start(controller) {
+      const send = (payload: Record<string, unknown>) => {
+        controller.enqueue(
+          encoder.encode(`data: ${JSON.stringify(payload)}\n\n`),
+        );
+      };
+      try {
+        const content = String(cached.report ?? "");
+        const chunkSize = 160;
+        for (let i = 0; i < content.length; i += chunkSize) {
+          send({ type: "token", text: content.slice(i, i + chunkSize) });
+        }
+        send({
+          type: "done",
+          success: cached.success ?? true,
+          source: cached.source,
+          report: cached.report,
+          saved: cached.saved,
+          metadata: cached.metadata,
+          tweetsAnalyzed: cached.tweetsAnalyzed,
+          tokenData: (cached as { tokenData?: unknown }).tokenData,
+          tweets: (cached as { tweets?: unknown }).tweets,
+          holderAnalytics: (cached as { holderAnalytics?: unknown })
+            .holderAnalytics,
+          securityAnalytics: (cached as { securityAnalytics?: unknown })
+            .securityAnalytics,
+        });
+      } catch (e: unknown) {
+        const message = e instanceof Error ? e.message : "Unknown error";
+        send({ type: "error", message });
+      } finally {
+        controller.close();
+      }
+    },
+  });
+  return new Response(sse, {
+    headers: {
+      "Content-Type": "text/event-stream; charset=utf-8",
+      "Cache-Control": "no-cache, no-transform",
+      Connection: "keep-alive",
+    },
+  });
+}
+
 export async function POST(request: NextRequest) {
   try {
     const userId = requireUserId(request);
@@ -190,7 +422,10 @@ export async function POST(request: NextRequest) {
       storeToSystem, // admin-only path
       overwrite, // admin confirm
       forceRefresh = false,
+      stream,
     } = await request.json();
+
+    const wantsStream = Boolean(stream) && !storeToSystem;
 
     if (!contractAddress || !ticker) {
       return NextResponse.json(
@@ -205,7 +440,25 @@ export async function POST(request: NextRequest) {
 
     const isAdmin = isAdminEmail(user.email);
 
-    // Subscription & usage: RexScreener technical report generation
+    const addr = normAddr(contractAddress);
+    const tkr = normTicker(ticker);
+
+    // Reuse Rex Pilot / RexScreener DB reports first: no usage charge, same content/tweets/embeds as Screener.
+    if (!storeToSystem && !forceRefresh) {
+      const cached = await tryReuseExistingReport({
+        userId,
+        addr,
+        tkr,
+        projectName,
+      });
+      if (cached) {
+        if (wantsStream) {
+          return streamCryptoReportAsSse(cached);
+        }
+        return NextResponse.json(cached);
+      }
+    }
+
     const usageResult = await checkAndIncrementUsage(
       userId,
       "REXSCREENER_REPORT" as UsageFeature,
@@ -220,157 +473,6 @@ export async function POST(request: NextRequest) {
         },
         { status: 402 },
       );
-    }
-    const addr = normAddr(contractAddress);
-    const tkr = normTicker(ticker);
-
-    // ---------- FAST-PATH for normal users: reuse SystemReport if exists ----------
-    if (!storeToSystem && !forceRefresh) {
-      const userReport = await prisma.report.findFirst({
-        where: {
-          contractAddress: { equals: addr, mode: "insensitive" },
-          ticker: { equals: tkr, mode: "insensitive" },
-          userId: userId,
-        },
-      });
-
-      if (userReport) {
-        // Detect chain from existing report data
-        const reportChain = detectChain({
-          dexData: userReport.dexData as any,
-          address: addr,
-        });
-
-        const created = await prisma.report.create({
-          data: {
-            userId,
-            contractAddress: addr,
-            ticker: tkr,
-            chain: reportChain,
-            projectName: userReport.projectName ?? projectName ?? undefined,
-            content: userReport.content,
-            dexData: userReport.dexData ?? undefined,
-            tweetsData: userReport.tweetsData ?? undefined,
-            securityData:
-              reportChain === "bsc" ? userReport.securityData ?? undefined : undefined,
-            holdersData:
-              reportChain === "bsc" ? userReport.holdersData ?? undefined : undefined,
-            conversation: { create: {} },
-          },
-          include: {
-            conversation: {
-              select: { id: true, createdAt: true, updatedAt: true },
-            },
-          },
-        });
-
-        const userTweetsData = userReport.tweetsData as any;
-        const tweetsCount = Array.isArray(userTweetsData)
-          ? userTweetsData.length
-          : 0;
-        await awardReportPoints(userId);
-        return NextResponse.json({
-          success: true,
-          source: "systemreports",
-          report: userReport.content,
-          tokenData: {
-            dexData: userReport.dexData ?? null,
-            coingeckoData: null,
-          },
-          tweetsData: { success: true, data: userTweetsData || [] },
-          tweetsAnalyzed: tweetsCount,
-          metadata: {
-            contractAddress: addr,
-            ticker: tkr,
-            projectName: created.projectName ?? null,
-            generatedAt: new Date().toISOString(),
-            dataSourcesUsed: {
-              dexScreener: !!userReport.dexData,
-              coinGecko: false,
-              tweets: tweetsCount > 0,
-            },
-          },
-          saved: {
-            reportId: created.id,
-            conversationId: created.conversation?.id ?? null,
-            createdAt: created.createdAt,
-          },
-        });
-      }
-
-      const sysReport = await prisma.systemReport.findFirst({
-        where: {
-          contractAddress: { equals: addr, mode: "insensitive" },
-          ticker: { equals: tkr, mode: "insensitive" },
-        },
-      });
-
-      if (sysReport) {
-        // Detect chain from system report data
-        const sysReportChain = detectChain({
-          dexData: sysReport.dexData as any,
-          address: addr,
-        });
-
-        const created = await prisma.report.create({
-          data: {
-            userId,
-            contractAddress: addr,
-            ticker: tkr,
-            chain: sysReportChain,
-            projectName: sysReport.projectName ?? projectName ?? undefined,
-            content: sysReport.content,
-            dexData: sysReport.dexData ?? undefined,
-            tweetsData: sysReport.tweetsData ?? undefined,
-            securityData:
-              sysReportChain === "bsc" ? sysReport.securityData ?? undefined : undefined,
-            holdersData:
-              sysReportChain === "bsc" ? sysReport.holdersData ?? undefined : undefined,
-            conversation: { create: {} },
-          },
-          include: {
-            conversation: {
-              select: { id: true, createdAt: true, updatedAt: true },
-            },
-          },
-        });
-
-        const systemTweetsData = sysReport.tweetsData as any;
-        const tweetsCount = Array.isArray(systemTweetsData)
-          ? systemTweetsData.length
-          : 0;
-
-        await awardReportPoints(userId);
-
-        return NextResponse.json({
-          success: true,
-          source: "systemreports",
-          report: sysReport.content,
-          tokenData: {
-            dexData: sysReport.dexData ?? null,
-            coingeckoData: null,
-          },
-          tweetsData: { success: true, data: systemTweetsData || [] },
-          tweetsAnalyzed: tweetsCount,
-          metadata: {
-            contractAddress: addr,
-            ticker: tkr,
-            projectName: created.projectName ?? null,
-            generatedAt: new Date().toISOString(),
-            dataSourcesUsed: {
-              dexScreener: !!sysReport.dexData,
-              coinGecko: false,
-              tweets: tweetsCount > 0,
-            },
-          },
-          saved: {
-            reportId: created.id,
-            conversationId: created.conversation?.id ?? null,
-            createdAt: created.createdAt,
-          },
-        });
-      }
-      // else fall through and generate fresh
     }
 
     // ---------- Admin protections (no duplicates on store) ----------
@@ -411,7 +513,17 @@ export async function POST(request: NextRequest) {
       explicitChain: explicitChainFromBody,
     });
 
-    const tweetsData = await getTweetsSearch(addr, tkr, projectName, 40);
+    let tweetsData: Awaited<ReturnType<typeof getTweetsSearch>>;
+    try {
+      tweetsData = await getTweetsSearch(addr, tkr, projectName, 40);
+    } catch (tweetErr: any) {
+      console.error("generate-report: tweet fetch failed:", tweetErr?.message || tweetErr);
+      tweetsData = {
+        success: false,
+        data: [],
+        error: tweetErr?.message || "Tweet search unavailable",
+      };
+    }
     const rawTweetsArray =
       (tweetsData as any).success && (tweetsData as any).data?.length > 0
         ? (tweetsData as any).data
@@ -475,7 +587,7 @@ export async function POST(request: NextRequest) {
 - Contract Address: ${addr}
 - Ticker: ${tkr}
 - Project Name: ${projectName || "Not provided"}
-- Blockchain: ${detectedChain === "bsc" ? "BNB Smart Chain (BSC)" : detectedChain === "base" ? "Base" : detectedChain === "monad" ? "Monad" : "Solana"}
+- Blockchain: ${detectedChain === "bsc" ? "BNB Smart Chain (BSC)" : detectedChain === "ethereum" ? "Ethereum" : detectedChain === "base" ? "Base" : detectedChain === "monad" ? "Monad" : "Solana"}
 
 ### DexScreener Data:
 ${JSON.stringify((tokenData as any).dexData, null, 2)}
@@ -504,7 +616,7 @@ ${JSON.stringify(securityAnalytics, null, 2)}`
 - Follow the exact report structure outlined in the system prompt
 - Include all available stats, links, and relevant insights
 - Analyze the tweets for sentiment, trends, and key mentions in the Community Chatter section
-- For Individual Tweets section, extract and format the 5 most relevant tweets from the provided data
+- For Top Tweets section, extract and format the 5 most relevant tweets from the provided data
 - ${
       holderAnalytics
         ? "Include the Holder Analytics section with comprehensive analysis of the provided holder data"
@@ -519,6 +631,167 @@ ${JSON.stringify(securityAnalytics, null, 2)}`
 - Focus on creating a professional, readable report structure
 - Make sure each section provides substantial analysis and insights`;
 
+    const buildReportPayload = async (generatedReport: string) => {
+      // ---------- Admin "Generate and Store": UPDATE existing row by id (case-insensitive match), else CREATE ----------
+      if (storeToSystem && isAdmin) {
+        const existingCI = await prisma.systemReport.findFirst({
+          where: {
+            contractAddress: { equals: addr, mode: "insensitive" },
+            ticker: { equals: tkr, mode: "insensitive" },
+          },
+          select: { id: true },
+        });
+
+        if (existingCI) {
+          await prisma.systemReport.update({
+            where: { id: existingCI.id },
+            data: {
+              contractAddress: addr,
+              ticker: tkr,
+              chain: detectedChain,
+              projectName: projectName || undefined,
+              content: generatedReport,
+              dexData: (tokenData as any).dexData ?? undefined,
+              tweetsData: rawTweetsArray || undefined,
+              securityData: securityAnalytics || undefined,
+              holdersData: holderAnalytics || undefined,
+            },
+          });
+        } else {
+          await prisma.systemReport.create({
+            data: {
+              contractAddress: addr,
+              ticker: tkr,
+              chain: detectedChain,
+              projectName: projectName || undefined,
+              content: generatedReport,
+              dexData: (tokenData as any).dexData ?? undefined,
+              tweetsData: rawTweetsArray || undefined,
+              securityData: securityAnalytics || undefined,
+              holdersData: holderAnalytics || undefined,
+            },
+          });
+        }
+      }
+
+      const created = await prisma.report.create({
+        data: {
+          userId,
+          contractAddress: addr,
+          ticker: tkr,
+          chain: detectedChain,
+          projectName: projectName || undefined,
+          content: generatedReport,
+          dexData: (tokenData as any).dexData ?? undefined,
+          tweetsData: rawTweetsArray || undefined,
+          securityData: securityAnalytics || undefined,
+          holdersData: holderAnalytics || undefined,
+          conversation: { create: {} },
+        },
+        include: {
+          conversation: {
+            select: { id: true, createdAt: true, updatedAt: true },
+          },
+        },
+      });
+
+      await awardReportPoints(userId);
+
+      return {
+        success: true,
+        source: storeToSystem ? "generated+stored" : "generated",
+        report: generatedReport,
+        tokenData,
+        tweets: tweetsData,
+        tweetsAnalyzed: (tweetsData as any).data?.length || 0,
+        holderAnalytics: holderAnalytics || null,
+        securityAnalytics: securityAnalytics || null,
+        metadata: {
+          contractAddress: addr,
+          ticker: tkr,
+          projectName: projectName || null,
+          generatedAt: new Date().toISOString(),
+          chain: detectedChain,
+          dataSourcesUsed: {
+            dexScreener: !!(tokenData as any).dexData,
+            coinGecko: !!(tokenData as any).coingeckoData,
+            tweets:
+              (tweetsData as any).success &&
+              ((tweetsData as any).data?.length || 0) > 0,
+          },
+        },
+        saved: {
+          reportId: created.id,
+          conversationId: created.conversation?.id ?? null,
+          createdAt: created.createdAt,
+          updatedAt: created.updatedAt,
+        },
+      };
+    };
+
+    if (wantsStream) {
+      const encoder = new TextEncoder();
+      const sse = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const send = (payload: Record<string, unknown>) => {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(payload)}\n\n`),
+            );
+          };
+          try {
+            let fullReport = "";
+            const aiStream = await client.chat.completions.create({
+              model: "deepseek-chat",
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: aiPrompt },
+              ],
+              temperature: 0.7,
+              max_tokens: 4000,
+              stream: true,
+            });
+            for await (const part of aiStream) {
+              const delta = (
+                part as { choices?: { delta?: { content?: string } }[] }
+              ).choices?.[0]?.delta?.content;
+              if (delta) {
+                fullReport += delta;
+                send({ type: "token", text: delta });
+              }
+            }
+            const payload = await buildReportPayload(fullReport);
+            // Slim `done`: full payload includes `tokenData` / nested blobs that can make one SSE
+            // line huge and break JSON parsing or intermediaries; client only needs these fields.
+            send({
+              type: "done",
+              success: payload.success,
+              source: payload.source,
+              report: payload.report,
+              saved: payload.saved,
+              metadata: payload.metadata,
+              tweetsAnalyzed: payload.tweetsAnalyzed,
+              tokenData: payload.tokenData,
+              tweets: payload.tweets,
+              holderAnalytics: payload.holderAnalytics,
+              securityAnalytics: payload.securityAnalytics,
+            });
+          } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : "Unknown error";
+            send({ type: "error", message });
+          } finally {
+            controller.close();
+          }
+        },
+      });
+      return new Response(sse, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
     const aiResponse = await client.chat.completions.create({
       model: "deepseek-chat",
       messages: [
@@ -530,105 +803,8 @@ ${JSON.stringify(securityAnalytics, null, 2)}`
     });
 
     const generatedReport = aiResponse.choices?.[0]?.message?.content || "";
-
-    // ---------- Admin "Generate and Store": UPDATE existing row by id (case-insensitive match), else CREATE ----------
-    if (storeToSystem && isAdmin) {
-      const existingCI = await prisma.systemReport.findFirst({
-        where: {
-          contractAddress: { equals: addr, mode: "insensitive" },
-          ticker: { equals: tkr, mode: "insensitive" },
-        },
-        select: { id: true },
-      });
-
-      if (existingCI) {
-        // Update the single existing row — no new row created
-        await prisma.systemReport.update({
-          where: { id: existingCI.id },
-          data: {
-            contractAddress: addr, // normalize on write
-            ticker: tkr, // normalize on write
-            chain: detectedChain,
-            projectName: projectName || undefined,
-            content: generatedReport,
-            dexData: (tokenData as any).dexData ?? undefined,
-            tweetsData: rawTweetsArray || undefined,
-            securityData: securityAnalytics || undefined,
-            holdersData: holderAnalytics || undefined,
-            // updatedAt auto via @updatedAt
-          },
-        });
-      } else {
-        // No match -> create a new normalized row
-        await prisma.systemReport.create({
-          data: {
-            contractAddress: addr,
-            ticker: tkr,
-            chain: detectedChain,
-            projectName: projectName || undefined,
-            content: generatedReport,
-            dexData: (tokenData as any).dexData ?? undefined,
-            tweetsData: rawTweetsArray || undefined,
-            securityData: securityAnalytics || undefined,
-            holdersData: holderAnalytics || undefined,
-          },
-        });
-      }
-    }
-
-    // ---------- Always create a per-user Report row ----------
-    const created = await prisma.report.create({
-      data: {
-        userId,
-        contractAddress: addr,
-        ticker: tkr,
-        chain: detectedChain,
-        projectName: projectName || undefined,
-        content: generatedReport,
-        dexData: (tokenData as any).dexData ?? undefined,
-        tweetsData: rawTweetsArray || undefined,
-        securityData: securityAnalytics || undefined,
-        holdersData: holderAnalytics || undefined,
-        conversation: { create: {} },
-      },
-      include: {
-        conversation: {
-          select: { id: true, createdAt: true, updatedAt: true },
-        },
-      },
-    });
-
-    await awardReportPoints(userId);
-
-    return NextResponse.json({
-      success: true,
-      source: storeToSystem ? "generated+stored" : "generated",
-      report: generatedReport,
-      tokenData,
-      tweets: tweetsData,
-      tweetsAnalyzed: (tweetsData as any).data?.length || 0,
-      holderAnalytics: holderAnalytics || null,
-      securityAnalytics: securityAnalytics || null,
-      metadata: {
-        contractAddress: addr,
-        ticker: tkr,
-        projectName: projectName || null,
-        generatedAt: new Date().toISOString(),
-        chain: detectedChain,
-        dataSourcesUsed: {
-          dexScreener: !!(tokenData as any).dexData,
-          coinGecko: !!(tokenData as any).coingeckoData,
-          tweets:
-            (tweetsData as any).success &&
-            ((tweetsData as any).data?.length || 0) > 0,
-        },
-      },
-      saved: {
-        reportId: created.id,
-        conversationId: created.conversation?.id ?? null,
-        createdAt: created.createdAt,
-      },
-    });
+    const payload = await buildReportPayload(generatedReport);
+    return NextResponse.json(payload);
   } catch (err: any) {
     const msg = err instanceof Error ? err.message : "Unknown error";
     const status = msg.includes("x-user-id") ? 401 : 500;

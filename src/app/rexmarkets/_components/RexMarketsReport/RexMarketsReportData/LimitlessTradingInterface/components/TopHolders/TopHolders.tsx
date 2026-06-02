@@ -20,7 +20,7 @@ export default function TopHolders({ marketSlug }: TopHoldersProps) {
           <span className="text-sm text-green-400">Yes Holders</span>
           <span>SHARES</span>
         </div>
-        <div className="space-y-0 overflow-y-auto custom-select-scrollbar">
+        <div className="space-y-0">
           {isLoading ? (
             <div className="text-xs text-white/60 py-2">Loading...</div>
           ) : yesData.length > 0 ? (
@@ -52,7 +52,7 @@ export default function TopHolders({ marketSlug }: TopHoldersProps) {
           <span className="text-sm text-red-400">No Holders</span>
           <span>SHARES</span>
         </div>
-        <div className="space-y-0 overflow-y-auto custom-select-scrollbar">
+        <div className="space-y-0">
           {isLoading ? (
             <div className="text-xs text-white/60 py-2">Loading...</div>
           ) : noData.length > 0 ? (

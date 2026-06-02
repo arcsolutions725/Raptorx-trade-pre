@@ -2,7 +2,14 @@
 
 import { useState, useEffect, useRef, useContext, useCallback } from "react";
 import { useQueryClient } from "@tanstack/react-query";
-import { Copy, Check, ArrowDownCircle, ArrowUpCircle, RefreshCw } from "lucide-react";
+import {
+  Copy,
+  Check,
+  ArrowDownCircle,
+  ArrowUpCircle,
+  RefreshCw,
+  CircleAlert,
+} from "lucide-react";
 import copy from "copy-to-clipboard";
 import { useWallet } from "@/contexts/WalletContext";
 import useSafeDeployment from "@/hooks/useSafeDeployment";
@@ -16,8 +23,8 @@ import { useUsdcBalance } from "@/hooks/useUsdcBalance";
 import { useBaseBalance } from "@/hooks/useBaseBalance";
 import { showSuccessNotification } from "@/components/ui/notification";
 import { USDC_E_DECIMALS } from "@/constants/tokens";
-import { parseUnits, isAddress, createWalletClient, custom } from "viem";
-import { base } from "viem/chains";
+import { parseUnits, parseEther, isAddress, createWalletClient, custom } from "viem";
+import { base, bsc } from "viem/chains";
 import { erc20Abi } from "viem";
 import { USDC_BASE_ADDRESS, USDC_BASE_DECIMALS } from "@/constants/tokens";
 import { useWallets, usePrivy } from "@privy-io/react-auth";
@@ -38,6 +45,14 @@ import {
   createTransferCheckedInstruction,
   createAssociatedTokenAccountInstruction,
 } from "@solana/spl-token";
+import {
+  useMyriadBscBalances,
+  MYRIAD_BSC_USD1,
+  MYRIAD_BSC_USDT,
+  MYRIAD_BSC_STABLE_DECIMALS,
+  MYRIAD_BNB_WITHDRAW_GAS_RESERVE_BNB,
+} from "@/hooks/useMyriadBscBalances";
+import { formatCurrency } from "@/utils/format";
 
 const SOLANA_RPC =
   process.env.NEXT_PUBLIC_HELIUS_RPC_URL ||
@@ -48,8 +63,9 @@ const SOLANA_RPC =
 const SOLANA_USDC_MINT = "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v";
 const SOLANA_USDC_DECIMALS = 6;
 
-type PlatformTab = "kalshi" | "polymarket" | "limitless";
+type PlatformTab = "kalshi" | "polymarket" | "limitless" | "myriad" | "predictfun";
 type KalshiWithdrawAsset = "SOL" | "USDC";
+type MyriadWithdrawAsset = "BNB" | "USD1" | "USDT";
 
 type DepositWithdrawModalProps = {
   isOpen: boolean;
@@ -93,6 +109,13 @@ export default function DepositWithdrawModal({
   const [isSendingLimitlessUsdc, setIsSendingLimitlessUsdc] = useState(false);
   const [limitlessWithdrawError, setLimitlessWithdrawError] = useState<string | null>(null);
   const [isRefreshingBaseBalance, setIsRefreshingBaseBalance] = useState(false);
+  const [myriadWithdrawAsset, setMyriadWithdrawAsset] =
+    useState<MyriadWithdrawAsset>("USD1");
+  const [myriadWithdrawError, setMyriadWithdrawError] = useState<string | null>(
+    null,
+  );
+  const [isSendingMyriadStable, setIsSendingMyriadStable] = useState(false);
+  const [isRefreshingMyriadBsc, setIsRefreshingMyriadBsc] = useState(false);
   const modalRef = useRef<HTMLDivElement>(null);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -164,6 +187,15 @@ export default function DepositWithdrawModal({
   } = useBaseBalance(isOpen && platformTab === "limitless" ? eoaAddress : undefined);
 
   const {
+    data: myriadBscBalances,
+    isLoading: isMyriadBscBalancesLoading,
+    refetch: refetchMyriadBscBalances,
+  } = useMyriadBscBalances(
+    eoaAddress,
+    isOpen && (platformTab === "myriad" || platformTab === "predictfun"),
+  );
+
+  const {
     data: depositAddressesData,
     isLoading: isLoadingDepositAddresses,
     error: depositAddressesError,
@@ -190,11 +222,19 @@ export default function DepositWithdrawModal({
       setAddressError(null);
       setKalshiWithdrawError(null);
       setLimitlessWithdrawError(null);
+      setMyriadWithdrawError(null);
+      setMyriadWithdrawAsset(defaultPlatform === "predictfun" ? "USDT" : "USD1");
       setKalshiWithdrawAsset("USDC");
       setLastWithdrawnAmount(null);
       setLastWithdrawnAsset(null);
     }
   }, [isOpen, defaultPlatform]);
+
+  useEffect(() => {
+    if (platformTab === "predictfun" && myriadWithdrawAsset === "USD1") {
+      setMyriadWithdrawAsset("USDT");
+    }
+  }, [platformTab, myriadWithdrawAsset]);
 
   // Clear error messages after 3 seconds
   useEffect(() => {
@@ -298,6 +338,16 @@ export default function DepositWithdrawModal({
       setIsRefreshingBaseBalance(false);
     }
   }, [refetchBaseBalance, isRefreshingBaseBalance]);
+
+  const handleRefreshMyriadBscBalance = useCallback(async () => {
+    if (isRefreshingMyriadBsc) return;
+    setIsRefreshingMyriadBsc(true);
+    try {
+      await refetchMyriadBscBalances();
+    } finally {
+      setIsRefreshingMyriadBsc(false);
+    }
+  }, [refetchMyriadBscBalances, isRefreshingMyriadBsc]);
 
   const handleTransfer = async () => {
     if (!relayClient || !recipient || !amount) return;
@@ -737,6 +787,162 @@ export default function DepositWithdrawModal({
     }
   }, [recipient, amount, eoaAddress, baseUsdcBalance, wallets, refetchBaseBalance, queryClient]);
 
+  const handleMyriadWithdraw = useCallback(async () => {
+    const trimmedRecipient = recipient.trim();
+    const sendAmount = parseFloat(amount);
+    const usd1Avail = myriadBscBalances?.usd1 ?? 0;
+    const maxSendBnbWei = BigInt(
+      myriadBscBalances?.bnbMaxSendAfterReserveWei ?? "0",
+    );
+
+    if (!eoaAddress || !trimmedRecipient || !amount) {
+      setMyriadWithdrawError("Please enter recipient and amount.");
+      return;
+    }
+    if (!isAddress(trimmedRecipient)) {
+      setMyriadWithdrawError("Invalid EVM address.");
+      return;
+    }
+    if (isNaN(sendAmount) || sendAmount <= 0) {
+      setMyriadWithdrawError("Please enter a valid amount.");
+      return;
+    }
+
+    if (myriadWithdrawAsset === "USD1") {
+      if (sendAmount > usd1Avail) {
+        setMyriadWithdrawError("Insufficient USD1 balance on BNB Chain.");
+        return;
+      }
+    } else if (myriadWithdrawAsset === "USDT") {
+      const usdtAvail = myriadBscBalances?.usdt ?? 0;
+      if (sendAmount > usdtAvail) {
+        setMyriadWithdrawError("Insufficient USDT balance on BNB Chain.");
+        return;
+      }
+    } else {
+      let bnbValueWei: bigint;
+      try {
+        bnbValueWei = parseEther(amount.trim());
+      } catch {
+        setMyriadWithdrawError("Invalid BNB amount.");
+        return;
+      }
+      if (bnbValueWei <= BigInt(0)) {
+        setMyriadWithdrawError("Please enter a valid amount.");
+        return;
+      }
+      if (bnbValueWei > maxSendBnbWei) {
+        setMyriadWithdrawError(
+          `Exceeds sendable BNB (wallet keeps ~${MYRIAD_BNB_WITHDRAW_GAS_RESERVE_BNB} BNB for gas).`,
+        );
+        return;
+      }
+    }
+
+    setMyriadWithdrawError(null);
+    setIsSendingMyriadStable(true);
+
+    try {
+      const wallet = wallets?.find(
+        (w) =>
+          (w as { address?: string }).address?.toLowerCase() ===
+          eoaAddress?.toLowerCase(),
+      );
+      if (!wallet) {
+        throw new Error("Wallet not found. Please connect your wallet.");
+      }
+      const provider =
+        typeof (wallet as { getEthereumProvider?: () => Promise<unknown> })
+          .getEthereumProvider === "function"
+          ? await (
+              wallet as { getEthereumProvider: () => Promise<unknown> }
+            ).getEthereumProvider()
+          : null;
+      if (!provider) {
+        throw new Error(
+          "Wallet provider not available. Please connect your wallet.",
+        );
+      }
+
+      const walletWithSwitch = wallet as {
+        chainId?: string | number;
+        switchChain?: (chainId: number) => Promise<void>;
+      };
+      const currentChainId = walletWithSwitch.chainId;
+      const isOnBsc =
+        currentChainId === bsc.id ||
+        currentChainId === `eip155:${bsc.id}` ||
+        currentChainId === String(bsc.id);
+      if (!isOnBsc) {
+        if (typeof walletWithSwitch.switchChain !== "function") {
+          throw new Error(
+            "Cannot switch chain. Switch your wallet to BNB Smart Chain (56) and try again.",
+          );
+        }
+        await walletWithSwitch.switchChain(bsc.id);
+      }
+
+      const client = createWalletClient({
+        account: eoaAddress as `0x${string}`,
+        chain: bsc,
+        transport: custom(provider as Parameters<typeof custom>[0]),
+      });
+
+      if (myriadWithdrawAsset === "USD1") {
+        const amountWei = parseUnits(amount, MYRIAD_BSC_STABLE_DECIMALS);
+        await client.writeContract({
+          address: MYRIAD_BSC_USD1,
+          abi: erc20Abi,
+          functionName: "transfer",
+          args: [trimmedRecipient as `0x${string}`, amountWei],
+        });
+      } else if (myriadWithdrawAsset === "USDT") {
+        const amountWei = parseUnits(amount, MYRIAD_BSC_STABLE_DECIMALS);
+        await client.writeContract({
+          address: MYRIAD_BSC_USDT as `0x${string}`,
+          abi: erc20Abi,
+          functionName: "transfer",
+          args: [trimmedRecipient as `0x${string}`, amountWei],
+        });
+      } else {
+        const valueWei = parseEther(amount);
+        await client.sendTransaction({
+          to: trimmedRecipient as `0x${string}`,
+          value: valueWei,
+        });
+      }
+
+      setShowSuccess(true);
+      setRecipient("");
+      setAmount("");
+      showSuccessNotification(
+        "Withdrawal successful",
+        `${amount} ${myriadWithdrawAsset} sent on BNB Smart Chain.`,
+      );
+      void refetchMyriadBscBalances();
+      void queryClient.invalidateQueries({ queryKey: ["myriad-bsc-balances"] });
+      void queryClient.invalidateQueries({ queryKey: ["myriad-erc20-balance"] });
+      void queryClient.invalidateQueries({ queryKey: ["predictfun-positions"] });
+      setTimeout(() => setShowSuccess(false), 3000);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Withdraw failed.";
+      setMyriadWithdrawError(message);
+    } finally {
+      setIsSendingMyriadStable(false);
+    }
+  }, [
+    recipient,
+    amount,
+    eoaAddress,
+    myriadWithdrawAsset,
+    myriadBscBalances?.bnbMaxSendAfterReserveWei,
+    myriadBscBalances?.usd1,
+    myriadBscBalances?.usdt,
+    wallets,
+    refetchMyriadBscBalances,
+    queryClient,
+  ]);
+
   // Helper function to get user-friendly error message
   const getErrorMessage = () => {
     if (!error) return null;
@@ -765,6 +971,15 @@ export default function DepositWithdrawModal({
       setAmount((Number(rawUsdcBalance) / 10 ** USDC_E_DECIMALS).toString());
     }
   };
+
+  const isPredictFunBsc = platformTab === "predictfun";
+  const bscAccentActive = "bg-[#ffc000] text-black";
+  const bscAccentMax = "bg-[#ffc000] hover:bg-[#ffd000] text-black";
+  const bscAccentSubmit =
+    "bg-[#ffc000] hover:bg-[#ffd000] disabled:bg-gray-600 disabled:cursor-not-allowed text-black";
+  const bscFocusBorder = "focus:border-[#ffc000]";
+  const bscRefreshHover = "hover:text-[#ffc000]";
+  const bscBalanceAccent = "text-[#ffc000]";
 
   if (!isOpen) return null;
 
@@ -800,11 +1015,12 @@ export default function DepositWithdrawModal({
             </button>
           </div>
 
-          {/* Platform tabs: Kalshi | Polymarket | Limitless */}
-          <div className="flex space-x-1 mx-4 mt-4 bg-[#141414] p-1 rounded-lg">
+          {/* Platform tabs — equal-width grid keeps labels centered per column */}
+          <div className="mx-4 mt-4 bg-[#141414] p-1 rounded-lg grid grid-cols-5 gap-1">
             <button
+              type="button"
               onClick={() => setPlatformTab("kalshi")}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              className={`py-2 px-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors text-center leading-tight ${
                 platformTab === "kalshi"
                   ? "bg-[#17cb91] text-black"
                   : "text-gray-400 hover:text-white"
@@ -813,8 +1029,9 @@ export default function DepositWithdrawModal({
               Kalshi
             </button>
             <button
+              type="button"
               onClick={() => setPlatformTab("polymarket")}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              className={`py-2 px-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors text-center leading-tight ${
                 platformTab === "polymarket"
                   ? "bg-[#2C59F7] text-white"
                   : "text-gray-400 hover:text-white"
@@ -823,27 +1040,57 @@ export default function DepositWithdrawModal({
               Polymarket
             </button>
             <button
+              type="button"
               onClick={() => setPlatformTab("limitless")}
-              className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors ${
+              className={`py-2 px-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors text-center leading-tight ${
                 platformTab === "limitless"
-                  ? "bg-black text-white"
+                  ? "bg-black text-white border border-white/20"
                   : "text-gray-400 hover:text-white"
               }`}
             >
               Limitless
             </button>
+            <button
+              type="button"
+              onClick={() => setPlatformTab("myriad")}
+              className={`py-2 px-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors text-center leading-tight ${
+                platformTab === "myriad"
+                  ? "bg-[#ffc000] text-black"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              Myriad
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPlatformTab("predictfun");
+                setMyriadWithdrawAsset("USDT");
+              }}
+              className={`py-2 px-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors text-center leading-tight ${
+                platformTab === "predictfun"
+                  ? "bg-[#A855F7] text-white"
+                  : "text-gray-400 hover:text-white"
+              }`}
+            >
+              <span className="sm:hidden">Predict</span>
+              <span className="hidden sm:inline">Predict.fun</span>
+            </button>
           </div>
 
-          {/* Deposit / Withdraw tabs (Kalshi, Polymarket, Limitless) */}
-          {(platformTab === "polymarket" || platformTab === "kalshi" || platformTab === "limitless") && (
-            <div className="flex space-x-1 mx-4 mt-2 bg-[#141414] p-1 rounded-lg">
+          {/* Deposit / Withdraw tabs */}
+          {(platformTab === "polymarket" ||
+            platformTab === "kalshi" ||
+            platformTab === "limitless" ||
+            platformTab === "myriad" ||
+            platformTab === "predictfun") && (
+            <div className="mx-4 mt-2 bg-[#141414] p-1 rounded-lg grid grid-cols-2 gap-1">
               <button
+                type="button"
                 onClick={() => setActiveTab("deposit")}
-                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                className={`py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
                   activeTab === "deposit"
-                    ? platformTab === "kalshi"
-                      ? "bg-[#ffc000] text-black"
-                      : "bg-[#ffc000] text-black"
+                    ? "bg-[#ffc000] text-black"
                     : "text-gray-400 hover:text-white"
                 }`}
               >
@@ -851,12 +1098,11 @@ export default function DepositWithdrawModal({
                 Deposit
               </button>
               <button
+                type="button"
                 onClick={() => setActiveTab("withdraw")}
-                className={`flex-1 py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
+                className={`py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
                   activeTab === "withdraw"
-                    ? platformTab === "kalshi"
-                      ? "bg-[#ffc000] text-black"
-                      : "bg-[#ffc000] text-black"
+                    ? "bg-[#ffc000] text-black"
                     : "text-gray-400 hover:text-white"
                 }`}
               >
@@ -1227,6 +1473,351 @@ export default function DepositWithdrawModal({
                     className="w-full py-3 bg-[#ffc000] hover:bg-[#ffd000] disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-bold rounded-lg transition-colors"
                   >
                     {isSendingLimitlessUsdc ? "Sending..." : "Send USDC (Base)"}
+                  </button>
+                  {!eoaAddress && (
+                    <p className="text-xs text-yellow-400 text-center">
+                      Connect your wallet to withdraw.
+                    </p>
+                  )}
+                </div>
+              )
+            ) : platformTab === "myriad" || platformTab === "predictfun" ? (
+              activeTab === "deposit" ? (
+                <div className="space-y-4">
+                  <div className="bg-white/5 rounded-lg p-4">
+                    <h4 className="text-white font-semibold mb-3">
+                      BNB Smart Chain (
+                      {platformTab === "predictfun" ? "Predict.fun" : "Myriad"})
+                    </h4>
+                    <div
+                      className="flex gap-3 rounded-lg border border-amber-500/35 bg-amber-950/35 px-3 py-2.5 mb-3"
+                      role="note"
+                    >
+                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full">
+                        <CircleAlert
+                          className="h-4 w-4 text-amber-300"
+                          aria-hidden
+                        />
+                      </div>
+                      <p className="text-[13px] leading-snug text-amber-200/95">
+                        {platformTab === "predictfun" ? (
+                          <>
+                            Only send{" "}
+                            <strong className="font-semibold text-amber-100">
+                              USDT
+                            </strong>{" "}
+                            (BEP-20) on{" "}
+                            <strong className="font-semibold text-amber-100">
+                              BNB Smart Chain
+                            </strong>{" "}
+                            to this address to trade on Predict.fun.
+                          </>
+                        ) : (
+                          <>
+                            Only send{" "}
+                            <strong className="font-semibold text-amber-100">
+                              USD1
+                            </strong>{" "}
+                            or{" "}
+                            <strong className="font-semibold text-amber-100">
+                              USDT
+                            </strong>{" "}
+                            (BEP-20) on{" "}
+                            <strong className="font-semibold text-amber-100">
+                              BNB Smart Chain
+                            </strong>{" "}
+                            to this address to trade on Myriad.
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    {!eoaAddress ? (
+                      <p className="text-gray-400 text-sm py-2">
+                        Connect your wallet to see your BNB Chain address.
+                      </p>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="flex flex-col gap-1">
+                          <span className="text-gray-400 text-xs">
+                            BNB Chain (EVM) address
+                          </span>
+                          <div className="flex items-center gap-2 bg-black/30 rounded px-2 py-1.5">
+                            <span className="text-white text-xs font-mono break-all flex-1 min-w-0">
+                              {eoaAddress}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCopyAddress(eoaAddress, "evm")}
+                              className="p-1 hover:bg-white/10 rounded transition-colors shrink-0"
+                              title="Copy address"
+                            >
+                              {copiedAddress === "evm" ? (
+                                <Check className="w-4 h-4 text-green-400" />
+                              ) : (
+                                <Copy className="w-4 h-4 text-gray-400 hover:text-white" />
+                              )}
+                            </button>
+                          </div>
+                        </div>
+                        <div className="bg-black/30 rounded-lg p-3 mt-2 space-y-2">
+                          <div className="flex items-center justify-between mb-1">
+                            <p className="text-xs text-gray-400">
+                              Wallet balance (BNB Chain)
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => void handleRefreshMyriadBscBalance()}
+                              disabled={isRefreshingMyriadBsc || isMyriadBscBalancesLoading}
+                              className="p-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                              title="Refresh"
+                            >
+                              <RefreshCw
+                                className={`w-4 h-4 text-gray-400 ${bscRefreshHover} ${
+                                  isRefreshingMyriadBsc ? "animate-spin" : ""
+                                }`}
+                              />
+                            </button>
+                          </div>
+                          {isMyriadBscBalancesLoading || isRefreshingMyriadBsc ? (
+                            <span className="inline-block animate-pulse h-5 w-32 bg-white/10 rounded" />
+                          ) : (
+                            <div className="flex flex-col gap-1 text-[14px]">
+                              {isPredictFunBsc ? (
+                                <>
+                                  <span
+                                    className={`text-white/90 font-semibold text-lg tabular-nums ${bscBalanceAccent}`}
+                                  >
+                                    {myriadBscBalances?.usdtFormatted ?? "0"} USDT
+                                  </span>
+                                  <span className="text-white/90 font-semibold text-[12px] break-words">
+                                    {myriadBscBalances?.bnbFormatted ?? "0"} BNB (gas)
+                                  </span>
+                                </>
+                              ) : (
+                                <>
+                                  <span
+                                    className={`text-white/90 font-semibold text-lg tabular-nums ${bscBalanceAccent}`}
+                                  >
+                                    {formatCurrency(
+                                      myriadBscBalances?.totalUsdApprox ?? 0,
+                                    )}
+                                  </span>
+                                  <span className="text-white/90 font-semibold text-[12px] break-words">
+                                    {myriadBscBalances?.bnbFormatted ?? "0"} BNB ·{" "}
+                                    {myriadBscBalances?.usd1Formatted ?? "0"} USD1 ·{" "}
+                                    {myriadBscBalances?.usdtFormatted ?? "0"} USDT
+                                  </span>
+                                  {(myriadBscBalances?.usdc ?? 0) > 0 && (
+                                    <span className="text-[11px] text-gray-500">
+                                      USDC included in total above
+                                    </span>
+                                  )}
+                                </>
+                              )}
+                              <p className="text-[11px] text-gray-500 leading-snug pt-1 border-t border-white/10 mt-1">
+                                Keep native BNB on this chain for gas (trades, transfers). As a rule of
+                                thumb, leave at least{" "}
+                                <span className="text-gray-400 font-medium">
+                                  {MYRIAD_BNB_WITHDRAW_GAS_RESERVE_BNB} BNB
+                                </span>{" "}
+                                or more if you trade often.
+                              </p>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {myriadWithdrawError && (
+                    <div className="bg-red-500/20 border border-red-500/40 rounded-lg p-3">
+                      <p className="text-red-300 text-sm">{myriadWithdrawError}</p>
+                    </div>
+                  )}
+                  {showSuccess && (
+                    <div className="bg-green-500/20 border border-green-500/40 rounded-lg p-3">
+                      <p className="text-green-300 font-medium text-sm">Transfer successful!</p>
+                    </div>
+                  )}
+                  <div>
+                    <p className="text-xs text-gray-400 mb-2">Withdraw asset</p>
+                    <div
+                      className={`grid ${
+                        isPredictFunBsc ? "grid-cols-2" : "grid-cols-3"
+                      } rounded-lg overflow-hidden border border-white/10`}
+                    >
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMyriadWithdrawAsset("BNB");
+                          setAmount("");
+                        }}
+                        className={`py-2 px-2 text-xs sm:text-sm font-medium ${
+                          myriadWithdrawAsset === "BNB"
+                            ? bscAccentActive
+                            : "bg-white/5 text-gray-400 hover:text-white"
+                        }`}
+                      >
+                        BNB
+                      </button>
+                      {!isPredictFunBsc && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setMyriadWithdrawAsset("USD1");
+                            setAmount("");
+                          }}
+                          className={`py-2 px-2 text-xs sm:text-sm font-medium border-l border-white/10 ${
+                            myriadWithdrawAsset === "USD1"
+                              ? bscAccentActive
+                              : "bg-white/5 text-gray-400 hover:text-white"
+                          }`}
+                        >
+                          USD1
+                        </button>
+                      )}
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMyriadWithdrawAsset("USDT");
+                          setAmount("");
+                        }}
+                        className={`py-2 px-2 text-xs sm:text-sm font-medium border-l border-white/10 ${
+                          myriadWithdrawAsset === "USDT"
+                            ? bscAccentActive
+                            : "bg-white/5 text-gray-400 hover:text-white"
+                        }`}
+                      >
+                        USDT
+                      </button>
+                    </div>
+                    <p className="text-[11px] text-gray-500 mt-1.5">
+                      {isPredictFunBsc
+                        ? "Native BNB or BEP-20 USDT on BNB Smart Chain. Switch network if prompted."
+                        : "Native BNB or BEP-20 USD1 / USDT on BNB Smart Chain. Switch network if prompted."}
+                    </p>
+                    {myriadWithdrawAsset === "BNB" ? (
+                      <div
+                        className="flex gap-2.5 rounded-lg border border-amber-500/35 bg-amber-950/35 px-3 py-2.5 mt-2"
+                        role="note"
+                      >
+                        <CircleAlert
+                          className="h-4 w-4 shrink-0 text-amber-300 mt-0.5"
+                          aria-hidden
+                        />
+                        <p className="text-[12px] leading-snug text-amber-100/95">
+                          <span className="font-semibold text-amber-50">BNB gas reserve: </span>
+                          Max withdraw leaves about{" "}
+                          <strong className="font-semibold text-amber-50">
+                            {MYRIAD_BNB_WITHDRAW_GAS_RESERVE_BNB} BNB
+                          </strong>{" "}
+                          in your wallet so you can still pay network fees on BNB Smart Chain.{" "}
+                          <span className="text-amber-200/90">
+                            The <strong className="text-amber-100">MAX</strong> button only fills the
+                            amount above that reserve.
+                          </span>
+                        </p>
+                      </div>
+                    ) : (
+                      <p className="text-[11px] text-gray-500 mt-2 leading-snug">
+                        Sending {isPredictFunBsc ? "USDT" : "USD1 or USDT"} still uses a small
+                        amount of <span className="text-gray-400">BNB</span> for gas—keep native BNB
+                        in this wallet (e.g. at least ~{MYRIAD_BNB_WITHDRAW_GAS_RESERVE_BNB} BNB).
+                      </p>
+                    )}
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">
+                      Recipient (EVM address)
+                    </label>
+                    <input
+                      type="text"
+                      value={recipient}
+                      onChange={(e) => setRecipient(e.target.value)}
+                      placeholder="0x..."
+                      className={`w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none ${bscFocusBorder} text-white font-mono text-sm`}
+                      disabled={isSendingMyriadStable}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm text-gray-400 mb-2">
+                      {!isPredictFunBsc && (
+                        <>
+                          Total balance (est.):{" "}
+                          {formatCurrency(myriadBscBalances?.totalUsdApprox ?? 0)} ·{" "}
+                        </>
+                      )}
+                      Available to send:{" "}
+                      {myriadWithdrawAsset === "USD1"
+                        ? `${myriadBscBalances?.usd1Formatted ?? "0"} USD1`
+                        : myriadWithdrawAsset === "USDT"
+                          ? `${myriadBscBalances?.usdtFormatted ?? "0"} USDT`
+                          : `${myriadBscBalances?.bnbMaxSendAfterReserveFormatted ?? "0"} BNB`}{" "}
+                      {myriadWithdrawAsset === "BNB"
+                        ? `· Wallet: ${myriadBscBalances?.bnbFormatted ?? "0"} BNB (BNB Chain)`
+                        : "(BNB Chain)"}
+                    </label>
+                    <div className="relative">
+                      <input
+                        type="text"
+                        value={amount}
+                        onChange={(e) =>
+                          setAmount(e.target.value.replace(/[^0-9.]/g, ""))
+                        }
+                        placeholder={
+                          myriadWithdrawAsset === "BNB" ? "0.0000" : "0.00"
+                        }
+                        className={`w-full px-4 py-2 pr-16 bg-white/5 border border-white/10 rounded-lg focus:outline-none ${bscFocusBorder} text-white`}
+                        disabled={isSendingMyriadStable}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (myriadWithdrawAsset === "USD1") {
+                            setAmount(myriadBscBalances?.usd1Formatted ?? "0");
+                          } else if (myriadWithdrawAsset === "USDT") {
+                            setAmount(myriadBscBalances?.usdtFormatted ?? "0");
+                          } else {
+                            setAmount(
+                              myriadBscBalances?.bnbMaxSendAfterReserveFormatted ??
+                                "0",
+                            );
+                          }
+                        }}
+                        className={`absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs rounded font-semibold ${bscAccentMax}`}
+                      >
+                        MAX
+                      </button>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => void handleMyriadWithdraw()}
+                    disabled={
+                      isSendingMyriadStable ||
+                      !recipient.trim() ||
+                      !amount ||
+                      !eoaAddress ||
+                      (myriadWithdrawAsset === "USD1"
+                        ? (myriadBscBalances?.usd1 ?? 0) <= 0
+                        : myriadWithdrawAsset === "USDT"
+                          ? (myriadBscBalances?.usdt ?? 0) <= 0
+                          : BigInt(
+                                myriadBscBalances?.bnbMaxSendAfterReserveWei ??
+                                  "0",
+                              ) === BigInt(0))
+                    }
+                    className={`w-full py-3 disabled:cursor-not-allowed font-bold rounded-lg transition-colors ${bscAccentSubmit}`}
+                  >
+                    {isSendingMyriadStable
+                      ? "Sending..."
+                      : myriadWithdrawAsset === "BNB"
+                        ? "Send BNB"
+                        : myriadWithdrawAsset === "USD1"
+                          ? "Send USD1"
+                          : "Send USDT"}
                   </button>
                   {!eoaAddress && (
                     <p className="text-xs text-yellow-400 text-center">

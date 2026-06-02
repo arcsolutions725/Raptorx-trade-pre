@@ -14,7 +14,7 @@ const systemPrompt = `You are a professional crypto research analyst and technic
 
 ### Requirements:
 - Preserve the overall structure and format of the original report
-- Focus on updating ONLY the data-dependent sections (Community Chatter, Individual Tweets, Coin-O-Metry, Technical Analysis)
+- Focus on updating ONLY the data-dependent sections (Community Chatter, Top Tweets, Coin-O-Metry, Technical Analysis)
 - Maintain the same markdown formatting and section structure
 - Use complete sentences and well-written paragraphs
 - Do NOT fabricate any data. If some data is missing, clearly state "Data not available"
@@ -74,11 +74,11 @@ Update with fresh sentiment analysis from the provided tweets data:
 - Engagement metrics and social activity
 - Notable influencer mentions or whale discussions
 
-## Individual Tweets
+## Top Tweets
 Update with the 5 most relevant tweets from the newly provided data:
 - Format as: **Username:** Tweet content
 - Prioritize tweets containing the ticker, contract address, or project name
-- If no tweets provided, state "No tweet data available for analysis"
+- If no tweets in input, write one brief line that tweet cards load from live data when the user refreshes the report (do not use the phrase "No tweet data available for analysis")
 
 ## Coin-O-Metry
 Update all statistics with fresh data:
@@ -114,7 +114,9 @@ function requireUserId(req: NextRequest): string {
 export async function POST(request: NextRequest) {
   try {
     const userId = requireUserId(request);
-    const { reportId } = await request.json();
+    const body = await request.json();
+    const reportId = body?.reportId as string | undefined;
+    const wantsStream = Boolean(body?.stream);
 
     if (!reportId) {
       return NextResponse.json(
@@ -272,88 +274,140 @@ ${JSON.stringify(securityAnalytics, null, 2)}`
 
 ### Requirements:
 - Preserve the overall structure and formatting of the original report
-- Update ONLY the data-dependent sections (Community Chatter, Individual Tweets, Coin-O-Metry, Technical Analysis)
+- Update ONLY the data-dependent sections (Community Chatter, Top Tweets, Coin-O-Metry, Technical Analysis)
 - Keep the "What It Is" section mostly unchanged
-- For Individual Tweets section, extract and format the 5 most relevant tweets from the newly provided data
+- For Top Tweets section, extract and format the 5 most relevant tweets from the newly provided data
 - If some data is missing, state clearly "Data not available" instead of guessing
 - Add a note at the beginning indicating this is a refreshed report with current timestamp`;
 
-    // Call AI service with optimized parameters for faster generation
+    const finishRegeneration = async (regeneratedReport: string) => {
+      const regenerationTimestamp = new Date().toISOString();
+
+      await prisma.report.update({
+        where: { id: reportId },
+        data: {
+          chain: detectedChain,
+          content: regeneratedReport,
+          dexData: (tokenData as any).dexData ?? undefined,
+          tweetsData: rawTweetsArray || undefined,
+          securityData: securityAnalytics || undefined,
+          holdersData: holderAnalytics || undefined,
+          updatedAt: new Date(),
+        },
+      });
+
+      if (isAdmin) {
+        const systemReport = await prisma.systemReport.findFirst({
+          where: {
+            contractAddress: { equals: contractAddress, mode: "insensitive" },
+            ticker: { equals: ticker, mode: "insensitive" },
+          },
+        });
+
+        if (systemReport) {
+          await prisma.systemReport.update({
+            where: { id: systemReport.id },
+            data: {
+              chain: detectedChain,
+              content: regeneratedReport,
+              dexData: (tokenData as any).dexData ?? undefined,
+              tweetsData: rawTweetsArray || undefined,
+              securityData: securityAnalytics || undefined,
+              holdersData: holderAnalytics || undefined,
+            },
+          });
+        }
+      }
+
+      return {
+        success: true,
+        source: "regenerated",
+        report: regeneratedReport,
+        tweetsAnalyzed: (tweetsData as any).data?.length || 0,
+        metadata: {
+          contractAddress,
+          ticker,
+          projectName: projectName || null,
+          regeneratedAt: regenerationTimestamp,
+          dataSourcesUsed: {
+            dexScreener: !!(tokenData as any).dexData,
+            coinGecko: !!(tokenData as any).coingeckoData,
+            tweets:
+              (tweetsData as any).success &&
+              ((tweetsData as any).data?.length || 0) > 0,
+          },
+        },
+        saved: {
+          reportId,
+          updatedAt: regenerationTimestamp,
+        },
+      };
+    };
+
+    if (wantsStream) {
+      const encoder = new TextEncoder();
+      const sse = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const send = (payload: Record<string, unknown>) => {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(payload)}\n\n`),
+            );
+          };
+          try {
+            let fullReport = "";
+            const aiStream = await client.chat.completions.create({
+              model: "deepseek-chat",
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: aiPrompt },
+              ],
+              temperature: 0.3,
+              max_tokens: 4000,
+              stream: true,
+            });
+            for await (const part of aiStream) {
+              const delta = (
+                part as { choices?: { delta?: { content?: string } }[] }
+              ).choices?.[0]?.delta?.content;
+              if (delta) {
+                fullReport += delta;
+                send({ type: "token", text: delta });
+              }
+            }
+            const payload = await finishRegeneration(fullReport);
+            send({ type: "done", ...payload });
+          } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : "Unknown error";
+            send({ type: "error", message });
+          } finally {
+            controller.close();
+          }
+        },
+      });
+      return new Response(sse, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      });
+    }
+
     const aiResponse = await client.chat.completions.create({
       model: "deepseek-chat",
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: aiPrompt },
       ],
-      temperature: 0.3, // Lower temperature for more focused updates
-      max_tokens: 4000, // Slightly reduced tokens since we're only updating parts
+      temperature: 0.3,
+      max_tokens: 4000,
     });
 
     const regeneratedReport = aiResponse.choices?.[0]?.message?.content || "";
-    const regenerationTimestamp = new Date().toISOString();
-
-    // Update the user report
-    await prisma.report.update({
-      where: { id: reportId },
-      data: {
-        chain: detectedChain,
-        content: regeneratedReport,
-        dexData: (tokenData as any).dexData ?? undefined,
-        tweetsData: rawTweetsArray || undefined,
-        securityData: securityAnalytics || undefined,
-        holdersData: holderAnalytics || undefined,
-        updatedAt: new Date(), // This will update the timestamp
-      },
-    });
-
-    // If admin and system report exists, update it too
-    if (isAdmin) {
-      const systemReport = await prisma.systemReport.findFirst({
-        where: {
-          contractAddress: { equals: contractAddress, mode: "insensitive" },
-          ticker: { equals: ticker, mode: "insensitive" },
-        },
-      });
-
-      if (systemReport) {
-        await prisma.systemReport.update({
-          where: { id: systemReport.id },
-          data: {
-            chain: detectedChain,
-            content: regeneratedReport,
-            dexData: (tokenData as any).dexData ?? undefined,
-            tweetsData: rawTweetsArray || undefined,
-            securityData: securityAnalytics || undefined,
-            holdersData: holderAnalytics || undefined,
-            // updatedAt auto via @updatedAt
-          },
-        });
-      }
-    }
-
+    const basePayload = await finishRegeneration(regeneratedReport);
     return NextResponse.json({
-      success: true,
-      source: "regenerated",
-      report: regeneratedReport,
+      ...basePayload,
       tokenData,
-      tweetsAnalyzed: (tweetsData as any).data?.length || 0,
-      metadata: {
-        contractAddress,
-        ticker,
-        projectName: projectName || null,
-        regeneratedAt: regenerationTimestamp,
-        dataSourcesUsed: {
-          dexScreener: !!(tokenData as any).dexData,
-          coinGecko: !!(tokenData as any).coingeckoData,
-          tweets:
-            (tweetsData as any).success &&
-            ((tweetsData as any).data?.length || 0) > 0,
-        },
-      },
-      saved: {
-        reportId,
-        updatedAt: regenerationTimestamp,
-      },
     });
   } catch (err: any) {
     const msg = err instanceof Error ? err.message : "Unknown error";

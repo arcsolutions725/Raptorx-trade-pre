@@ -62,7 +62,7 @@ export default function Comments({ marketSlug }: CommentsProps) {
   }
 
   return (
-    <div className="space-y-0 overflow-y-auto custom-select-scrollbar px-1">
+    <div className="space-y-0 px-1">
       {comments.map((comment, idx) => (
         <CommentItem key={(comment as any).id ?? `c-${idx}`} comment={comment} />
       ))}

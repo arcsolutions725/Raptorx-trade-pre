@@ -26,7 +26,7 @@ export default function ActivityFeed({
   });
 
   return (
-    <div className="space-y-0 overflow-y-auto custom-select-scrollbar">
+    <div className="space-y-0">
       {isLoadingActivity ? (
         <div className="text-xs text-white/60 py-2">Loading...</div>
       ) : activityData?.trades && activityData.trades.length > 0 ? (

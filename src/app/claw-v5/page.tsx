@@ -5,12 +5,14 @@ import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
 import Image from "next/image";
-import ChatSidebar from "./_components/chat/ChatSidebar";
+import ChatSidebar, {
+  clawV5HeaderNavShiftPx,
+} from "./_components/chat/ChatSidebar";
 import ChatInput, {
   type PredictionMarketMode,
   type ClawSelectionContext,
 } from "./_components/chat/ChatInput";
-import { StreamingStatus, ConnectingStatus } from "./_components/chat/Message";
+import { CLAW_V5_PENDING_STREAM_KEY } from "@/lib/clawV5/streamingReportDisplay";
 import RexHeader from "@/components/ui/layout/Header";
 import Footer from "@/components/ui/layout/Footer";
 import {
@@ -20,9 +22,7 @@ import {
   Chat,
 } from "@/lib/storage/chatStorage";
 import { Loader2, Menu } from "lucide-react";
-import { PaywallModal, type PaywallLimitCode } from "@/components/subscription/PaywallModal";
-
-const STREAMING_COUNTDOWN_START = 20;
+import { PaywallModal, type PaywallLimitCode } from "@/components/ui/modal/PaywallModal";
 
 import {
   showSuccessNotification,
@@ -32,6 +32,7 @@ import {
 export default function ClawV5Page() {
   const router = useRouter();
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isChatSidebarCollapsed, setIsChatSidebarCollapsed] = useState(false);
   const {
     authenticated: privyAuthenticated,
     user: privyUser,
@@ -44,30 +45,12 @@ export default function ClawV5Page() {
   const [chats, setChats] = useState<Chat[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
-  const [streamingPhase, setStreamingPhase] = useState<
-    "" | "markets" | "research" | "draft" | "synth"
-  >("");
-  const [streamingStatusLabel, setStreamingStatusLabel] = useState("");
-  const [streamingCountdown, setStreamingCountdown] = useState(STREAMING_COUNTDOWN_START);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [hasFetched, setHasFetched] = useState(false);
   const [prefillText, setPrefillText] = useState<string>("");
   const [marketMode, setMarketMode] = useState<PredictionMarketMode>("Markets");
-  const abortControllerRef = useRef<AbortController | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallLimitCode, setPaywallLimitCode] = useState<PaywallLimitCode | null>(null);
-
-  // Countdown 20→0, reset to 20, while sending (same as Prediction Market / chat detail)
-  useEffect(() => {
-    if (!isSending) return;
-    setStreamingCountdown(STREAMING_COUNTDOWN_START);
-    const interval = setInterval(() => {
-      setStreamingCountdown((prev) =>
-        prev <= 0 ? STREAMING_COUNTDOWN_START : prev - 1
-      );
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isSending]);
 
   // Fetch user ID
   useEffect(() => {
@@ -278,17 +261,7 @@ export default function ClawV5Page() {
       if (!currentUserId || !message.trim() || isSending) return;
 
       setIsSending(true);
-      setStreamingPhase("");
-      setStreamingStatusLabel("");
-      let newChatId: string | null = null;
       try {
-        // New chat starts with no history
-        const historyForAi: Array<{
-          role: "user" | "assistant";
-          content: string;
-        }> = [];
-
-        // Create a new chat
         const chatRes = await fetch("/api/claw-v5/chats", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -301,172 +274,44 @@ export default function ClawV5Page() {
         if (chatRes.ok) {
           const chatData = await chatRes.json();
           const newChat = chatData.chat;
-          newChatId = newChat.id;
 
-          // Save to localStorage
           saveChatToStorage(newChat);
+          setChats(getChatsFromStorage());
 
-          const controller = new AbortController();
-          abortControllerRef.current = controller;
-
-          // Send the message to the new chat and handle streaming
-          const messageRes = await fetch(
-            `/api/claw-v5/chats/${newChat.id}/messages`,
-            {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                content: message,
-                role: "user",
-                history: historyForAi,
+          if (typeof window !== "undefined") {
+            sessionStorage.setItem("claw-v5-skip-initial-scroll", newChat.id);
+            sessionStorage.setItem(
+              CLAW_V5_PENDING_STREAM_KEY,
+              JSON.stringify({
+                chatId: newChat.id,
+                message,
+                quotedContent: quotedContent || undefined,
                 marketMode,
-                ...(context?.cryptoChain && { cryptoChain: context.cryptoChain }),
-                ...(context?.predictionSubmode != null && { predictionSubmode: context.predictionSubmode }),
-                ...(context?.predictionDisplayLevel != null && { predictionDisplayLevel: context.predictionDisplayLevel }),
+                context: context ?? undefined,
               }),
-              signal: controller.signal,
-            },
-          );
-
-          if (messageRes.status === 402) {
-            const data = await messageRes.json().catch(() => ({}));
-            const code = (data?.code === "PAID_LIMIT_REACHED" ? "PAID_LIMIT_REACHED" : "FREE_LIMIT_REACHED") as PaywallLimitCode;
-            setPaywallLimitCode(code);
-            setShowPaywall(true);
-            setIsSending(false);
-            setStreamingPhase("");
-            setStreamingStatusLabel("");
-            return;
+            );
           }
 
-          if (!messageRes.ok) {
-            throw new Error("Failed to send message");
-          }
-
-          const reader = messageRes.body?.getReader();
-          const decoder = new TextDecoder();
-          let userMessageData: any = null;
-          let aiMessageData: any = null;
-          let streamingContent = "";
-
-          if (reader) {
-            while (true) {
-              const { done, value } = await reader.read();
-              if (done) break;
-
-              const chunk = decoder.decode(value, { stream: true });
-              const lines = chunk.split("\n").filter((line) => line.trim());
-
-              for (const line of lines) {
-                try {
-                  const parsed = JSON.parse(line);
-
-                  if (parsed.type === "userMessage") {
-                    userMessageData = parsed.data;
-                  } else if (parsed.type === "status") {
-                    const phase = parsed.phase as
-                      | "markets"
-                      | "research"
-                      | "draft"
-                      | "synth"
-                      | undefined;
-                    if (phase) setStreamingPhase(phase);
-                    if (typeof parsed.label === "string") {
-                      setStreamingStatusLabel(parsed.label);
-                    }
-                  } else if (parsed.type === "chunk") {
-                    streamingContent += parsed.content;
-                  } else if (parsed.type === "aiMessage") {
-                    aiMessageData = parsed.data;
-                  } else if (parsed.type === "error") {
-                    throw new Error(parsed.error || "Streaming failed");
-                  }
-                } catch (e) {
-                  // Skip invalid JSON lines
-                  console.error("Error parsing stream chunk:", e);
-                }
-              }
-            }
-          }
-
-          // Update chat in localStorage with the final messages
-          if (userMessageData && aiMessageData) {
-            const updatedChat: Chat = {
-              ...newChat,
-              messages: [
-                {
-                  id: userMessageData.id,
-                  role: "user",
-                  content: userMessageData.content,
-                  createdAt: userMessageData.createdAt,
-                },
-                {
-                  id: aiMessageData.id,
-                  role: "assistant",
-                  content: aiMessageData.content,
-                  createdAt: aiMessageData.createdAt,
-                },
-              ],
-            };
-            saveChatToStorage(updatedChat);
-
-            // Redirect to chat detail page after streaming completes (tell detail page not to auto-scroll)
-            abortControllerRef.current = null;
-            setStreamingPhase("");
-            setStreamingStatusLabel("");
-            if (typeof window !== "undefined") {
-              sessionStorage.setItem("claw-v5-skip-initial-scroll", newChat.id);
-            }
-            router.push(`/claw-v5/${newChat.id}`);
-          } else if (userMessageData || newChat?.id) {
-            abortControllerRef.current = null;
-            setStreamingPhase("");
-            setStreamingStatusLabel("");
-            if (typeof window !== "undefined") {
-              sessionStorage.setItem("claw-v5-skip-initial-scroll", newChat.id);
-            }
-            router.push(`/claw-v5/${newChat.id}`);
-          } else {
-            setIsSending(false);
-            setStreamingPhase("");
-            setStreamingStatusLabel("");
-          }
+          router.replace(`/claw-v5/${newChat.id}`);
         } else {
           setIsSending(false);
-          setStreamingPhase("");
-          setStreamingStatusLabel("");
         }
       } catch (error) {
-        abortControllerRef.current = null;
-        const isAbort = error instanceof Error && error.name === "AbortError";
-        if (isAbort) {
-          setStreamingPhase("");
-          setStreamingStatusLabel("");
-          setIsSending(false);
-          // Redirect to the new chat so user sees it (partial content is on server/detail page will load from API)
-          if (newChatId && typeof window !== "undefined") {
-            sessionStorage.setItem("claw-v5-skip-initial-scroll", newChatId);
-            router.push(`/claw-v5/${newChatId}`);
-          }
-        } else {
-          console.error("Error creating chat or sending message:", error);
-          setIsSending(false);
-          setStreamingPhase("");
-          setStreamingStatusLabel("");
-        }
+        console.error("Error creating chat:", error);
+        setIsSending(false);
       }
     },
     [currentUserId, router, isSending, marketMode],
   );
 
   const handleStop = useCallback(() => {
-    abortControllerRef.current?.abort();
+    /* Stream runs on the chat detail page after redirect. */
   }, []);
 
   const MARKET_SAMPLE_PROMPT =
-    "Rex Markets: What are the current odds for the Fed Interest Rate decision?";
+    "Rex Markets: What are Polymarket and Kalshi odds for the next Fed interest rate decision?";
   const CRYPTO_SAMPLE_PROMPT =
-    "Crypto: Is $SOL showing bullish divergence on MACD (15m)? Give key levels, invalidation, and a quick trade plan.";
+    "Crypto: Is $SOL leaning bullish or bearish on the 15m—key levels, invalidation, and a quick trade plan?";
 
   const stripLeadingLabel = (text: string) =>
     text
@@ -476,14 +321,20 @@ export default function ClawV5Page() {
 
   return (
     <>
-    <div className="relative w-full h-screen flex flex-col overflow-hidden">
-      <div className="flex-1 flex overflow-hidden">
-        <div className="h-full flex flex-col w-full">
+    <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex h-full min-h-0 w-full flex-col">
           {/* Header */}
-          <RexHeader onHistoryClick={() => {}} showExchangeButton={false} />
+          <RexHeader
+            onHistoryClick={() => {}}
+            showExchangeButton={false}
+            clawV5MainNavShiftPx={clawV5HeaderNavShiftPx(
+              isChatSidebarCollapsed,
+            )}
+          />
 
           {/* Main Content */}
-          <div className="flex-1 flex overflow-hidden bg-black border-y-2 border-[#FFC000] pb-21.75 sm:pb-13.75 relative">
+          <div className="flex min-h-0 flex-1 overflow-hidden bg-black border-y-2 border-[#FFC000] relative">
             {/* Mobile Sidebar Toggle Button - Top Left */}
             <button
               onClick={() => setIsSidebarOpen(true)}
@@ -501,32 +352,33 @@ export default function ClawV5Page() {
               onChatDelete={handleChatDelete}
               isMobileOpen={isSidebarOpen}
               onMobileClose={() => setIsSidebarOpen(false)}
+              collapsed={isChatSidebarCollapsed}
+              onCollapsedChange={setIsChatSidebarCollapsed}
             />
 
-            <div className="flex-1 flex flex-col bg-black min-w-0">
-              {/* Main Content */}
-              <div className="flex-1 flex flex-col items-center justify-start md:justify-center p-4 md:p-8 pt-14 md:pt-8 overflow-y-auto">
+            <div className="flex-1 flex flex-col bg-black min-w-0 min-h-0">
+              {/* Scroll matches chat thread: custom scrollbar + min-h-0 flex fix */}
+              <div className="flex-1 overflow-y-auto overflow-x-clip min-h-0 custom-chat-messages-scrollbar px-2 md:px-4 pt-14 md:pt-8 pb-2">
+                <div
+                  className={`mx-auto w-full max-w-4xl flex flex-col pb-3 md:pb-6 ${
+                    isSending
+                      ? "items-stretch justify-start gap-3 min-h-0"
+                      : "items-center justify-center min-h-full p-3 md:p-8"
+                  }`}
+                >
                 {isSending ? (
-                  // Same StreamingStatus / ConnectingStatus as chat detail page (matched progress per phase)
                   <div className="flex flex-col items-center gap-4">
                     <Loader2 className="w-12 h-12 text-[#FFC000] animate-spin" />
-                    {streamingPhase ? (
-                      <StreamingStatus
-                        label={streamingStatusLabel}
-                        phase={streamingPhase}
-                        countdownSeconds={streamingCountdown}
-                        minimal={true}
-                      />
-                    ) : (
-                      <ConnectingStatus countdownSeconds={streamingCountdown} minimal={true} />
-                    )}
+                    <p className="text-sm text-white/70 text-center px-4">
+                      Opening chat…
+                    </p>
                   </div>
                 ) : (
                   <>
                     {/* Claw v5 Icon */}
                     <div className="mb-4 md:mb-8 w-14 h-14 md:w-24 md:h-24 relative">
                       <Image
-                        src="/images/calw-v5.png"
+                        src="/images/claw-v5.webp"
                         alt="Claw v5"
                         fill
                         className="object-contain"
@@ -553,7 +405,7 @@ export default function ClawV5Page() {
                         <div className="flex items-center gap-3 mb-3">
                           <span className="w-11 h-11 flex items-center justify-center overflow-hidden">
                             <Image
-                              src="/images/market-prompt.png"
+                              src="/images/market-prompt.webp"
                               alt="Markets Prompt"
                               width={28}
                               height={28}
@@ -584,7 +436,7 @@ export default function ClawV5Page() {
                         <div className="flex items-center gap-3 mb-3">
                           <span className="w-11 h-11 flex items-center justify-center overflow-hidden">
                             <Image
-                              src="/images/crypto-prompt.png"
+                              src="/images/crypto-prompt.webp"
                               alt="Crypto Prompt"
                               width={28}
                               height={28}
@@ -605,6 +457,7 @@ export default function ClawV5Page() {
                     </div>
                   </>
                 )}
+                </div>
               </div>
 
               {/* Chat Input */}

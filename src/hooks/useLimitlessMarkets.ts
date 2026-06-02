@@ -50,7 +50,29 @@ export function useLimitlessMarkets(
     queryKey: ["limitless-markets", categoryId, tagFilter, searchQuery, pageSize, pageIndex],
     enabled,
     queryFn: async () => {
-      // When a category is selected, use market-pages/{categoryId}/markets
+      const q = searchQuery?.trim() ?? "";
+
+      // Semantic search uses /markets/search (via our proxy). Do this before category
+      // so typing in the search box works even when a category tab is selected.
+      if (q) {
+        const params = new URLSearchParams({
+          limit: pageSize.toString(),
+          page: pageIndex.toString(),
+          q,
+        });
+        const res = await fetch(`/api/limitless/markets?${params.toString()}`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" },
+          cache: "no-store",
+        });
+        if (!res.ok) {
+          const errorData = await res.json().catch(() => ({ error: res.statusText }));
+          throw new Error(errorData.error || `Limitless search failed: ${res.status}`);
+        }
+        return res.json();
+      }
+
+      // When a category is selected (no search text), use market-pages/{categoryId}/markets
       if (categoryId && categoryId.trim()) {
         const params = new URLSearchParams({
           categoryId: categoryId.trim(),
@@ -75,14 +97,11 @@ export function useLimitlessMarkets(
         return res.json();
       }
 
-      // No category: use /markets/active
+      // No category: browse /markets/active
       const params = new URLSearchParams({
         limit: pageSize.toString(),
         page: pageIndex.toString(),
       });
-      if (searchQuery && searchQuery.trim()) {
-        params.append("q", searchQuery.trim());
-      }
       const res = await fetch(`/api/limitless/markets?${params.toString()}`, {
         method: "GET",
         headers: { "Content-Type": "application/json" },

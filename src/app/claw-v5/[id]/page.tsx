@@ -1,17 +1,32 @@
 "use client";
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+  useState,
+  useEffect,
+  useLayoutEffect,
+  useCallback,
+  useRef,
+  useMemo,
+} from "react";
+import { flushSync } from "react-dom";
 import { useRouter, useParams } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
-import { Share2, Menu } from "lucide-react";
+import { Share2, Menu, Loader2 } from "lucide-react";
 import Image from "next/image";
 import copy from "copy-to-clipboard";
-import ChatSidebar from "../_components/chat/ChatSidebar";
+import ChatSidebar, {
+  clawV5HeaderNavShiftPx,
+} from "../_components/chat/ChatSidebar";
 import ChatInput, {
   type PredictionMarketMode,
   type ClawSelectionContext,
 } from "../_components/chat/ChatInput";
+import {
+  CLAW_V5_PENDING_STREAM_KEY,
+  cryptotechFenceClosedAndParses,
+  recomputeClawStreamingAssistantText,
+} from "@/lib/clawV5/streamingReportDisplay";
 import Message, { MessageData } from "../_components/chat/Message";
 import { CryptoSwapPanel } from "../_components/chat/CryptoSwapPanel";
 import RexHeader from "@/components/ui/layout/Header";
@@ -27,7 +42,9 @@ import {
   showErrorNotification,
   showSuccessNotification,
 } from "@/components/ui/notification";
-import { PaywallModal, type PaywallLimitCode } from "@/components/subscription/PaywallModal";
+import { PaywallModal, type PaywallLimitCode } from "@/components/ui/modal/PaywallModal";
+import { createNdjsonAccumulator } from "@/lib/clawV5/ndjsonStream";
+import { createStreamRafBatcher } from "@/lib/clawV5/streamRaf";
 
 export default function ChatDetailPage() {
   const router = useRouter();
@@ -55,15 +72,21 @@ export default function ChatDetailPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [streamingPhase, setStreamingPhase] = useState<
-    "" | "markets" | "research" | "draft" | "synth"
+    "" | "markets" | "report" | "research" | "draft" | "synth"
   >("");
   const [streamingStatusLabel, setStreamingStatusLabel] = useState<string>("");
+  const [streamingThinking, setStreamingThinking] = useState<string>("");
+  const thinkingDraftSeparatorPendingRef = useRef(false);
+  /** Coalesce web-research + draft token deltas to one React update per frame (reduces jank). */
+  const thinkingDeltaQueueRef = useRef<{ phase: string; text: string }[]>([]);
+  const thinkingDeltaRafRef = useRef<number | null>(null);
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [quotedContent, setQuotedContent] = useState<string | undefined>(
     undefined,
   );
   const [marketMode, setMarketMode] = useState<PredictionMarketMode>("Markets");
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isChatSidebarCollapsed, setIsChatSidebarCollapsed] = useState(false);
   const [isSwapOpen, setIsSwapOpen] = useState(false);
   const [activeCryptoPayload, setActiveCryptoPayload] = useState<any | null>(
     null,
@@ -78,6 +101,35 @@ export default function ChatDetailPage() {
   /** When true, never auto-scroll this session (e.g. after redirect from main page post-generation). Cleared when user sends. */
   const skipInitialScrollRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
+  const handleSendMessageRef = useRef<
+    | ((
+        message: string,
+        quotedContent?: string,
+        context?: ClawSelectionContext,
+        opts?: { userId?: string; onServerContact?: () => void },
+      ) => Promise<void>)
+    | null
+  >(null);
+  const pendingInitialStreamStartedRef = useRef(false);
+  /** Avoid GET /chats/:id during landing→detail handoff (React Strict remount + in-flight stream). */
+  const skipServerChatFetchUntilSendDoneRef = useRef<string | null>(null);
+  /** True while sessionStorage still has a landing→detail first message for this chat. */
+  const [sessionPendingForChat, setSessionPendingForChat] = useState(false);
+
+  useLayoutEffect(() => {
+    if (typeof window === "undefined") return;
+    try {
+      const raw = sessionStorage.getItem(CLAW_V5_PENDING_STREAM_KEY);
+      if (!raw) {
+        setSessionPendingForChat(false);
+        return;
+      }
+      const p = JSON.parse(raw) as { chatId?: string };
+      setSessionPendingForChat(p?.chatId === chatId);
+    } catch {
+      setSessionPendingForChat(false);
+    }
+  }, [chatId]);
 
   const findLatestCryptoPayload = useCallback((msgs: MessageData[]) => {
     for (let i = msgs.length - 1; i >= 0; i--) {
@@ -96,22 +148,38 @@ export default function ChatDetailPage() {
     return null;
   }, []);
 
-  // Extract Solana (base58, 32–44 chars) or BNB (0x + 40 hex) contract from text
+  // Extract contract/mint from text and infer chain for swap prefill.
+  // For generic 0x addresses, default to Ethereum unless chain keywords say otherwise.
   const extractContractFromText = useCallback((text: string): { address: string; chainId: string } | null => {
     const t = (text || "").trim();
     if (!t) return null;
-    const bnbWord = /^0x[a-fA-F0-9]{40}$/;
+    const evmWord = /^0x[a-fA-F0-9]{40}$/;
     const solanaWord = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
-    const bnbAny = /0x[a-fA-F0-9]{40}/g;
+    const evmAny = /0x[a-fA-F0-9]{40}/g;
     const solanaAny = /[1-9A-HJ-NP-Za-km-z]{32,44}/g;
+    const lower = t.toLowerCase();
+
+    const inferEvmChain = (): "bsc" | "base" | "monad" | "ethereum" => {
+      if (
+        lower.includes(" bsc") ||
+        lower.includes("bnb chain") ||
+        lower.includes("binance smart chain")
+      ) {
+        return "bsc";
+      }
+      if (lower.includes(" base")) return "base";
+      if (lower.includes("monad")) return "monad";
+      return "ethereum";
+    };
+
     const words = t.split(/\s+/);
     for (const w of words) {
       const clean = w.replace(/[.,;:!?)]+$/, "").trim();
-      if (bnbWord.test(clean)) return { address: clean, chainId: "bsc" };
+      if (evmWord.test(clean)) return { address: clean, chainId: inferEvmChain() };
       if (solanaWord.test(clean)) return { address: clean, chainId: "solana" };
     }
-    const bnbMatch = t.match(bnbAny);
-    if (bnbMatch?.[0]) return { address: bnbMatch[0], chainId: "bsc" };
+    const evmMatch = t.match(evmAny);
+    if (evmMatch?.[0]) return { address: evmMatch[0], chainId: inferEvmChain() };
     const solMatch = t.match(solanaAny);
     if (solMatch?.[0]) return { address: solMatch[0], chainId: "solana" };
     return null;
@@ -230,6 +298,17 @@ export default function ChatDetailPage() {
     const fetchChat = async () => {
       if (!chatId) return;
 
+      let skipServerFetch = false;
+      try {
+        const raw = sessionStorage.getItem(CLAW_V5_PENDING_STREAM_KEY);
+        if (raw) {
+          const p = JSON.parse(raw) as { chatId?: string };
+          if (p?.chatId === chatId) skipServerFetch = true;
+        }
+      } catch {
+        /* ignore */
+      }
+
       setIsLoading(true);
 
       // First try localStorage for immediate display (optimistic loading)
@@ -245,6 +324,21 @@ export default function ChatDetailPage() {
           })),
         );
         // Don't set loading to false yet - we'll fetch from server to ensure we have latest data
+      }
+
+      if (skipServerFetch) {
+        skipServerChatFetchUntilSendDoneRef.current = chatId;
+        if (!storedChat) {
+          setCurrentChat(null);
+          setMessages([]);
+        }
+        setIsLoading(false);
+        return;
+      }
+
+      if (skipServerChatFetchUntilSendDoneRef.current === chatId) {
+        setIsLoading(false);
+        return;
       }
 
       // Always fetch from backend to get the latest messages
@@ -291,17 +385,43 @@ export default function ChatDetailPage() {
   }, [chatId]);
 
   const handleSendMessage = useCallback(
-    async (message: string, quotedContent?: string, context?: ClawSelectionContext) => {
-      if (!chatId || !message.trim() || isSending || !authenticated || !currentUserId) return;
+    async (
+      message: string,
+      quotedContent?: string,
+      context?: ClawSelectionContext,
+      opts?: { userId?: string; onServerContact?: () => void },
+    ) => {
+      const effectiveUserId = (opts?.userId ?? "").trim() || currentUserId;
+      let serverContactNotified = false;
+      const notifyServerContact = () => {
+        if (serverContactNotified) return;
+        serverContactNotified = true;
+        opts?.onServerContact?.();
+      };
+
+      if (!chatId || !message.trim() || isSending || !authenticated || !effectiveUserId) {
+        notifyServerContact();
+        return;
+      }
 
       setIsSending(true);
       // Don't assume the phase on the client. The server will emit status events
       // based on intent (market vs crypto vs other).
       setStreamingPhase("");
       setStreamingStatusLabel("");
+      setStreamingThinking("");
+      thinkingDraftSeparatorPendingRef.current = false;
+      if (thinkingDeltaRafRef.current != null) {
+        cancelAnimationFrame(thinkingDeltaRafRef.current);
+        thinkingDeltaRafRef.current = null;
+      }
+      thinkingDeltaQueueRef.current = [];
 
       let tempAiMessageId = "";
       let streamingContent = "";
+      let streamBatcher: ReturnType<
+        typeof createStreamRafBatcher<string>
+      > | null = null;
       try {
         // Build chat history to send to the AI (exclude optimistic/temp UI-only messages)
         const historyForAi = messages
@@ -327,6 +447,7 @@ export default function ChatDetailPage() {
           id: tempUserMessageId,
           role: "user",
           content: finalMessage,
+          uiKey: tempUserMessageId,
         };
 
         // Add placeholder AI message for streaming
@@ -334,6 +455,7 @@ export default function ChatDetailPage() {
           id: tempAiMessageId,
           role: "assistant",
           content: "",
+          uiKey: tempAiMessageId,
         };
 
         setMessages((prev) => [...prev, userMessage, aiMessage]);
@@ -362,6 +484,7 @@ export default function ChatDetailPage() {
           }),
           signal: controller.signal,
         });
+        notifyServerContact();
 
         if (res.status === 402) {
           const data = await res.json().catch(() => ({}));
@@ -376,6 +499,7 @@ export default function ChatDetailPage() {
           );
           setStreamingPhase("");
           setStreamingStatusLabel("");
+          setStreamingThinking("");
           setIsSending(false);
           return;
         }
@@ -388,138 +512,251 @@ export default function ChatDetailPage() {
         const decoder = new TextDecoder();
         let userMessageData: any = null;
         let aiMessageData: any = null;
-        let lastUpdateTime = 0;
         let swapOpened = false;
-        const UPDATE_INTERVAL = 16; // ~60fps for smooth updates
 
-        // Smooth streaming update function
+        let reportStreamMd = "";
+        /** Rex / ```topmarkets``` / etc. streamed before ```cryptotech``` */
+        let preCryptotechMarkdown = "";
+        let cryptotechBlock = "";
+        let cryptotechFenceComplete = false;
+        let synthTail = "";
+        let sawCryptotech = false;
+        /** After synthStart, clear Live notes on the first answer chunk (avoids a blank flash). */
+        let deferClearLiveNotesUntilChunk = false;
+
+        const recomputeStreamingText = () =>
+          recomputeClawStreamingAssistantText({
+            reportStreamMd,
+            preCryptotechMarkdown,
+            sawCryptotech,
+            cryptotechBlock,
+            synthTail,
+          });
+
+        const sb = createStreamRafBatcher<string>((content) => {
+          streamingContent = content;
+          setMessages((prev) =>
+            prev.map((msg) =>
+              msg.id === tempAiMessageId || msg.uiKey === tempAiMessageId
+                ? { ...msg, content }
+                : msg,
+            ),
+          );
+        });
+        streamBatcher = sb;
+
         const updateStreamingContent = (content: string, force = false) => {
-          const now = Date.now();
-          if (force || now - lastUpdateTime >= UPDATE_INTERVAL) {
-            setMessages((prev) =>
-              prev.map((msg) =>
-                msg.id === tempAiMessageId ? { ...msg, content } : msg,
-              ),
-            );
-            lastUpdateTime = now;
-            return true;
-          }
-          return false;
+          streamingContent = content;
+          if (force) sb.flushNow(content);
+          else sb.schedule(content);
         };
+
+        const flushThinkingDeltaQueue = () => {
+          thinkingDeltaRafRef.current = null;
+          const batch = thinkingDeltaQueueRef.current;
+          thinkingDeltaQueueRef.current = [];
+          if (batch.length === 0) return;
+          setStreamingThinking((prev) => {
+            let next = prev;
+            for (const { phase, text } of batch) {
+              if (phase === "draft") {
+                if (!thinkingDraftSeparatorPendingRef.current) {
+                  thinkingDraftSeparatorPendingRef.current = true;
+                  next = next + (next.trim() ? "\n\n---\n\n" : "");
+                }
+              }
+              next = next + text;
+            }
+            return next;
+          });
+        };
+
+        const scheduleThinkingDelta = (phase: string, text: string) => {
+          thinkingDeltaQueueRef.current.push({ phase, text });
+          if (thinkingDeltaRafRef.current != null) return;
+          thinkingDeltaRafRef.current = requestAnimationFrame(
+            flushThinkingDeltaQueue,
+          );
+        };
+
+        const ndjson = createNdjsonAccumulator(
+          (parsed: Record<string, unknown>) => {
+            if (parsed.type === "userMessage") {
+              userMessageData = parsed.data;
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === tempUserMessageId
+                    ? {
+                        ...msg,
+                        id: (userMessageData as { id: string }).id,
+                        role: "user",
+                        content: (userMessageData as { content: string })
+                          .content,
+                        createdAt: (userMessageData as { createdAt?: string })
+                          .createdAt,
+                      }
+                    : msg,
+                ),
+              );
+            } else if (parsed.type === "reportDelta") {
+              const text = String(parsed.text ?? "");
+              reportStreamMd += text;
+              updateStreamingContent(recomputeStreamingText());
+            } else if (parsed.type === "thinkingDelta") {
+              const phase = String(parsed.phase ?? "");
+              const t = String(parsed.text ?? "");
+              scheduleThinkingDelta(phase, t);
+            } else if (parsed.type === "synthStart") {
+              if (thinkingDeltaRafRef.current != null) {
+                cancelAnimationFrame(thinkingDeltaRafRef.current);
+                thinkingDeltaRafRef.current = null;
+              }
+              const tail = thinkingDeltaQueueRef.current;
+              thinkingDeltaQueueRef.current = [];
+              // Ensure queued deltas commit before we clear "Live notes" (avoid dropping the tail vs RAF).
+              if (tail.length > 0) {
+                flushSync(() => {
+                  setStreamingThinking((prev) => {
+                    let next = prev;
+                    for (const { phase, text } of tail) {
+                      if (phase === "draft") {
+                        if (!thinkingDraftSeparatorPendingRef.current) {
+                          thinkingDraftSeparatorPendingRef.current = true;
+                          next = next + (next.trim() ? "\n\n---\n\n" : "");
+                        }
+                      }
+                      next = next + text;
+                    }
+                    return next;
+                  });
+                });
+              }
+              thinkingDraftSeparatorPendingRef.current = false;
+              deferClearLiveNotesUntilChunk = true;
+            } else if (parsed.type === "chunk") {
+              if (deferClearLiveNotesUntilChunk) {
+                deferClearLiveNotesUntilChunk = false;
+                setStreamingThinking("");
+              }
+              const c = String(parsed.content ?? "");
+              if (!sawCryptotech && c.includes("```cryptotech")) {
+                sawCryptotech = true;
+                preCryptotechMarkdown = synthTail;
+                synthTail = "";
+                cryptotechBlock = c;
+                cryptotechFenceComplete =
+                  cryptotechFenceClosedAndParses(cryptotechBlock);
+              } else if (sawCryptotech && !cryptotechFenceComplete) {
+                cryptotechBlock += c;
+                cryptotechFenceComplete =
+                  cryptotechFenceClosedAndParses(cryptotechBlock);
+              } else {
+                synthTail += c;
+              }
+              updateStreamingContent(recomputeStreamingText());
+            } else if (parsed.type === "status") {
+              const phase = parsed.phase as
+                | "markets"
+                | "report"
+                | "research"
+                | "draft"
+                | "synth"
+                | undefined;
+              if (phase) setStreamingPhase(phase);
+              if (typeof parsed.label === "string") {
+                setStreamingStatusLabel(parsed.label);
+              }
+            } else if (parsed.type === "aiMessage") {
+              aiMessageData = parsed.data;
+              const finalContent = (aiMessageData as { content: string })
+                .content;
+              streamingContent = finalContent;
+              sb.cancel();
+              setStreamingPhase("");
+              setStreamingStatusLabel("");
+
+              setMessages((prev) =>
+                prev.map((msg) =>
+                  msg.id === tempAiMessageId
+                    ? {
+                        ...msg,
+                        id: (aiMessageData as { id: string }).id,
+                        role: "assistant",
+                        content: finalContent,
+                        createdAt: (aiMessageData as { createdAt?: string })
+                          .createdAt,
+                      }
+                    : msg,
+                ),
+              );
+
+              let didOpenFromCrypto = false;
+              const cryptotechMatch = finalContent?.match(
+                /```cryptotech\s*([\s\S]*?)```/i,
+              );
+              if (cryptotechMatch?.[1]) {
+                try {
+                  const payload = JSON.parse(cryptotechMatch[1]);
+                  const hasToken =
+                    payload?.token &&
+                    (payload.token.tokenAddress ||
+                      payload.token.contractAddress);
+                  if (
+                    (payload?.kind === "indicator" && payload?.analysis) ||
+                    (payload?.kind === "technical_report" && hasToken)
+                  ) {
+                    setActiveCryptoPayload(payload);
+                    setIsSwapOpen(true);
+                    swapOpened = true;
+                    didOpenFromCrypto = true;
+                  }
+                } catch {
+                  /* ignore */
+                }
+              }
+              if (!didOpenFromCrypto) {
+                const contract = extractContractFromText(finalMessage);
+                if (contract) {
+                  setActiveCryptoPayload({
+                    token: {
+                      tokenAddress: contract.address,
+                      contractAddress: contract.address,
+                      chainId: contract.chainId,
+                    },
+                  });
+                  setIsSwapOpen(true);
+                  swapOpened = true;
+                }
+              }
+            } else if (parsed.type === "error") {
+              throw new Error(String(parsed.error || "Streaming failed"));
+            }
+          },
+        );
 
         if (reader) {
           while (true) {
             const { done, value } = await reader.read();
             if (done) break;
+            ndjson.push(decoder.decode(value, { stream: true }));
+          }
+          ndjson.flush();
 
-            const chunk = decoder.decode(value, { stream: true });
-            const lines = chunk.split("\n").filter((line) => line.trim());
-
-            for (const line of lines) {
-              try {
-                const parsed = JSON.parse(line);
-
-                if (parsed.type === "userMessage") {
-                  userMessageData = parsed.data;
-                  // Update user message with actual data
-                  setMessages((prev) =>
-                    prev.map((msg) =>
-                      msg.id === tempUserMessageId
-                        ? {
-                            id: userMessageData.id,
-                            role: "user",
-                            content: userMessageData.content,
-                            createdAt: userMessageData.createdAt,
-                          }
-                        : msg,
-                    ),
-                  );
-                } else if (parsed.type === "chunk") {
-                  // Stream content chunk - accumulate and update smoothly
-                  streamingContent += parsed.content;
-                  updateStreamingContent(streamingContent);
-                } else if (parsed.type === "status") {
-                  const phase = parsed.phase as
-                    | "research"
-                    | "draft"
-                    | "synth"
-                    | undefined;
-                  if (phase) setStreamingPhase(phase);
-                  if (typeof parsed.label === "string") {
-                    setStreamingStatusLabel(parsed.label);
-                  }
-                } else if (parsed.type === "aiMessage") {
-                  // Final AI message with complete data - force update
-                  aiMessageData = parsed.data;
-                  updateStreamingContent(aiMessageData.content, true);
-                  setStreamingPhase("");
-                  setStreamingStatusLabel("");
-
-                  setMessages((prev) =>
-                    prev.map((msg) =>
-                      msg.id === tempAiMessageId
-                        ? {
-                            id: aiMessageData.id,
-                            role: "assistant",
-                            content: aiMessageData.content,
-                            createdAt: aiMessageData.createdAt,
-                          }
-                        : msg,
-                    ),
-                  );
-
-                  // Auto-open swap with token when response is ready
-                  let didOpenFromCrypto = false;
-                  const cryptotechMatch = aiMessageData.content?.match(
-                    /```cryptotech\s*([\s\S]*?)```/i
-                  );
-                  if (cryptotechMatch?.[1]) {
-                    try {
-                      const payload = JSON.parse(cryptotechMatch[1]);
-                      const hasToken =
-                        payload?.token &&
-                        (payload.token.tokenAddress ||
-                          payload.token.contractAddress);
-                      if (
-                        (payload?.kind === "indicator" && payload?.analysis) ||
-                        (payload?.kind === "technical_report" && hasToken)
-                      ) {
-                        setActiveCryptoPayload(payload);
-                        setIsSwapOpen(true);
-                        swapOpened = true;
-                        didOpenFromCrypto = true;
-                      }
-                    } catch {
-                      // ignore
-                    }
-                  }
-                  if (!didOpenFromCrypto) {
-                    const contract = extractContractFromText(finalMessage);
-                    if (contract) {
-                      setActiveCryptoPayload({
-                        token: {
-                          tokenAddress: contract.address,
-                          contractAddress: contract.address,
-                          chainId: contract.chainId,
-                        },
-                      });
-                      setIsSwapOpen(true);
-                      swapOpened = true;
-                    }
-                  }
-                } else if (parsed.type === "error") {
-                  throw new Error(parsed.error || "Streaming failed");
-                }
-              } catch (e) {
-                // Skip invalid JSON lines
-                console.error("Error parsing stream chunk:", e);
-              }
+          // Drain batched thinking deltas (stream may end without another RAF tick).
+          if (
+            thinkingDeltaRafRef.current != null ||
+            thinkingDeltaQueueRef.current.length > 0
+          ) {
+            if (thinkingDeltaRafRef.current != null) {
+              cancelAnimationFrame(thinkingDeltaRafRef.current);
+              thinkingDeltaRafRef.current = null;
             }
+            flushThinkingDeltaQueue();
           }
 
           // Ensure final update is applied if streaming content exists
           if (streamingContent && !aiMessageData) {
-            updateStreamingContent(streamingContent, true);
+            updateStreamingContent(recomputeStreamingText(), true);
           }
 
           // Fallback: open swap after stream ends if we never opened (e.g. aiMessage was split across chunks)
@@ -596,19 +833,28 @@ export default function ChatDetailPage() {
           });
         }
       } catch (error) {
+        notifyServerContact();
         const isAbort = error instanceof Error && error.name === "AbortError";
         if (isAbort) {
           setStreamingPhase("");
           setStreamingStatusLabel("");
+          setStreamingThinking("");
           const hasContent = (streamingContent || "").trim().length > 0;
           setMessages((prev) => {
             if (!hasContent) {
               // No content generated: remove the empty assistant message (like ChatGPT)
-              return prev.filter((m) => m.id !== tempAiMessageId);
+              return prev.filter(
+                (m) =>
+                  m.id !== tempAiMessageId &&
+                  m.uiKey !== tempAiMessageId,
+              );
             }
             // Partial content: keep the assistant message with content generated so far
             const next = [...prev];
-            const idx = next.findIndex((m) => m.id === tempAiMessageId);
+            const idx = next.findIndex(
+              (m) =>
+                m.id === tempAiMessageId || m.uiKey === tempAiMessageId,
+            );
             if (idx !== -1) {
               next[idx] = { ...next[idx], content: streamingContent };
             }
@@ -618,6 +864,7 @@ export default function ChatDetailPage() {
           console.error("Error sending message:", error);
           setStreamingPhase("");
           setStreamingStatusLabel("");
+          setStreamingThinking("");
           setMessages((prev) =>
             prev.filter(
               (msg) =>
@@ -628,30 +875,185 @@ export default function ChatDetailPage() {
           showErrorNotification("Error", "Failed to send message.");
         }
       } finally {
+        streamBatcher?.cancel();
+        if (thinkingDeltaRafRef.current != null) {
+          cancelAnimationFrame(thinkingDeltaRafRef.current);
+          thinkingDeltaRafRef.current = null;
+        }
+        thinkingDeltaQueueRef.current = [];
         abortControllerRef.current = null;
+        skipServerChatFetchUntilSendDoneRef.current = null;
         setIsSending(false);
         setStreamingPhase("");
         setStreamingStatusLabel("");
+        setStreamingThinking("");
         setQuotedContent(undefined);
       }
     },
     [chatId, isSending, messages, currentChat, marketMode, extractContractFromText, authenticated, currentUserId],
   );
 
+  handleSendMessageRef.current = handleSendMessage;
+
+  useEffect(() => {
+    pendingInitialStreamStartedRef.current = false;
+  }, [chatId]);
+
+  useEffect(() => {
+    if (pendingInitialStreamStartedRef.current) return;
+    if (!chatId || !currentUserId.trim() || !authenticated || isLoading) return;
+
+    let raw: string | null = null;
+    try {
+      raw = sessionStorage.getItem(CLAW_V5_PENDING_STREAM_KEY);
+    } catch {
+      return;
+    }
+    if (!raw) return;
+
+    type Pending = {
+      chatId: string;
+      message: string;
+      quotedContent?: string;
+      marketMode?: PredictionMarketMode;
+      context?: ClawSelectionContext;
+    };
+    let pending: Pending;
+    try {
+      pending = JSON.parse(raw) as Pending;
+    } catch {
+      return;
+    }
+    if (pending.chatId !== chatId) return;
+
+    sessionStorage.removeItem(CLAW_V5_PENDING_STREAM_KEY);
+    setSessionPendingForChat(false);
+    pendingInitialStreamStartedRef.current = true;
+    if (pending.marketMode) setMarketMode(pending.marketMode);
+
+    queueMicrotask(() => {
+      void handleSendMessageRef.current?.(
+        pending.message,
+        pending.quotedContent,
+        pending.context,
+      );
+    });
+  }, [chatId, currentUserId, authenticated, isLoading]);
+
   const handleQuote = useCallback((content: string) => {
     setQuotedContent(content);
   }, []);
 
   const handleDeepAnalysisMarket = useCallback(
-    (params: { provider: "polymarket" | "kalshi"; marketId: string; title: string }) => {
+    async (params: {
+      provider: "polymarket" | "kalshi" | "limitless" | "myriad" | "predictfun";
+      marketId: string;
+      title: string;
+    }) => {
+      if (!authenticated) {
+        showErrorNotification(
+          "Sign in required",
+          "Sign in to run deep analysis from the chat.",
+        );
+        return;
+      }
+      if (isSending) {
+        showErrorNotification(
+          "Please wait",
+          "Let the current reply finish before starting deep analysis.",
+        );
+        return;
+      }
+
+      let effectiveUserId = currentUserId.trim();
+      if (!effectiveUserId) {
+        const authId = privyUser?.id || phantomUser?.id;
+        if (!authId) {
+          showErrorNotification(
+            "Please wait",
+            "Your session is still loading. Try again in a moment.",
+          );
+          return;
+        }
+        try {
+          let email: string | undefined;
+          if (phantomUser?.email) {
+            email = phantomUser.email;
+          } else if (privyUser) {
+            const privyUserWithEmail = privyUser as {
+              email?: { address?: string } | string;
+            };
+            email =
+              (typeof privyUserWithEmail.email === "object" &&
+                privyUserWithEmail.email?.address) ||
+              (typeof privyUserWithEmail.email === "string" &&
+                privyUserWithEmail.email) ||
+              undefined;
+          }
+          const res = await fetch("/api/user", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              ...(privyUser?.id
+                ? { privyId: privyUser.id }
+                : { phantomId: phantomUser!.id }),
+              email,
+            }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            effectiveUserId = (data?.user?.id || "").trim();
+            if (effectiveUserId) setCurrentUserId(effectiveUserId);
+          }
+        } catch (e) {
+          console.error("Deep analysis: failed to resolve user", e);
+        }
+      }
+
+      if (!effectiveUserId) {
+        showErrorNotification(
+          "Please wait",
+          "Could not resolve your account. Try again in a moment.",
+        );
+        return;
+      }
+
       const origin = typeof window !== "undefined" ? window.location.origin : "";
-      const url = `${origin}/rexmarkets/${params.provider}/${encodeURIComponent(params.marketId)}`;
-      const providerLabel = params.provider === "kalshi" ? "Kalshi" : "Polymarket";
-      handleSendMessage(
-        `Give me a deep analysis of this prediction market about ${params.title} on ${providerLabel}: ${url}`,
-      );
+      const rexPath =
+        params.provider === "predictfun"
+          ? "predict-fun"
+          : params.provider;
+      const url = `${origin}/rexmarkets/${rexPath}/${encodeURIComponent(params.marketId)}`;
+      const providerLabel =
+        params.provider === "kalshi"
+          ? "Kalshi"
+          : params.provider === "limitless"
+            ? "Limitless"
+            : params.provider === "myriad"
+              ? "Myriad"
+              : params.provider === "predictfun"
+                ? "Predict.fun"
+                : "Polymarket";
+      await new Promise<void>((resolve) => {
+        void handleSendMessage(
+          `Give me a deep analysis of this prediction market about ${params.title} on ${providerLabel}: ${url}`,
+          undefined,
+          undefined,
+          {
+            userId: effectiveUserId,
+            onServerContact: () => resolve(),
+          },
+        );
+      });
     },
-    [handleSendMessage],
+    [
+      authenticated,
+      currentUserId,
+      handleSendMessage,
+      isSending,
+      privyUser,
+      phantomUser,
+    ],
   );
 
   const handleClearQuote = useCallback(() => {
@@ -879,17 +1281,50 @@ export default function ChatDetailPage() {
     [chatId, router],
   );
 
+  const threadHasCryptoExchangeContext = useMemo(() => {
+    if (findLatestCryptoPayload(messages)) return true;
+    if (
+      messages.some(
+        (m) =>
+          m.role === "assistant" &&
+          typeof m.content === "string" &&
+          /```cryptotech/i.test(m.content),
+      )
+    )
+      return true;
+    if (
+      messages.some(
+        (m) =>
+          m.role === "user" &&
+          extractContractFromText(m.content || "") != null,
+      )
+    )
+      return true;
+    return false;
+  }, [messages, findLatestCryptoPayload, extractContractFromText]);
+
+  const showClawExchangeButton =
+    marketMode === "Crypto" || threadHasCryptoExchangeContext;
+
   if (isLoading) {
     return (
-      <div className="relative w-full h-screen flex flex-col overflow-hidden">
-        <div className="flex-1 flex overflow-hidden">
-          <div className="h-full flex flex-col w-full">
-            <RexHeader onHistoryClick={() => {}} showExchangeButton={false} />
-            <div className="flex-1 flex overflow-hidden bg-black border-y-2 border-[#FFC000] pb-21.75 sm:pb-13.75">
+      <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+        <div className="flex min-h-0 flex-1 overflow-hidden">
+          <div className="flex h-full min-h-0 w-full flex-col">
+            <RexHeader
+              onHistoryClick={() => {}}
+              showExchangeButton={false}
+              clawV5MainNavShiftPx={clawV5HeaderNavShiftPx(
+                isChatSidebarCollapsed,
+              )}
+            />
+            <div className="flex-1 flex overflow-hidden bg-black border-y-2 border-[#FFC000] min-h-0">
               <ChatSidebar
                 chats={chats}
                 isLoading={false}
                 onNewChat={handleNewChat}
+                collapsed={isChatSidebarCollapsed}
+                onCollapsedChange={setIsChatSidebarCollapsed}
               />
               <div className="flex-1 flex items-center justify-center text-white">
                 Loading chat...
@@ -904,14 +1339,20 @@ export default function ChatDetailPage() {
 
   return (
     <>
-    <div className="relative w-full h-screen flex flex-col overflow-hidden">
-      <div className="flex-1 flex overflow-hidden">
-        <div className="h-full flex flex-col w-full">
+    <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
+      <div className="flex min-h-0 flex-1 overflow-hidden">
+        <div className="flex h-full min-h-0 w-full flex-col">
           {/* Header */}
-          <RexHeader onHistoryClick={() => {}} showExchangeButton={false} />
+          <RexHeader
+            onHistoryClick={() => {}}
+            showExchangeButton={false}
+            clawV5MainNavShiftPx={clawV5HeaderNavShiftPx(
+              isChatSidebarCollapsed,
+            )}
+          />
 
           {/* Main Content */}
-          <div className="flex-1 flex overflow-hidden bg-black border-y-2 border-[#FFC000] pb-21.75 sm:pb-13.75 relative">
+          <div className="flex-1 flex overflow-hidden bg-black border-y-2 border-[#FFC000] relative min-h-0">
             <ChatSidebar
               chats={chats}
               isLoading={false}
@@ -920,6 +1361,8 @@ export default function ChatDetailPage() {
               onChatDelete={handleChatDelete}
               isMobileOpen={isSidebarOpen}
               onMobileClose={() => setIsSidebarOpen(false)}
+              collapsed={isChatSidebarCollapsed}
+              onCollapsedChange={setIsChatSidebarCollapsed}
             />
 
             <div className="flex-1 flex min-h-0 min-w-0 bg-black">
@@ -936,20 +1379,22 @@ export default function ChatDetailPage() {
                       <Menu className="w-6 h-6" />
                     </button>
                     <div className="flex items-center gap-3">
-                      <button
-                        onClick={handleExchange}
-                        className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors"
-                        aria-label="Open exchange"
-                        title="Exchange"
-                      >
-                        <Image
-                          src="/images/exchange.png"
-                          alt="Exchange"
-                          width={72}
-                          height={32}
-                          className="w-25 h-10"
-                        />
-                      </button>
+                      {showClawExchangeButton && (
+                        <button
+                          onClick={handleExchange}
+                          className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors"
+                          aria-label="Open exchange"
+                          title="Exchange"
+                        >
+                          <Image
+                            src="/images/exchange.png"
+                            alt="Exchange"
+                            width={72}
+                            height={32}
+                            className="w-25 h-10"
+                          />
+                        </button>
+                      )}
                       <button
                         onClick={handleShare}
                         className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors"
@@ -960,22 +1405,24 @@ export default function ChatDetailPage() {
                       </button>
                     </div>
                   </div>
-                  {/* Desktop: Exchange + Share */}
+                  {/* Desktop: Exchange (crypto mode only) + Share */}
                   <div className="hidden md:flex items-center gap-3">
-                    <button
-                      onClick={handleExchange}
-                      className="cursor-pointer transition hover:scale-[1.03]"
-                      aria-label="Open exchange"
-                      title="Exchange"
-                    >
-                      <Image
-                        src="/images/exchange.png"
-                        alt="Enter the exchange"
-                        width={120}
-                        height={48}
-                        className="w-25 h-10 object-contain"
-                      />
-                    </button>
+                    {showClawExchangeButton && (
+                      <button
+                        onClick={handleExchange}
+                        className="cursor-pointer transition hover:scale-[1.03]"
+                        aria-label="Open exchange"
+                        title="Exchange"
+                      >
+                        <Image
+                          src="/images/exchange.png"
+                          alt="Enter The Exchange."
+                          width={120}
+                          height={48}
+                          className="w-25 h-10 object-contain"
+                        />
+                      </button>
+                    )}
                     <button
                       onClick={handleShare}
                       className="flex items-center gap-2 text-white/80 hover:text-white transition-colors text-sm"
@@ -988,23 +1435,43 @@ export default function ChatDetailPage() {
                 </div>
 
                 {/* Messages */}
-                <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 custom-chat-messages-scrollbar px-2 md:px-0">
+                <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0 min-w-0 custom-chat-messages-scrollbar px-1.5 sm:px-2 md:px-0">
                   <div className="mx-auto w-full max-w-4xl">
                     {messages.length === 0 ? (
-                      <div className="flex items-center justify-center h-full text-gray-400 text-sm px-4">
-                        No messages yet. Start a conversation!
-                      </div>
+                      isLoading ||
+                      isSending ||
+                      sessionPendingForChat ? (
+                        <div
+                          className="flex flex-col items-center justify-center min-h-[min(50vh,28rem)] gap-3 px-4 py-12"
+                          role="status"
+                          aria-live="polite"
+                          aria-busy="true"
+                        >
+                          <Loader2
+                            className="w-10 h-10 text-[#FFC000] animate-spin"
+                            aria-hidden
+                          />
+                          <p className="text-sm text-white/65 text-center max-w-sm">
+                            {isSending || sessionPendingForChat
+                              ? "Preparing your conversation…"
+                              : "Loading chat…"}
+                          </p>
+                        </div>
+                      ) : (
+                        <div className="flex items-center justify-center h-full min-h-[min(40vh,20rem)] text-gray-400 text-sm px-4">
+                          No messages yet. Start a conversation!
+                        </div>
+                      )
                     ) : (
                       <div className="pb-4">
                         {messages.map((message, index) => (
                           <Message
-                            key={message.id}
+                            key={message.uiKey ?? message.id}
                             message={message}
                             onEdit={handleEditMessage}
                             onCopy={handleCopyMessage}
                             onQuote={handleQuote}
                             onDeepAnalysisMarket={handleDeepAnalysisMarket}
-                            disableDeepAnalysis={isSending}
                             isStreaming={
                               message.role === "assistant" &&
                               isSending &&
@@ -1025,6 +1492,13 @@ export default function ChatDetailPage() {
                               isSending &&
                               index === messages.length - 1
                                 ? streamingStatusLabel
+                                : ""
+                            }
+                            streamingThinking={
+                              message.role === "assistant" &&
+                              isSending &&
+                              index === messages.length - 1
+                                ? streamingThinking
                                 : ""
                             }
                           />

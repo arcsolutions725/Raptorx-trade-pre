@@ -19,9 +19,27 @@ import {
   ChartStatsDot,
   getStatsLabelsForPoint,
   CHART_STATS_DOT_MARGIN,
+  CHART_LEGEND_WRAPPER_STYLE,
+  isChartLegendCheckboxTarget,
 } from "../../../shared/ChartStatsDot";
+import {
+  formatChartAxisPercent,
+  formatChartPercentValue,
+} from "../../../shared/chartPercentFormat";
 
 const LIMITLESS_LINE_COLOR = "#8B5CF6";
+
+function accentAlphaRgba(accentHex: string, alpha: number): string {
+  const h = accentHex.replace("#", "").trim();
+  if (h.length !== 6 || !/^[0-9a-f]+$/i.test(h)) {
+    return `rgba(139, 92, 246, ${alpha})`;
+  }
+  const n = parseInt(h, 16);
+  const r = (n >> 16) & 255;
+  const g = (n >> 8) & 255;
+  const b = n & 255;
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
 
 // Color palette for multiple market lines (Limitless primary first, then Polymarket/Kalshi style)
 const MARKET_COLORS = [
@@ -62,6 +80,8 @@ type PriceChartProps =
       marketKeys: MarketKey[];
       history?: never;
       lineName?: never;
+      /** Chrome + single-series line color (default Limitless purple). Use `#ffc000` for Myriad. */
+      accentColor?: string;
     }
   | {
       /** Single-series fallback */
@@ -69,6 +89,7 @@ type PriceChartProps =
       lineName?: string;
       chartData?: never;
       marketKeys?: never;
+      accentColor?: string;
     };
 
 function formatSingleChartData(
@@ -93,9 +114,14 @@ function formatSingleChartData(
 type CustomTooltipSingleProps = {
   active?: boolean;
   payload?: readonly { payload: SingleChartDataPoint }[];
+  accentColor: string;
 };
 
-const CustomTooltipSingle = ({ active, payload }: CustomTooltipSingleProps) => {
+const CustomTooltipSingle = ({
+  active,
+  payload,
+  accentColor,
+}: CustomTooltipSingleProps) => {
   if (!active || !payload?.length) return null;
 
   const point = payload[0]?.payload;
@@ -114,7 +140,7 @@ const CustomTooltipSingle = ({ active, payload }: CustomTooltipSingleProps) => {
     <div
       style={{
         backgroundColor: "#000",
-        border: "1px solid rgba(139, 92, 246, 0.4)",
+        border: `1px solid ${accentAlphaRgba(accentColor, 0.45)}`,
         borderRadius: "6px",
         padding: "8px 12px",
         color: "#fff",
@@ -125,11 +151,11 @@ const CustomTooltipSingle = ({ active, payload }: CustomTooltipSingleProps) => {
     >
       <div
         style={{
-          color: LIMITLESS_LINE_COLOR,
+          color: accentColor,
           fontWeight: "bold",
           marginBottom: "6px",
           fontSize: "11px",
-          borderBottom: "1px solid rgba(139, 92, 246, 0.2)",
+          borderBottom: `1px solid ${accentAlphaRgba(accentColor, 0.25)}`,
           paddingBottom: "4px",
         }}
       >
@@ -148,10 +174,12 @@ const CustomTooltipSingle = ({ active, payload }: CustomTooltipSingleProps) => {
           style={{
             fontSize: "12px",
             fontWeight: "bold",
-            color: LIMITLESS_LINE_COLOR,
+            color: accentColor,
           }}
         >
-          {typeof point.price === "number" ? point.price.toFixed(2) : "—"}%
+          {typeof point.price === "number"
+            ? `${formatChartPercentValue(point.price, 2)}%`
+            : "—"}
         </span>
       </div>
     </div>
@@ -164,6 +192,7 @@ type CustomTooltipMultiProps = {
   marketKeys: MarketKey[];
   chartData: MultiChartDataPoint[];
   visibleMarketKeys: MarketKey[];
+  accentColor: string;
 };
 
 const CustomTooltipMulti = ({
@@ -172,6 +201,7 @@ const CustomTooltipMulti = ({
   marketKeys,
   chartData,
   visibleMarketKeys,
+  accentColor,
 }: CustomTooltipMultiProps) => {
   if (!active || !payload?.length || !chartData?.length) return null;
 
@@ -185,7 +215,6 @@ const CustomTooltipMulti = ({
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
   });
 
   const marketKeysToShow =
@@ -227,7 +256,7 @@ const CustomTooltipMulti = ({
     <div
       style={{
         backgroundColor: "#000",
-        border: "1px solid rgba(139, 92, 246, 0.4)",
+        border: `1px solid ${accentAlphaRgba(accentColor, 0.45)}`,
         borderRadius: "6px",
         padding: "8px",
         color: "#fff",
@@ -238,11 +267,11 @@ const CustomTooltipMulti = ({
     >
       <div
         style={{
-          color: LIMITLESS_LINE_COLOR,
+          color: accentColor,
           fontWeight: "bold",
           marginBottom: "6px",
           fontSize: "11px",
-          borderBottom: "1px solid rgba(139, 92, 246, 0.2)",
+          borderBottom: `1px solid ${accentAlphaRgba(accentColor, 0.25)}`,
           paddingBottom: "4px",
         }}
       >
@@ -286,7 +315,9 @@ const CustomTooltipMulti = ({
                     color: market.color,
                   }}
                 >
-                  {typeof price === "number" ? price.toFixed(2) : "N/A"}%
+                  {typeof price === "number"
+                    ? `${formatChartPercentValue(price, 2)}%`
+                    : "N/A"}
                 </span>
               ) : (
                 <span
@@ -308,6 +339,7 @@ const CustomTooltipMulti = ({
 };
 
 export default function PriceChart(props: PriceChartProps) {
+  const accentColor = props.accentColor ?? LIMITLESS_LINE_COLOR;
   const isMultiMarket = "chartData" in props && props.chartData && props.marketKeys;
 
   // Single-series mode
@@ -474,7 +506,7 @@ export default function PriceChart(props: PriceChartProps) {
                 type="number"
                 domain={["dataMin", "dataMax"]}
                 stroke="#ffffff40"
-                tick={{ fill: "#ffffff60", fontSize: 11 }}
+                tick={{ fill: "#ffc000", fontSize: 11 }}
                 interval="preserveStartEnd"
                 tickFormatter={(value) => {
                   const date = new Date(value);
@@ -486,7 +518,7 @@ export default function PriceChart(props: PriceChartProps) {
               />
               <YAxis
                 stroke="#ffffff40"
-                tick={{ fill: "#ffffff60", fontSize: 11 }}
+                tick={{ fill: "#ffc000", fontSize: 11 }}
                 domain={multiYDomain}
                 ticks={multiYTicks}
                 allowDataOverflow={false}
@@ -495,33 +527,38 @@ export default function PriceChart(props: PriceChartProps) {
                     typeof value === "number"
                       ? value
                       : parseFloat(String(value)) || 0;
-                  return `${num.toFixed(1)}%`;
+                  return formatChartAxisPercent(num);
                 }}
               />
               <Tooltip
+                filterNull={false}
+                allowEscapeViewBox={{ x: false, y: true }}
+                wrapperStyle={{ zIndex: 10000 }}
                 content={(tooltipProps) => (
                   <CustomTooltipMulti
                     {...tooltipProps}
                     marketKeys={marketKeys}
                     chartData={chartDataFormatted}
                     visibleMarketKeys={visibleMarketKeys}
+                    accentColor={accentColor}
                   />
                 )}
               />
               <Legend
-                wrapperStyle={{ color: "#fff", fontSize: "12px" }}
+                wrapperStyle={CHART_LEGEND_WRAPPER_STYLE}
                 content={() => (
-                  <div
-                    className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2"
-                    style={{ color: "#fff", fontSize: "12px" }}
-                  >
+                  <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2 pointer-events-auto touch-manipulation">
                     {marketKeys.map((market) => {
                       const visible = !hiddenMarketKeys.has(market.key);
                       const lastPrice = lastPrices.get(market.key);
                       return (
                         <div
                           key={market.key}
-                          className="flex items-center gap-2 select-none"
+                          className="flex items-center gap-2 select-none cursor-pointer touch-manipulation"
+                          onClick={(e) => {
+                            if (isChartLegendCheckboxTarget(e.target)) return;
+                            toggleMarketVisibility(market.key);
+                          }}
                         >
                           <Checkbox
                             checked={visible}
@@ -537,7 +574,7 @@ export default function PriceChart(props: PriceChartProps) {
                           <span className="text-white/90">
                             {market.title}{" "}
                             {lastPrice !== undefined
-                              ? `${lastPrice.toFixed(1)}%`
+                              ? `${formatChartPercentValue(lastPrice, 2)}%`
                               : ""}
                           </span>
                         </div>
@@ -633,7 +670,7 @@ export default function PriceChart(props: PriceChartProps) {
               type="number"
               domain={["dataMin", "dataMax"]}
               stroke="#ffffff40"
-              tick={{ fill: "#ffffff60", fontSize: 11 }}
+              tick={{ fill: "#ffc000", fontSize: 11 }}
               interval="preserveStartEnd"
               tickFormatter={(value) => {
                 const date = new Date(value);
@@ -645,7 +682,7 @@ export default function PriceChart(props: PriceChartProps) {
             />
             <YAxis
               stroke="#ffffff40"
-              tick={{ fill: "#ffffff60", fontSize: 11 }}
+              tick={{ fill: "#ffc000", fontSize: 11 }}
               domain={singleYDomain}
               ticks={singleYTicks}
               allowDataOverflow={false}
@@ -654,17 +691,22 @@ export default function PriceChart(props: PriceChartProps) {
                   typeof value === "number"
                     ? value
                     : parseFloat(String(value)) || 0;
-                return `${num.toFixed(1)}%`;
+                return formatChartAxisPercent(num);
               }}
             />
-            <Tooltip content={<CustomTooltipSingle />} />
+            <Tooltip
+              filterNull={false}
+              allowEscapeViewBox={{ x: false, y: true }}
+              wrapperStyle={{ zIndex: 10000 }}
+              content={(tp) => <CustomTooltipSingle {...tp} accentColor={accentColor} />}
+            />
             <Line
               type="monotone"
               dataKey="price"
               name={lineName}
-              stroke={LIMITLESS_LINE_COLOR}
+              stroke={accentColor}
               strokeWidth={2}
-              activeDot={{ r: 4, fill: LIMITLESS_LINE_COLOR }}
+              activeDot={{ r: 4, fill: accentColor }}
               connectNulls
               isAnimationActive={false}
               dot={(dotProps: {
@@ -685,7 +727,7 @@ export default function PriceChart(props: PriceChartProps) {
                     cx={dotProps.cx}
                     cy={dotProps.cy}
                     labels={labels}
-                    color={LIMITLESS_LINE_COLOR}
+                    color={accentColor}
                     isCurrentPriceLabel={isCurrent ?? false}
                   />
                 );
@@ -696,10 +738,10 @@ export default function PriceChart(props: PriceChartProps) {
       </div>
       {typeof lastPrice === "number" && !isNaN(lastPrice) && (
         <div className="flex-shrink-0 flex items-center justify-center gap-2 mt-2 text-xs text-white/80">
-          <span className="w-2 h-2 rounded-sm shrink-0 bg-[#8B5CF6]" />
+          <span className="w-2 h-2 rounded-sm shrink-0" style={{ backgroundColor: accentColor }} />
           <span>{lineName}</span>
-          <span className="font-semibold text-[#8B5CF6]">
-            {lastPrice.toFixed(1)}%
+          <span className="font-semibold" style={{ color: accentColor }}>
+            {formatChartPercentValue(lastPrice, 2)}%
           </span>
         </div>
       )}

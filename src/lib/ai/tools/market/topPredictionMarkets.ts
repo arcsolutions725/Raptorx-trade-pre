@@ -1,6 +1,15 @@
+import { myriadFetchText } from "@/lib/myriad/serverFetch";
+import { predictFunGetJson } from "@/lib/predictfun/serverFetch";
+import {
+  buildPredictFunCategoriesSearchParams,
+  parsePredictFunCategoriesResponse,
+} from "@/lib/predictfun/fetchCategories";
+import { isPredictFunMarketOpen } from "@/lib/predictfun/filterOpenMarkets";
+
 /**
  * Top prediction markets tool for Claw v5.
- * When the user asks for "top prediction markets" (or "hottest", "best", etc.) we show top 3 Polymarket + top 3 Kalshi by volume.
+ * When the user asks for "top prediction markets" (or "hottest", "best", etc.) we show top N Polymarket,
+ * Limitless, Kalshi, and Myriad by volume (default 3 each).
  * Supports category-specific queries (e.g. "top sports markets") and filters out expired markets.
  */
 
@@ -13,7 +22,7 @@ export type TopMarketCard = {
   title: string;
   volume: number;
   volume24hr?: number;
-  provider: "polymarket" | "kalshi";
+  provider: "polymarket" | "kalshi" | "limitless" | "myriad" | "predictfun";
   /** Market/event symbol image URL for the card. */
   imageUrl?: string;
 };
@@ -21,6 +30,12 @@ export type TopMarketCard = {
 export type TopMarketsEmbedPayload = {
   kind: "top_markets";
   polymarket: TopMarketCard[];
+  /** Top Limitless markets for the same category (when applicable). Omitted in older stored messages. */
+  limitless?: TopMarketCard[];
+  /** Top Myriad markets (when applicable). */
+  myriad?: TopMarketCard[];
+  /** Top Predict.fun markets (when applicable). */
+  predictfun?: TopMarketCard[];
   kalshi: TopMarketCard[];
   /** When the requested category doesn't exist on the chosen platform, show this message above the cards. */
   message?: string;
@@ -30,26 +45,67 @@ export type TopMarketsEmbedPayload = {
 
 /**
  * Infer which provider the user wants when asking for top markets (e.g. "best sports on Kalshi" -> kalshi).
- * Use when marketMode is Auto. Only infer a single provider when the user explicitly mentions a platform
- * (e.g. "on Kalshi", "on Polymarket"); otherwise return undefined so we show both Polymarket and Kalshi.
+ * Use when marketMode is Auto. Only infer a single provider when the user explicitly mentions one platform
+ * (e.g. "on Kalshi", "on Polymarket"); otherwise return undefined so we show Polymarket, Limitless, and Kalshi.
  */
-export function inferProviderFromTopMarketsQuery(text: string): "polymarket" | "kalshi" | undefined {
+export function inferProviderFromTopMarketsQuery(
+  text: string
+): "polymarket" | "kalshi" | "limitless" | "myriad" | "predictfun" | undefined {
   const t = (text || "").toLowerCase();
   const mentionsKalshi = /\bkalshi\b/.test(t);
   const mentionsPolymarket = /\bpolymarket\b/.test(t);
-  // If the query doesn't mention either platform, never restrict to one — show both (e.g. "Top Culture markets").
-  if (!mentionsKalshi && !mentionsPolymarket) return undefined;
-  // Prefer explicit "on Kalshi" / "on Polymarket" (or "in", "for")
+  const mentionsLimitless = /\blimitless\b/.test(t);
+  const mentionsMyriad = /\bmyriad\b/.test(t);
+  const mentionsPredictFun =
+    /\bpredict\s*fun\b/.test(t) || /\bpredict\.fun\b/.test(t);
+  const mentionCount =
+    (mentionsKalshi ? 1 : 0) +
+    (mentionsPolymarket ? 1 : 0) +
+    (mentionsLimitless ? 1 : 0) +
+    (mentionsMyriad ? 1 : 0) +
+    (mentionsPredictFun ? 1 : 0);
+  if (mentionCount > 1) return undefined;
+  if (
+    !mentionsKalshi &&
+    !mentionsPolymarket &&
+    !mentionsLimitless &&
+    !mentionsMyriad &&
+    !mentionsPredictFun
+  )
+    return undefined;
   const onKalshi = /\b(?:on|in|for)\s+kalshi\b/.test(t) || /\bkalshi\s+(?:markets?|prediction|right\s+now)/.test(t);
-  const onPolymarket = /\b(?:on|in|for)\s+polymarket\b/.test(t) || /\bpolymarket\s+(?:markets?|prediction|right\s+now)/.test(t);
-  if (onKalshi && !onPolymarket) return "kalshi";
-  if (onPolymarket && !onKalshi) return "polymarket";
-  // "hot on Kalshi", "hottest on Kalshi", "best on Polymarket"
+  const onPolymarket =
+    /\b(?:on|in|for)\s+polymarket\b/.test(t) || /\bpolymarket\s+(?:markets?|prediction|right\s+now)/.test(t);
+  const onLimitless =
+    /\b(?:on|in|for)\s+limitless\b/.test(t) || /\blimitless\s+(?:markets?|prediction|right\s+now)/.test(t);
+  const onMyriad =
+    /\b(?:on|in|for)\s+myriad\b/.test(t) || /\bmyriad\s+(?:markets?|market|prediction|right\s+now)/.test(t);
+  const onPredictFun =
+    /\b(?:on|in|for)\s+predict\s*fun\b/.test(t) ||
+    /\bpredict\s*fun\s+(?:markets?|market|prediction|right\s+now)/.test(t);
+  if (onKalshi && !onPolymarket && !onLimitless && !onMyriad && !onPredictFun)
+    return "kalshi";
+  if (onPolymarket && !onKalshi && !onLimitless && !onMyriad && !onPredictFun)
+    return "polymarket";
+  if (onLimitless && !onKalshi && !onPolymarket && !onMyriad && !onPredictFun)
+    return "limitless";
+  if (onMyriad && !onKalshi && !onPolymarket && !onLimitless && !onPredictFun)
+    return "myriad";
+  if (onPredictFun && !onKalshi && !onPolymarket && !onLimitless && !onMyriad)
+    return "predictfun";
   if (/\b(?:hot|hottest|best)\s+(?:on|in)\s+kalshi\b/.test(t) || /\b(?:markets?|what)\s+.*\s+(?:on|in)\s+kalshi\b/.test(t)) return "kalshi";
   if (/\b(?:hot|hottest|best)\s+(?:on|in)\s+polymarket\b/.test(t) || /\b(?:markets?|what)\s+.*\s+(?:on|in)\s+polymarket\b/.test(t)) return "polymarket";
-  // Standalone platform name at end or before "markets"
+  if (/\b(?:hot|hottest|best)\s+(?:on|in)\s+limitless\b/.test(t) || /\b(?:markets?|what)\s+.*\s+(?:on|in)\s+limitless\b/.test(t)) return "limitless";
+  if (/\b(?:hot|hottest|best)\s+(?:on|in)\s+myriad\b/.test(t) || /\b(?:markets?|what)\s+.*\s+(?:on|in)\s+myriad\b/.test(t)) return "myriad";
   if (/\bkalshi\s*\.?\s*$/i.test(text.trim()) || /\b(?:top|best|hottest)\s+.*\s+kalshi\b/i.test(t)) return "kalshi";
   if (/\bpolymarket\s*\.?\s*$/i.test(text.trim()) || /\b(?:top|best|hottest)\s+.*\s+polymarket\b/i.test(t)) return "polymarket";
+  if (/\blimitless\s*\.?\s*$/i.test(text.trim()) || /\b(?:top|best|hottest)\s+.*\s+limitless\b/i.test(t)) return "limitless";
+  if (/\bmyriad\s*\.?\s*$/i.test(text.trim()) || /\b(?:top|best|hottest)\s+.*\s+myriad\b/i.test(t)) return "myriad";
+  if (
+    /\bpredict\s*fun\s*\.?\s*$/i.test(text.trim()) ||
+    /\b(?:top|best|hottest)\s+.*\s+predict\s*fun\b/i.test(t)
+  )
+    return "predictfun";
   return undefined;
 }
 
@@ -59,31 +115,31 @@ const TOP_MARKETS_PATTERNS = [
   /top\s*(?:\d+\s*)?(?:prediction\s*)?markets?/i,
   // "hottest markets", "hottest prediction markets", "top 5 hottest markets on Kalshi and Polymarket"
   /(?:top\s*(?:\d+\s*)?)?hottest\s*(?:prediction\s*)?markets?/i,
-  /(?:hottest|best|most\s*active)\s*(?:\d+\s*)?(?:prediction\s*)?markets?(?:\s*(?:on|from)\s*(?:kalshi|polymarket))?/i,
+  /(?:hottest|best|most\s*active)\s*(?:\d+\s*)?(?:prediction\s*)?markets?(?:\s*(?:on|from)\s*(?:kalshi|polymarket|limitless))?/i,
   // "what are the top/hottest ...", "give me the top/hottest ..."
   /(?:what(?:'s| are)\s*)?(?:the\s*)?(?:top|hottest|best|most\s*traded|highest\s*volume)\s*(?:\d+\s*)?(?:prediction\s*)?markets?/i,
-  /(?:give\s*me\s*)?(?:the\s*)?(?:top|hottest)\s*(?:\d+\s*)?(?:hottest\s*)?(?:prediction\s*)?markets?(?:\s*(?:on|from|in)\s*(?:kalshi|polymarket))?/i,
+  /(?:give\s*me\s*)?(?:the\s*)?(?:top|hottest)\s*(?:\d+\s*)?(?:hottest\s*)?(?:prediction\s*)?markets?(?:\s*(?:on|from|in)\s*(?:kalshi|polymarket|limitless))?/i,
   // "markets right now", "prediction markets today", "high-volume X markets", "list of all X markets"
   /(?:prediction\s*)?markets?\s*(?:right\s*now|today|currently)/i,
   new RegExp(`(?:high-volume|high\\s*volume|list\\s+of\\s+(?:all\\s+)?)?(?:${CATEGORY_REGEX})\\s*markets?`, "i"),
   new RegExp(`(?:${CATEGORY_REGEX})\\s*markets?\\s*(?:today|right\\s*now|currently)?`, "i"),
-  // "top/best Polymarket and Kalshi markets"
-  /(?:top|best)\s*(?:polymarket|kalshi)\s*(?:and\s*)?(?:polymarket|kalshi)?\s*markets?/i,
+  // "top/best Polymarket / Kalshi / Limitless markets"
+  /(?:top|best)\s*(?:polymarket|kalshi|limitless)\s*(?:and\s*)?(?:polymarket|kalshi|limitless)?\s*(?:and\s*)?(?:polymarket|kalshi|limitless)?\s*markets?/i,
   /(?:most\s*)?(?:active|traded)\s*(?:prediction\s*)?markets?/i,
   // Category-specific: "top sports/political/geopolitical/crypto/... markets" (single source: CATEGORY_REGEX)
   new RegExp(`(?:top|hottest|best)\\s*(?:\\d+\\s*)?(?:${CATEGORY_REGEX})\\s*markets?`, "i"),
-  new RegExp(`(?:what\\s*are\\s*)?(?:the\\s*)?(?:top|hottest)\\s*(?:\\d+\\s*)?(?:${CATEGORY_REGEX})\\s*markets?(?:\\s*(?:right\\s*now|on\\s+(?:kalshi|polymarket)))?`, "i"),
+  new RegExp(`(?:what\\s*are\\s*)?(?:the\\s*)?(?:top|hottest)\\s*(?:\\d+\\s*)?(?:${CATEGORY_REGEX})\\s*markets?(?:\\s*(?:right\\s*now|on\\s+(?:kalshi|polymarket|limitless)))?`, "i"),
   // "tell me about / show me / asked about the top X markets"
   new RegExp(`(?:tell\\s*me\\s*about|show\\s*me|asked\\s*about|about)\\s+(?:the\\s*)?(?:top|hottest|best)\\s*(?:\\d+\\s*)?(?:${CATEGORY_REGEX})\\s*markets?`, "i"),
   new RegExp(`(?:give\\s*me|show\\s*me)\\s+(?:the\\s*)?(?:top|hottest|best)\\s*(?:\\d+\\s*)?(?:${CATEGORY_REGEX})\\s*markets?`, "i"),
   // "best X markets on Kalshi/Polymarket" (X = any category word)
-  /(?:top|hottest|best)\s*(?:\d+\s*)?\w+\s*markets?(?:\s*(?:on|from|in)\s*(?:kalshi|polymarket))/i,
+  /(?:top|hottest|best)\s*(?:\d+\s*)?\w+\s*markets?(?:\s*(?:on|from|in)\s*(?:kalshi|polymarket|limitless))/i,
   // "What is hot on Kalshi right now?" / "What's hot on Polymarket?" — show top markets for that platform only
-  /what(?:'s|\s+is)\s+hot\s+(?:on|in)\s+(?:kalshi|polymarket)(?:\s+right\s+now)?/i,
+  /what(?:'s|\s+is)\s+hot\s+(?:on|in)\s+(?:kalshi|polymarket|limitless)(?:\s+right\s+now)?/i,
   // "Which markets are (the) hottest/best on Kalshi?" / "Which markets in the hottest on Kalshi?"
-  /which\s+markets?\s+(?:are\s+)?(?:in\s+the\s+)?(?:hot|hottest|best)\s+(?:on|in)\s+(?:kalshi|polymarket)/i,
-  // "What are the hottest/best (markets) on Kalshi/Polymarket?"
-  /what\s+are\s+(?:the\s+)?(?:hottest|best|hot)(?:\s+markets?)?\s+(?:on|in)\s+(?:kalshi|polymarket)/i,
+  /which\s+markets?\s+(?:are\s+)?(?:in\s+the\s+)?(?:hot|hottest|best)\s+(?:on|in)\s+(?:kalshi|polymarket|limitless)/i,
+  // "What are the hottest/best (markets) on Kalshi/Polymarket/Limitless?"
+  /what\s+are\s+(?:the\s+)?(?:hottest|best|hot)(?:\s+markets?)?\s+(?:on|in)\s+(?:kalshi|polymarket|limitless)/i,
   // "Top Markets in Climate & Weather", "Top markets in Politics", "Top Culture markets" (in X)
   new RegExp(`top\\s+markets?\\s+in\\s+[\\w\\s&]*(?:${CATEGORY_REGEX})`, "i"),
   // "list (me) the top/best/hottest X markets", "list political markets", "list the top 5"
@@ -277,21 +333,32 @@ export function extractTopMarketsLimit(text: string): number {
  */
 export function buildTopMarketsSuggestMessage(params: {
   category?: string;
-  provider?: "polymarket" | "kalshi";
+  provider?: "polymarket" | "kalshi" | "limitless" | "myriad" | "predictfun";
 }): string {
   const { category, provider } = params;
   const categoryLabel = category ? category.charAt(0).toUpperCase() + category.slice(1) : "";
-  const platform = provider === "kalshi" ? "Kalshi" : provider === "polymarket" ? "Polymarket" : "";
+  const platform =
+    provider === "kalshi"
+      ? "Kalshi"
+      : provider === "polymarket"
+        ? "Polymarket"
+        : provider === "limitless"
+          ? "Limitless"
+          : provider === "myriad"
+            ? "Myriad"
+            : provider === "predictfun"
+              ? "Predict.fun"
+              : "";
   if (categoryLabel && platform) {
     return `\n\nHere are the top ${categoryLabel} markets on ${platform}. Click any card to trade on Rex Markets.`;
   }
   if (categoryLabel) {
-    return `\n\nHere are the top ${categoryLabel} prediction markets. Click any card to trade on Rex Markets.`;
+    return `\n\nHere are the top ${categoryLabel} prediction markets on Polymarket, Limitless, Kalshi, Myriad, and Predict.fun. Click any card to trade on Rex Markets.`;
   }
   if (platform) {
     return `\n\nHere are the top prediction markets on ${platform}. Click any card to trade on Rex Markets.`;
   }
-  return "\n\nHere are the top prediction markets by volume. Click any card to trade on Rex Markets.";
+  return "\n\nHere are the top prediction markets by volume on Polymarket, Limitless, Kalshi, Myriad, and Predict.fun. Click any card to trade on Rex Markets.";
 }
 
 // Kalshi search/series API category values (from api/kalshi/markets/route.ts).
@@ -405,8 +472,8 @@ export type FetchTopMarketsOptions = {
   category?: string;
   /** Number of top markets to return per provider (default 3, max 10). */
   limit?: number;
-  /** When set, only fetch and return this provider; the other is returned empty. */
-  provider?: "polymarket" | "kalshi";
+  /** When set, only fetch and return this provider; the others are returned empty. */
+  provider?: "polymarket" | "kalshi" | "limitless" | "myriad" | "predictfun";
 };
 
 /**
@@ -464,10 +531,232 @@ async function fetchKalshiSeriesDirect(params: {
 
 export type FetchTopPredictionMarketsResult = {
   polymarket: TopMarketCard[];
+  limitless: TopMarketCard[];
   kalshi: TopMarketCard[];
+  myriad: TopMarketCard[];
+  predictfun: TopMarketCard[];
   message?: string;
   categoryList?: string[];
 };
+
+/** Map normalized top-markets category -> Predict.fun tag id (staticNav). */
+const PREDICT_FUN_TAG_BY_CATEGORY: Record<string, string> = {
+  sports: "4",
+  politics: "1",
+  political: "1",
+  elections: "1",
+  election: "1",
+  geopolitical: "1",
+  geopolitics: "1",
+  international: "1",
+  trump: "1",
+  crypto: "2",
+  finance: "11",
+  financial: "11",
+  financials: "11",
+  economics: "6",
+  economy: "6",
+  economic: "6",
+  inflation: "6",
+  fed: "6",
+  rates: "11",
+  culture: "13",
+  entertainment: "13",
+  media: "13",
+  celebrity: "13",
+  music: "13",
+  film: "13",
+  movies: "13",
+  tech: "17",
+  technology: "17",
+  science: "17",
+  ai: "17",
+  "artificial intelligence": "17",
+  companies: "11",
+  earnings: "11",
+  business: "11",
+  world: "1",
+  commodities: "144",
+  climate: "144",
+  weather: "144",
+  energy: "144",
+};
+
+const PREDICT_FUN_TOP_MARKETS_CATEGORY_LIST = [
+  "Sports",
+  "Politics",
+  "Crypto",
+  "Finance",
+  "Economy",
+  "Culture",
+  "Esports",
+  "BNB",
+  "Commodities",
+];
+
+/** Map normalized top-markets category -> Limitless navigation slug (when it differs from our internal key). */
+const LIMITLESS_NAV_SLUG_BY_CATEGORY: Record<string, string> = {
+  sports: "sport",
+  political: "politics",
+  elections: "politics",
+  election: "politics",
+  geopolitical: "politics",
+  geopolitics: "politics",
+  international: "world",
+  culture: "entertainment",
+  earnings: "companies",
+  business: "companies",
+  companies: "companies",
+  financial: "financials",
+  financials: "financials",
+  finance: "financials",
+  economics: "economics",
+  economy: "economics",
+  economic: "economics",
+  inflation: "economics",
+  fed: "economics",
+  rates: "financials",
+  ai: "tech",
+  "artificial intelligence": "tech",
+  weather: "climate",
+  entertainment: "entertainment",
+  media: "entertainment",
+  celebrity: "entertainment",
+  music: "entertainment",
+  film: "entertainment",
+  movies: "entertainment",
+  trump: "politics",
+};
+
+const LIMITLESS_TOP_MARKETS_CATEGORY_LIST = [
+  "Sports",
+  "Politics",
+  "Crypto",
+  "Entertainment",
+  "Science",
+  "Climate",
+  "Economics",
+  "Financials",
+  "World",
+  "Companies",
+  "Health",
+];
+
+type LimitlessNavItem = { id: string; slug: string; name: string };
+
+async function fetchLimitlessNavigationDirect(): Promise<LimitlessNavItem[]> {
+  const res = await fetch("https://api.limitless.exchange/navigation", {
+    cache: "no-store",
+    headers: { "Content-Type": "application/json" },
+  });
+  if (!res.ok) return [];
+  const data = await res.json();
+  if (!Array.isArray(data)) return [];
+  return data.map((x: any) => ({
+    id: String(x.id ?? ""),
+    slug: String(x.slug ?? ""),
+    name: String(x.name ?? ""),
+  }));
+}
+
+function resolveLimitlessCategoryId(
+  nav: LimitlessNavItem[],
+  category?: string
+): string | undefined {
+  if (!category || nav.length === 0) return undefined;
+  const c = category.toLowerCase().trim();
+  const preferredSlug = (LIMITLESS_NAV_SLUG_BY_CATEGORY[c] ?? c).toLowerCase();
+  const found = nav.find((n) => {
+    const slug = n.slug.toLowerCase();
+    const name = n.name.toLowerCase();
+    return slug === preferredSlug || slug === c || name === preferredSlug || name === c;
+  });
+  return found?.id;
+}
+
+function getLimitlessNumericVolume(m: any): number {
+  if (m?.volumeFormatted != null && String(m.volumeFormatted).trim() !== "") {
+    const v = parseFloat(String(m.volumeFormatted));
+    if (Number.isFinite(v)) return v;
+  }
+  if (m?.volume != null) {
+    const raw = typeof m.volume === "string" ? parseFloat(m.volume) : Number(m.volume);
+    if (Number.isFinite(raw) && raw > 1_000_000) {
+      // Active markets API often stores USDC amount in 1e6 micro-units alongside volumeFormatted.
+      return raw / 1_000_000;
+    }
+    if (Number.isFinite(raw)) return raw;
+  }
+  const sub = m?.markets;
+  if (Array.isArray(sub) && sub.length > 0) {
+    return sub.reduce((sum: number, x: any) => sum + getLimitlessNumericVolume(x), 0);
+  }
+  return 0;
+}
+
+function isExpiredLimitlessRaw(m: any): boolean {
+  if (m?.expired === true) return true;
+  const s = (m?.status ?? "").toString().toUpperCase();
+  return s === "CLOSED" || s === "RESOLVED" || s === "ARCHIVED";
+}
+
+async function fetchLimitlessEventsForTop(params: {
+  category?: string;
+  fetchLimit: number;
+}): Promise<any[]> {
+  const { category, fetchLimit } = params;
+  const nav = category ? await fetchLimitlessNavigationDirect() : [];
+  const categoryId = category ? resolveLimitlessCategoryId(nav, category) : undefined;
+
+  if (categoryId) {
+    const sp = new URLSearchParams({
+      page: "1",
+      limit: String(fetchLimit),
+      sort: "deadline",
+    });
+    const url = `https://api.limitless.exchange/market-pages/${encodeURIComponent(categoryId)}/markets?${sp}`;
+    const res = await fetch(url, { cache: "no-store", headers: { "Content-Type": "application/json" } });
+    if (!res.ok) return [];
+    const data = await res.json();
+    if (data?.data && Array.isArray(data.data)) return data.data;
+    return Array.isArray(data) ? data : [];
+  }
+
+  const sp = new URLSearchParams({ page: "1", limit: String(fetchLimit) });
+  if (category) {
+    const q = (LIMITLESS_NAV_SLUG_BY_CATEGORY[category.toLowerCase()] ?? category).replace(/-/g, " ");
+    sp.set("q", q);
+  }
+  const url = `https://api.limitless.exchange/markets/active?${sp}`;
+  const res = await fetch(url, { cache: "no-store", headers: { "Content-Type": "application/json" } });
+  if (!res.ok) return [];
+  const data = await res.json();
+  if (data?.data && Array.isArray(data.data)) return data.data;
+  return Array.isArray(data) ? data : [];
+}
+
+function buildLimitlessCards(rawList: any[], topN: number): TopMarketCard[] {
+  const filtered = rawList.filter((m) => m && !isExpiredLimitlessRaw(m));
+  const sorted = [...filtered].sort(
+    (a, b) => getLimitlessNumericVolume(b) - getLimitlessNumericVolume(a)
+  );
+  return sorted
+    .slice(0, topN)
+    .map((m: any) => {
+      const id = String(m.slug || m.id || "").trim();
+      if (!id) return null;
+      const vol = getLimitlessNumericVolume(m);
+      return {
+        id,
+        title: m.title || "Market",
+        volume: vol,
+        volume24hr: vol,
+        provider: "limitless" as const,
+        imageUrl: m.logo || m.imageUrl || undefined,
+      };
+    })
+    .filter(Boolean) as TopMarketCard[];
+}
 
 function buildPolymarketCards(events: any[], topN: number): TopMarketCard[] {
   const asMarkets = events.map((event: any) => ({
@@ -536,13 +825,203 @@ function buildKalshiCards(seriesList: any[], topN: number): TopMarketCard[] {
   });
 }
 
+/** Myriad listing topics (GET /markets?topics=) — aligned with Rex Markets Myriad filters. */
+const MYRIAD_TOPIC_BY_CATEGORY: Record<string, string> = {
+  sports: "Sports",
+  politics: "Politics",
+  political: "Politics",
+  crypto: "Crypto",
+  finance: "Finance",
+  financial: "Finance",
+  economics: "Economy",
+  economy: "Economy",
+  economic: "Economy",
+  culture: "Culture",
+  entertainment: "Culture",
+  tech: "Tech",
+  technology: "Tech",
+  science: "Tech",
+  climate: "Climate",
+  weather: "Climate",
+  elections: "Politics",
+  election: "Politics",
+  geopolitics: "Politics",
+  geopolitical: "Politics",
+  world: "Politics",
+  international: "Politics",
+  companies: "Companies",
+  earnings: "Companies",
+  business: "Companies",
+};
+
+const MYRIAD_TOP_MARKETS_CATEGORY_LIST = [
+  "Sports",
+  "Politics",
+  "Crypto",
+  "Culture",
+  "Economy",
+  "Tech",
+  "Climate",
+  "Companies",
+  "Finance",
+];
+
+async function fetchMyriadMarketsForTop(params: {
+  category?: string;
+  fetchLimit: number;
+}): Promise<any[]> {
+  const sp = new URLSearchParams({
+    page: "1",
+    limit: String(params.fetchLimit),
+    sort: "volume_24h",
+    order: "desc",
+    state: "open",
+    trading_model: "all",
+  });
+  if (params.category) {
+    const c = params.category.toLowerCase().trim();
+    const topic = MYRIAD_TOPIC_BY_CATEGORY[c] ?? c.charAt(0).toUpperCase() + c.slice(1);
+    sp.set("topics", topic);
+  }
+  try {
+    const res = await myriadFetchText("/markets", sp);
+    if (!res.ok) return [];
+    const data = await res.json();
+    return Array.isArray(data?.data) ? data.data : [];
+  } catch {
+    return [];
+  }
+}
+
+function buildMyriadCards(rawList: any[], topN: number): TopMarketCard[] {
+  const openOnly = rawList.filter((m: any) => {
+    const s = String(m?.state ?? "").toLowerCase();
+    return !s || s === "open";
+  });
+  const sorted = [...openOnly].sort((a: any, b: any) => {
+    const vA = Number(a.volume24h ?? a.volume ?? 0) || 0;
+    const vB = Number(b.volume24h ?? b.volume ?? 0) || 0;
+    return vB - vA;
+  });
+  return sorted
+    .slice(0, topN)
+    .map((m: any) => {
+      const id = String(m.slug ?? "").trim();
+      if (!id) return null;
+      const vol = Number(m.volume24h ?? m.volume ?? 0) || 0;
+      return {
+        id,
+        title: m.title || "Market",
+        volume: vol,
+        volume24hr: vol,
+        provider: "myriad" as const,
+        imageUrl: m.imageUrl || m.logo || undefined,
+      };
+    })
+    .filter(Boolean) as TopMarketCard[];
+}
+
+function getPredictFunMarketVolume(m: any): number {
+  const vol24 = Number(m?.stats?.volume24hUsd ?? m?.volume24hUsd ?? 0);
+  if (Number.isFinite(vol24) && vol24 > 0) return vol24;
+  const volTotal = Number(m?.stats?.volumeTotalUsd ?? m?.volumeTotalUsd ?? 0);
+  return Number.isFinite(volTotal) ? volTotal : 0;
+}
+
+async function fetchPredictFunMarketsForTop(params: {
+  category?: string;
+  fetchLimit: number;
+}): Promise<any[]> {
+  const { category, fetchLimit } = params;
+  const tagId = category
+    ? PREDICT_FUN_TAG_BY_CATEGORY[category.toLowerCase()]
+    : undefined;
+
+  if (tagId) {
+    const search = buildPredictFunCategoriesSearchParams({
+      tagId,
+      first: Math.min(Math.max(fetchLimit, 16), 50),
+    });
+    try {
+      const { ok, body } = await predictFunGetJson("/categories", search);
+      if (ok) {
+        const parsed = parsePredictFunCategoriesResponse(body);
+        const open = parsed.markets.filter(isPredictFunMarketOpen);
+        if (open.length > 0) return open;
+      }
+    } catch {
+      /* fall through to /markets */
+    }
+  }
+
+  const marketParams = new URLSearchParams({
+    first: String(Math.min(Math.max(fetchLimit, 25), 50)),
+    status: "OPEN",
+    includeStats: "true",
+    sort: "VOLUME_24H_DESC",
+  });
+  try {
+    const { ok, body } = await predictFunGetJson("/markets", marketParams);
+    if (!ok) return [];
+    const data = (body as { data?: unknown[] })?.data;
+    const list = Array.isArray(data) ? data : [];
+    const open = list.filter(isPredictFunMarketOpen);
+
+    if (!category) return open;
+
+    const c = category.toLowerCase();
+    const filtered = open.filter((m: any) => {
+      const title = `${m?.title ?? ""} ${m?.question ?? ""}`.toLowerCase();
+      if (c === "crypto") {
+        return /\b(crypto|bitcoin|btc|eth|ethereum|solana|bnb|token|defi)\b/.test(
+          title,
+        );
+      }
+      if (c === "sports") return /\b(sport|nba|nfl|mlb|nhl|soccer|ufc|game)\b/.test(title);
+      if (c === "politics" || c === "elections") {
+        return /\b(politic|election|trump|congress|president|vote)\b/.test(title);
+      }
+      return title.includes(c);
+    });
+    return filtered.length > 0 ? filtered : open;
+  } catch {
+    return [];
+  }
+}
+
+function buildPredictFunCards(rawList: any[], topN: number): TopMarketCard[] {
+  const openOnly = rawList.filter(isPredictFunMarketOpen);
+  const sorted = [...openOnly].sort(
+    (a, b) => getPredictFunMarketVolume(b) - getPredictFunMarketVolume(a),
+  );
+  return sorted
+    .slice(0, topN)
+    .map((m: any) => {
+      const id = String(m?.id ?? "").trim();
+      if (!id) return null;
+      const vol = getPredictFunMarketVolume(m);
+      return {
+        id,
+        title: m.title || m.question || "Market",
+        volume: vol,
+        volume24hr: Number(m?.stats?.volume24hUsd ?? vol) || vol,
+        provider: "predictfun" as const,
+        imageUrl: m.imageUrl || undefined,
+      };
+    })
+    .filter(Boolean) as TopMarketCard[];
+}
+
 export async function fetchTopPredictionMarkets(
   _baseUrl: string,
   options?: FetchTopMarketsOptions
 ): Promise<FetchTopPredictionMarketsResult> {
   const out: FetchTopPredictionMarketsResult = {
     polymarket: [],
+    limitless: [],
     kalshi: [],
+    myriad: [],
+    predictfun: [],
   };
   const category = options?.category;
   const providerFilter = options?.provider;
@@ -552,11 +1031,17 @@ export async function fetchTopPredictionMarkets(
   );
   const polyTag = category ? POLY_TAG_BY_CATEGORY[category] : undefined;
 
-  const fetchPoly = providerFilter !== "kalshi";
-  const fetchKalshi = providerFilter !== "polymarket";
+  const fetchPoly = providerFilter === undefined || providerFilter === "polymarket";
+  const fetchKalshi = providerFilter === undefined || providerFilter === "kalshi";
+  const fetchLimitless = providerFilter === undefined || providerFilter === "limitless";
+  const fetchMyriad = providerFilter === undefined || providerFilter === "myriad";
+  const fetchPredictFun =
+    providerFilter === undefined || providerFilter === "predictfun";
 
   try {
-    const [polyEvents, kalshiSeriesList] = await Promise.all([
+    const fetchLimit = 40;
+    const [polyEvents, kalshiSeriesList, limitlessRaw, myriadRaw, predictFunRaw] =
+      await Promise.all([
       fetchPoly
         ? fetchPolymarketEventsDirect({
             limit: 15,
@@ -571,6 +1056,24 @@ export async function fetchTopPredictionMarkets(
             category: category || undefined,
           })
         : Promise.resolve([]),
+      fetchLimitless
+        ? fetchLimitlessEventsForTop({
+            category: category || undefined,
+            fetchLimit,
+          })
+        : Promise.resolve([]),
+      fetchMyriad
+        ? fetchMyriadMarketsForTop({
+            category: category || undefined,
+            fetchLimit,
+          })
+        : Promise.resolve([]),
+      fetchPredictFun
+        ? fetchPredictFunMarketsForTop({
+            category: category || undefined,
+            fetchLimit,
+          })
+        : Promise.resolve([]),
     ]);
 
     if (fetchPoly && polyEvents.length > 0) {
@@ -579,19 +1082,52 @@ export async function fetchTopPredictionMarkets(
     if (fetchKalshi && kalshiSeriesList.length > 0) {
       out.kalshi = buildKalshiCards(kalshiSeriesList, topN);
     }
+    if (fetchLimitless && limitlessRaw.length > 0) {
+      out.limitless = buildLimitlessCards(limitlessRaw, topN);
+    }
+    if (fetchMyriad && myriadRaw.length > 0) {
+      out.myriad = buildMyriadCards(myriadRaw, topN);
+    }
+    if (fetchPredictFun && predictFunRaw.length > 0) {
+      out.predictfun = buildPredictFunCards(predictFunRaw, topN);
+    }
 
     // When user asked for a single provider + category and that provider has no results,
     // show a friendly message, top markets without category, and the list of available categories.
     const singleProvider = providerFilter;
     const categoryDisplay = category ? category.charAt(0).toUpperCase() + category.slice(1) : "";
     if (singleProvider && category && categoryDisplay) {
-      const chosen = singleProvider === "kalshi" ? out.kalshi : out.polymarket;
+      const chosen =
+        singleProvider === "kalshi"
+          ? out.kalshi
+          : singleProvider === "limitless"
+            ? out.limitless
+            : singleProvider === "myriad"
+              ? out.myriad
+              : singleProvider === "predictfun"
+                ? out.predictfun
+                : out.polymarket;
       if (chosen.length === 0) {
         if (singleProvider === "kalshi") {
           const fallbackSeries = await fetchKalshiSeriesDirect({ pageSize: 25 });
           out.kalshi = buildKalshiCards(fallbackSeries, topN);
           out.message = `There is no ${categoryDisplay} category in Kalshi. Here are the top ${Math.min(topN, out.kalshi.length)} markets in Kalshi.`;
           out.categoryList = KALSHI_TOP_MARKETS_CATEGORY_LIST;
+        } else if (singleProvider === "limitless") {
+          const fallbackRaw = await fetchLimitlessEventsForTop({ fetchLimit });
+          out.limitless = buildLimitlessCards(fallbackRaw, topN);
+          out.message = `Could not load ${categoryDisplay} markets from Limitless. Here are the top ${Math.min(topN, out.limitless.length)} active markets on Limitless.`;
+          out.categoryList = LIMITLESS_TOP_MARKETS_CATEGORY_LIST;
+        } else if (singleProvider === "myriad") {
+          const fallbackRaw = await fetchMyriadMarketsForTop({ fetchLimit });
+          out.myriad = buildMyriadCards(fallbackRaw, topN);
+          out.message = `Could not load ${categoryDisplay} markets from Myriad. Here are the top ${Math.min(topN, out.myriad.length)} active markets on Myriad.`;
+          out.categoryList = MYRIAD_TOP_MARKETS_CATEGORY_LIST;
+        } else if (singleProvider === "predictfun") {
+          const fallbackRaw = await fetchPredictFunMarketsForTop({ fetchLimit });
+          out.predictfun = buildPredictFunCards(fallbackRaw, topN);
+          out.message = `Could not load ${categoryDisplay} markets from Predict.fun. Here are the top ${Math.min(topN, out.predictfun.length)} active markets on Predict.fun.`;
+          out.categoryList = PREDICT_FUN_TOP_MARKETS_CATEGORY_LIST;
         } else {
           const fallbackEvents = await fetchPolymarketEventsDirect({
             limit: 15,

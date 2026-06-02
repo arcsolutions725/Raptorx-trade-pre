@@ -1,4 +1,15 @@
 import type { OpenRouter } from "@openrouter/sdk";
+import {
+  fetchLimitlessMarketDocument,
+  limitlessApiDocumentToRexMarketDetails,
+  parseLimitlessSearchPayload,
+} from "@/lib/limitless/marketDocument";
+import { myriadFetchText } from "@/lib/myriad/serverFetch";
+import { mapMyriadMarketDetailToMarketDetails } from "@/lib/myriad/mapMyriadMarketDetails";
+import { normalizeKalshiEventTicker } from "@/lib/kalshi/normalizeEventTicker";
+import { predictFunGetJson } from "@/lib/predictfun/serverFetch";
+import { fetchPredictFunMarketDetailsById } from "@/lib/predictfun/fetchPredictFunMarketDetails";
+import type { PredictFunApiMarket } from "@/lib/predictfun/mapPredictFunMarketRow";
 
 type MarketToolCall = {
   id?: string;
@@ -15,7 +26,18 @@ function safeJsonParse(input: string | undefined): any {
   }
 }
 
-export type RexmarketsProvider = "polymarket" | "kalshi";
+export type RexmarketsProvider =
+  | "polymarket"
+  | "kalshi"
+  | "limitless"
+  | "myriad"
+  | "predictfun";
+
+export function rexmarketsProviderToPathSegment(
+  provider: RexmarketsProvider,
+): string {
+  return provider === "predictfun" ? "predict-fun" : provider;
+}
 
 export type RexmarketsEmbedPayload = {
   kind: "rexmarkets";
@@ -30,10 +52,29 @@ export function inferRexmarketsProviderFromText(text: string): RexmarketsProvide
     /https?:\/\/(?:www\.)?kalshi\.com\b/i.test(t) || /(^|\s)www\.kalshi\.com\b/i.test(t);
   const hasPolymarket =
     /https?:\/\/(?:www\.)?polymarket\.com\b/i.test(t) || /(^|\s)www\.polymarket\.com\b/i.test(t);
+  const hasLimitless =
+    /https?:\/\/(?:www\.)?limitless\.exchange\b/i.test(t) ||
+    /(^|\s)www\.limitless\.exchange\b/i.test(t);
+  const hasMyriad =
+    /https?:\/\/(?:www\.)?myriad\.markets\b/i.test(t) ||
+    /(^|\s)www\.myriad\.markets\b/i.test(t);
+  const hasPredictFun =
+    /https?:\/\/(?:www\.)?predict\.fun\b/i.test(t) ||
+    /(^|\s)www\.predict\.fun\b/i.test(t) ||
+    /\bpredict\s*fun\b/i.test(t);
 
-  // If both providers are present, don't force a constraint.
-  if (hasKalshi && !hasPolymarket) return "kalshi";
-  if (hasPolymarket && !hasKalshi) return "polymarket";
+  const n =
+    (hasKalshi ? 1 : 0) +
+    (hasPolymarket ? 1 : 0) +
+    (hasLimitless ? 1 : 0) +
+    (hasMyriad ? 1 : 0) +
+    (hasPredictFun ? 1 : 0);
+  if (n > 1) return undefined;
+  if (hasKalshi) return "kalshi";
+  if (hasPolymarket) return "polymarket";
+  if (hasLimitless) return "limitless";
+  if (hasMyriad) return "myriad";
+  if (hasPredictFun) return "predictfun";
   return undefined;
 }
 
@@ -255,8 +296,15 @@ async function getPolymarketDetailsDirect(args: { slug?: string; event_id?: stri
   };
 }
 
+/** Kalshi fixed-point strings (e.g. volume_fp); keep in sync with /api/kalshi/market-details. */
+function parseKalshiFp(value: unknown): number {
+  if (value == null || value === "") return 0;
+  const n = Number(typeof value === "string" ? String(value).trim() : value);
+  return Number.isFinite(n) ? n : 0;
+}
+
 async function getKalshiDetailsDirect(args: { event_ticker: string }) {
-  const eventTicker = (args?.event_ticker || "").trim();
+  const eventTicker = normalizeKalshiEventTicker(args?.event_ticker);
   if (!eventTicker) return { error: "event_ticker required" };
 
   const eventsUrl = `https://api.elections.kalshi.com/trade-api/v2/events/${encodeURIComponent(eventTicker)}`;
@@ -286,19 +334,23 @@ async function getKalshiDetailsDirect(args: { event_ticker: string }) {
   }
 
   const event = eventsData?.event || {};
-  const markets: any[] = Array.isArray(eventsData?.markets) ? eventsData.markets : [];
+  const allMarkets: any[] = Array.isArray(eventsData?.markets) ? eventsData.markets : [];
+  const markets = allMarkets.filter((m: any) => (m.status || "").toLowerCase() === "active");
 
   const transformedMarkets = markets.map((market: any, index: number) => {
-    const lastPriceCents = Number(market?.last_price) || 0;
-    const lastPriceDollarsStr = market?.last_price_dollars;
-    const lastPriceDollars = lastPriceDollarsStr ? Number(lastPriceDollarsStr) : lastPriceCents / 100;
+    const lastPriceDollarsStr = market.last_price_dollars;
+    const lastPriceCents = Number(market.last_price) || 0;
+    const lastPriceDollars =
+      lastPriceDollarsStr != null ? parseKalshiFp(lastPriceDollarsStr) : lastPriceCents / 100;
 
-    const yesPrice = Number(lastPriceDollars) || 0;
+    const yesPrice = lastPriceDollars || 0;
     const noPrice = yesPrice > 0 ? Number((1 - yesPrice).toFixed(4)) : 0;
     const probability = yesPrice;
 
-    const yesBid = Number(market?.yes_bid) || 0;
-    const yesAsk = Number(market?.yes_ask) || 0;
+    const yesBidDollars = parseKalshiFp(market.yes_bid_dollars);
+    const yesAskDollars = parseKalshiFp(market.yes_ask_dollars);
+    const yesBid = yesBidDollars > 0 ? yesBidDollars * 100 : Number(market.yes_bid) || 0;
+    const yesAsk = yesAskDollars > 0 ? yesAskDollars * 100 : Number(market.yes_ask) || 0;
 
     const candidateName =
       market?.custom_strike?.Candidate ||
@@ -309,18 +361,30 @@ async function getKalshiDetailsDirect(args: { event_ticker: string }) {
       market?.title ||
       `Outcome ${index + 1}`;
 
+    const marketId =
+      market.market_id ?? market.id ?? market.market_ticker ?? market.ticker ?? null;
+
+    const volumeFp = parseKalshiFp(market.volume_fp) || Number(market.volume) || 0;
+    const volume24hFp =
+      parseKalshiFp(market.volume_24h_fp) || Number(market.volume_24h) || volumeFp;
+    const liquidityDollars =
+      parseKalshiFp(market.liquidity_dollars) || Number(market.liquidity) || 0;
+    const openInterestFp =
+      parseKalshiFp(market.open_interest_fp) || Number(market.open_interest) || 0;
+
     return {
       ticker: market?.ticker || `market-${index}`,
+      market_id: marketId,
       subtitle: candidateName,
       probability,
       yes_price: yesPrice,
       no_price: noPrice,
-      volume: Number(market?.volume) || 0,
-      volume_24h: Number(market?.volume_24h) || Number(market?.volume) || 0,
+      volume: volumeFp,
+      volume_24h: volume24hFp,
       yes_bid: yesBid,
       yes_ask: yesAsk,
-      liquidity: Number(market?.liquidity) || 0,
-      open_interest: Number(market?.open_interest) || 0,
+      liquidity: liquidityDollars,
+      open_interest: openInterestFp,
       status: market?.status || "open",
       result: market?.result || null,
       open_time: market?.open_ts || null,
@@ -360,6 +424,206 @@ async function getKalshiDetailsDirect(args: { event_ticker: string }) {
   };
 }
 
+function isLimitlessMarketExpired(m: any): boolean {
+  if (m?.expired === true) return true;
+  const s = (m?.status ?? "").toString().toUpperCase();
+  return s === "CLOSED" || s === "RESOLVED" || s === "ARCHIVED";
+}
+
+async function searchLimitlessDirect(args: { query: string; limit?: number }) {
+  const query = (args?.query || "").trim();
+  const limit = clampInt(args?.limit ?? 5, 1, 10);
+  if (!query) return { results: [] };
+
+  const params = new URLSearchParams({
+    page: "1",
+    limit: String(Math.min(Math.max(limit * 4, 10), 40)),
+    query,
+  });
+  const url = `https://api.limitless.exchange/markets/search?${params}`;
+  const res = await fetch(url, {
+    method: "GET",
+    headers: { "Content-Type": "application/json" },
+    cache: "no-store",
+  });
+  if (!res.ok) return { results: [] };
+  const data: any = await res.json();
+  const list: any[] = parseLimitlessSearchPayload(data);
+  const results = list
+    .filter((m) => m && !isLimitlessMarketExpired(m))
+    .slice(0, limit)
+    .map((m: any) => ({
+      slug: String(m.slug || m.id || "").trim(),
+      title: m.title || "",
+    }))
+    .filter((r) => r.slug);
+  return { results };
+}
+
+async function searchLimitlessViaRaptorx(args: { query: string; limit?: number }) {
+  return await searchLimitlessDirect({ query: args?.query || "", limit: args?.limit });
+}
+
+async function getLimitlessDetailsDirect(args: { slug: string }) {
+  const slug = String(args?.slug || "").trim();
+  if (!slug) return { error: "slug required" };
+  try {
+    const doc = await fetchLimitlessMarketDocument(slug);
+    return limitlessApiDocumentToRexMarketDetails(doc);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { error: "Limitless fetch failed", details: msg };
+  }
+}
+
+async function searchMyriadDirect(args: { query: string; limit?: number }) {
+  const query = (args?.query || "").trim();
+  const limit = clampInt(args?.limit ?? 5, 1, 10);
+  if (!query) return { results: [] };
+
+  const params = new URLSearchParams({
+    page: "1",
+    limit: String(Math.min(Math.max(limit * 4, 10), 40)),
+    sort: "volume_24h",
+    order: "desc",
+    state: "open",
+    trading_model: "all",
+    keyword: query,
+  });
+  try {
+    const res = await myriadFetchText("/markets", params);
+    if (!res.ok) return { results: [] };
+    const data: any = await res.json();
+    const list: any[] = Array.isArray(data?.data) ? data.data : [];
+    const results = list
+      .slice(0, limit)
+      .map((m: any) => ({
+        slug: String(m?.slug ?? "").trim(),
+        title: m?.title || "",
+      }))
+      .filter((r) => r.slug);
+    return { results };
+  } catch {
+    return { results: [] };
+  }
+}
+
+async function getMyriadDetailsDirect(args: { slug: string }) {
+  const slug = String(args?.slug || "").trim();
+  if (!slug) return { error: "slug required" };
+  try {
+    const res = await myriadFetchText(
+      `/markets/${encodeURIComponent(slug)}`,
+      new URLSearchParams({ trading_model: "all" })
+    );
+    const text = await res.text();
+    if (!res.ok) {
+      let detail = text.slice(0, 300);
+      try {
+        const j = JSON.parse(text);
+        detail = j.detail || j.message || j.error || detail;
+      } catch {
+        /* */
+      }
+      return { error: `Myriad fetch failed (${res.status})`, details: detail };
+    }
+    const raw = JSON.parse(text);
+    return mapMyriadMarketDetailToMarketDetails(raw);
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { error: "Myriad fetch failed", details: msg };
+  }
+}
+
+function predictFunMarketsFromSearchBody(body: unknown): PredictFunApiMarket[] {
+  if (!body || typeof body !== "object") return [];
+  const data = (body as { data?: unknown }).data;
+  if (Array.isArray(data)) return data as PredictFunApiMarket[];
+  if (data && typeof data === "object") {
+    const markets = (data as { markets?: unknown }).markets;
+    if (Array.isArray(markets)) return markets as PredictFunApiMarket[];
+  }
+  return [];
+}
+
+function resolvePredictFunMarketBySlug(
+  markets: PredictFunApiMarket[],
+  slug: string,
+): PredictFunApiMarket | null {
+  const want = slug.toLowerCase();
+  return (
+    markets.find((m) => String(m.categorySlug ?? "").toLowerCase() === want) ??
+    markets.find((m) => String(m.id ?? "").toLowerCase() === want) ??
+    null
+  );
+}
+
+async function searchPredictFunDirect(args: { query: string; limit?: number }) {
+  const query = (args?.query || "").trim();
+  const limit = clampInt(args?.limit ?? 5, 1, 10);
+  if (!query) return { results: [] };
+
+  const params = new URLSearchParams({
+    query,
+    limit: String(Math.min(Math.max(limit * 4, 10), 25)),
+    includeStats: "true",
+    includeResolved: "false",
+  });
+  try {
+    const { ok, body } = await predictFunGetJson("/search", params);
+    const markets = ok ? predictFunMarketsFromSearchBody(body) : [];
+    const results = markets
+      .slice(0, limit)
+      .map((m) => ({
+        id: String(m.id ?? "").trim(),
+        slug: String(m.categorySlug ?? m.id ?? "").trim(),
+        title: m.title || m.question || "",
+      }))
+      .filter((r) => r.id);
+    return { results };
+  } catch {
+    return { results: [] };
+  }
+}
+
+async function getPredictFunDetailsDirect(args: { id: string }) {
+  const id = String(args?.id || "").trim();
+  if (!id) return { error: "id required" };
+
+  const primary = await fetchPredictFunMarketDetailsById(id);
+  if (!("error" in primary)) return primary;
+
+  try {
+    const search = await searchPredictFunDirect({ query: id, limit: 10 });
+    const top = Array.isArray(search?.results) ? search.results[0] : null;
+    const resolvedId = String(top?.id ?? top?.slug ?? "").trim();
+    if (resolvedId && resolvedId !== id) {
+      const retry = await fetchPredictFunMarketDetailsById(resolvedId);
+      if (!("error" in retry)) return retry;
+    }
+
+    const searchBody = await predictFunGetJson("/search", new URLSearchParams({
+      query: id,
+      limit: "15",
+      includeStats: "true",
+    }));
+    const match = resolvePredictFunMarketBySlug(
+      predictFunMarketsFromSearchBody(searchBody.body),
+      id,
+    );
+    const matchId = match?.id != null ? String(match.id) : "";
+    if (matchId && matchId !== id) {
+      const retry = await fetchPredictFunMarketDetailsById(matchId);
+      if (!("error" in retry)) return retry;
+    }
+
+    return { error: primary.error, details: primary.details };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    return { error: "Predict.fun fetch failed", details: msg };
+  }
+}
+
 export function extractRexmarketsLink(
   text: string
 ): { provider: RexmarketsProvider; id: string; url: string } | null {
@@ -370,19 +634,23 @@ export function extractRexmarketsLink(
   // - (optionally) kalshi variant if/when it exists
   // Allow query params / trailing punctuation after the slug, but don't include them in the id.
   const m = text.match(
-    /https?:\/\/(?:[a-z0-9-]+\.)?raptorx\.trade\/rexmarkets\/(polymarket|kalshi)\/([^\s/?#.,;:!)+]+)/i
+    /https?:\/\/(?:[a-z0-9-]+\.)?raptorx\.trade\/rexmarkets\/(polymarket|kalshi|limitless|myriad|predict-fun)\/([^\s/?#.,;:!)+]+)/i
   );
   if (!m) return null;
-  const provider = m[1].toLowerCase() as RexmarketsProvider;
-  const id = m[2];
+  const provider = (
+    m[1].toLowerCase() === "predict-fun" ? "predictfun" : m[1].toLowerCase()
+  ) as RexmarketsProvider;
+  const rawId = m[2];
+  const id = provider === "kalshi" ? normalizeKalshiEventTicker(rawId) : rawId;
+  if (provider === "kalshi" && !id) return null;
   const url = m[0];
   return { provider, id, url };
 }
 
 /**
- * Extract a direct Polymarket or Kalshi market link from user text.
- * When the user pastes polymarket.com/event/<slug> or kalshi.com/markets/... we use the
- * extracted id to fetch that specific market instead of searching (which can return the wrong market).
+ * Extract a direct Polymarket, Kalshi, or Limitless market link from user text.
+ * When the user pastes polymarket.com/event/<slug>, kalshi.com/markets/..., or
+ * limitless.exchange/markets/<slug> we use the extracted id to fetch that market directly.
  */
 export function extractDirectMarketLink(
   text: string,
@@ -404,9 +672,37 @@ export function extractDirectMarketLink(
     /https?:\/\/(?:www\.)?kalshi\.com\/markets\/(?:[^/]+\/)*([^\s/?#.,;:!)+]+)/i
   );
   if (kalshiMatch) {
-    const id = kalshiMatch[1];
+    const id = normalizeKalshiEventTicker(kalshiMatch[1]);
+    if (!id) return null;
     const url = `${getBaseUrl(baseUrl)}/rexmarkets/kalshi/${encodeURIComponent(id)}`;
     return { provider: "kalshi", id, url };
+  }
+  // Limitless: https://limitless.exchange/markets/<slug>
+  const limMatch = trimmed.match(
+    /https?:\/\/(?:www\.)?limitless\.exchange\/markets\/([^\s/?#.,;:!)+]+)/i
+  );
+  if (limMatch) {
+    const id = limMatch[1];
+    const url = `${getBaseUrl(baseUrl)}/rexmarkets/limitless/${encodeURIComponent(id)}`;
+    return { provider: "limitless", id, url };
+  }
+  // Myriad: https://myriad.markets/markets/<slug>
+  const myriadMatch = trimmed.match(
+    /https?:\/\/(?:www\.)?myriad\.markets\/markets\/([^\s/?#.,;:!)+]+)/i
+  );
+  if (myriadMatch) {
+    const id = myriadMatch[1];
+    const url = `${getBaseUrl(baseUrl)}/rexmarkets/myriad/${encodeURIComponent(id)}`;
+    return { provider: "myriad", id, url };
+  }
+  // Predict.fun: https://predict.fun/market/<slug>
+  const predictFunMatch = trimmed.match(
+    /https?:\/\/(?:www\.)?predict\.fun\/market\/([^\s/?#.,;:!)+]+)/i
+  );
+  if (predictFunMatch) {
+    const id = predictFunMatch[1];
+    const url = `${getBaseUrl(baseUrl)}/rexmarkets/predict-fun/${encodeURIComponent(id)}`;
+    return { provider: "predictfun", id, url };
   }
   return null;
 }
@@ -424,6 +720,15 @@ export async function fetchRexmarketsMarketDetails(params: {
     // The agent may pass either a slug or an event_id. If it looks like an integer, treat as event_id.
     if (/^\d+$/.test(id)) return await getPolymarketDetailsDirect({ event_id: id });
     return await getPolymarketDetailsDirect({ slug: id });
+  }
+  if (params.provider === "limitless") {
+    return await getLimitlessDetailsDirect({ slug: String(params.id || "").trim() });
+  }
+  if (params.provider === "myriad") {
+    return await getMyriadDetailsDirect({ slug: String(params.id || "").trim() });
+  }
+  if (params.provider === "predictfun") {
+    return await getPredictFunDetailsDirect({ id: String(params.id || "").trim() });
   }
   return await getKalshiDetailsDirect({ event_ticker: params.id });
 }
@@ -502,6 +807,80 @@ export async function findRexmarketsEmbedsForQuery(params: {
     }
   }
 
+  // Limitless (slug)
+  if (providers.includes("limitless")) {
+    try {
+      const search = await searchLimitlessDirect({ query, limit });
+      const top = Array.isArray(search?.results) ? search.results[0] : null;
+      const slug = top?.slug || null;
+      if (slug) {
+        const details = await fetchRexmarketsMarketDetails({
+          baseUrl,
+          provider: "limitless",
+          id: slug,
+        });
+        embeds.push({
+          kind: "rexmarkets",
+          provider: "limitless",
+          raptorxUrl: `${getBaseUrl(baseUrl)}/rexmarkets/limitless/${encodeURIComponent(slug)}`,
+          marketDetails: details,
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Myriad (slug)
+  if (providers.includes("myriad")) {
+    try {
+      const search = await searchMyriadDirect({ query, limit });
+      const top = Array.isArray(search?.results) ? search.results[0] : null;
+      const slug = top?.slug || null;
+      if (slug) {
+        const details = await fetchRexmarketsMarketDetails({
+          baseUrl,
+          provider: "myriad",
+          id: slug,
+        });
+        embeds.push({
+          kind: "rexmarkets",
+          provider: "myriad",
+          raptorxUrl: `${getBaseUrl(baseUrl)}/rexmarkets/myriad/${encodeURIComponent(slug)}`,
+          marketDetails: details,
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
+  // Predict.fun (id or category slug)
+  if (providers.includes("predictfun")) {
+    try {
+      const search = await searchPredictFunDirect({ query, limit });
+      const top = Array.isArray(search?.results) ? search.results[0] : null;
+      const marketId = top?.id || top?.slug || null;
+      if (marketId) {
+        const details = await fetchRexmarketsMarketDetails({
+          baseUrl,
+          provider: "predictfun",
+          id: marketId,
+        });
+        const routeId =
+          String((details as { id?: string })?.id ?? "").trim() || marketId;
+        embeds.push({
+          kind: "rexmarkets",
+          provider: "predictfun",
+          raptorxUrl: `${getBaseUrl(baseUrl)}/rexmarkets/predict-fun/${encodeURIComponent(routeId)}`,
+          marketDetails: details,
+        });
+      }
+    } catch {
+      // ignore
+    }
+  }
+
   return embeds;
 }
 
@@ -547,11 +926,11 @@ async function searchKalshiSeries(args: { query: string; limit?: number }) {
 }
 
 async function getKalshiEventDetails(args: { event_ticker: string }) {
-  const eventTicker = (args?.event_ticker || "").trim();
+  const eventTicker = normalizeKalshiEventTicker(args?.event_ticker);
   if (!eventTicker) return { error: "event_ticker required" };
 
-  const eventsUrl = `https://api.elections.kalshi.com/trade-api/v2/events/${eventTicker}`;
-  const metadataUrl = `https://api.elections.kalshi.com/trade-api/v2/events/${eventTicker}/metadata`;
+  const eventsUrl = `https://api.elections.kalshi.com/trade-api/v2/events/${encodeURIComponent(eventTicker)}`;
+  const metadataUrl = `https://api.elections.kalshi.com/trade-api/v2/events/${encodeURIComponent(eventTicker)}/metadata`;
 
   const [eventsRes, metaRes] = await Promise.all([
     fetch(eventsUrl, {
@@ -811,6 +1190,99 @@ export async function runMarketToolAgent(
         },
       },
     },
+    {
+      type: "function",
+      function: {
+        name: "search_limitless",
+        description:
+          "Search Limitless (limitless.exchange) markets by natural language (public search API).",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search query" },
+            limit: { type: "number", description: "Max results (1-10)" },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_limitless_market",
+        description:
+          "Fetch Limitless market details (RexMarkets format) by slug from limitless.exchange/markets/<slug>.",
+        parameters: {
+          type: "object",
+          properties: {
+            slug: { type: "string", description: "Limitless market slug" },
+          },
+          required: ["slug"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "search_myriad_markets",
+        description:
+          "Search Myriad (myriad.markets) open markets by natural language (Myriad GET /markets keyword search).",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search query" },
+            limit: { type: "number", description: "Max results (1-10)" },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_myriad_market",
+        description:
+          "Fetch Myriad market details (RexMarkets format) by URL slug from myriad.markets/markets/<slug>.",
+        parameters: {
+          type: "object",
+          properties: {
+            slug: { type: "string", description: "Myriad market slug" },
+          },
+          required: ["slug"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "search_predictfun_markets",
+        description:
+          "Search Predict.fun markets by natural language (predict.fun prediction markets on BNB).",
+        parameters: {
+          type: "object",
+          properties: {
+            query: { type: "string", description: "Search query" },
+            limit: { type: "number", description: "Max results (1-10)" },
+          },
+          required: ["query"],
+        },
+      },
+    },
+    {
+      type: "function",
+      function: {
+        name: "get_predictfun_market",
+        description:
+          "Fetch Predict.fun market details (RexMarkets format) by market id or URL slug from predict.fun/market/<slug>.",
+        parameters: {
+          type: "object",
+          properties: {
+            id: { type: "string", description: "Predict.fun market id or URL slug" },
+          },
+          required: ["id"],
+        },
+      },
+    },
   ];
 
   const TOOL_PROVIDER: Record<string, RexmarketsProvider> = {
@@ -818,6 +1290,12 @@ export async function runMarketToolAgent(
     get_kalshi_event: "kalshi",
     search_polymarket: "polymarket",
     get_polymarket_event: "polymarket",
+    search_limitless: "limitless",
+    get_limitless_market: "limitless",
+    search_myriad_markets: "myriad",
+    get_myriad_market: "myriad",
+    search_predictfun_markets: "predictfun",
+    get_predictfun_market: "predictfun",
   };
 
   // If the user provided a provider-specific URL, do not even expose the other provider tools.
@@ -840,14 +1318,38 @@ export async function runMarketToolAgent(
         provider: "polymarket",
         id: String(args?.slug || args?.event_id || ""),
       }),
+    search_limitless: (args: any) => searchLimitlessViaRaptorx({ ...args }),
+    get_limitless_market: (args: any) =>
+      fetchRexmarketsMarketDetails({
+        baseUrl,
+        provider: "limitless",
+        id: String(args?.slug || ""),
+      }),
+    search_myriad_markets: (args: any) => searchMyriadDirect({ ...args }),
+    get_myriad_market: (args: any) =>
+      fetchRexmarketsMarketDetails({
+        baseUrl,
+        provider: "myriad",
+        id: String(args?.slug || ""),
+      }),
+    search_predictfun_markets: (args: any) => searchPredictFunDirect({ ...args }),
+    get_predictfun_market: (args: any) =>
+      fetchRexmarketsMarketDetails({
+        baseUrl,
+        provider: "predictfun",
+        id: String(args?.id || ""),
+      }),
   };
 
   const system = `You are a routing agent for RaptorX Claw v5.
-Decide whether the user question is a prediction-market / market question (including politics/economics events that could have Kalshi/Polymarket markets).
+Decide whether the user question is a prediction-market / market question (including politics/economics events that could have Kalshi/Polymarket/Limitless/Myriad/Predict.fun markets).
 
 Important provider constraint:
 - If the user's message contains a kalshi.com link, ONLY use Kalshi tools and ONLY return the "kalshi" field.
 - If the user's message contains a polymarket.com link, ONLY use Polymarket tools and ONLY return the "polymarket" field.
+- If the user's message contains a limitless.exchange link, ONLY use Limitless tools and ONLY return the "limitless" field.
+- If the user's message contains a myriad.markets link, ONLY use Myriad tools and ONLY return the "myriad" field.
+- If the user's message contains a predict.fun link, ONLY use Predict.fun tools and ONLY return the "predictfun" field.
 
 If it IS a market question:
 - Call the relevant search tool(s) using the user's question as the query.
@@ -856,6 +1358,9 @@ If it IS a market question:
   - isMarketQuestion: true
   - kalshi?: { searchResults, selectedEvent, details? }
   - polymarket?: { searchResults, selectedEvent, details? }
+  - limitless?: { searchResults, selectedEvent, details? }
+  - myriad?: { searchResults, selectedEvent, details? }
+  - predictfun?: { searchResults, selectedEvent, details? }
 
 If it is NOT a market question:
 - Do NOT call tools.
@@ -897,17 +1402,42 @@ Be concise and do not include any prose outside the JSON.`;
 
       let result: any;
       try {
+        const isKalshiTool = toolName === "search_kalshi" || toolName === "get_kalshi_event";
+        const isPolyTool =
+          toolName === "search_polymarket" || toolName === "get_polymarket_event";
+        const isLimTool =
+          toolName === "search_limitless" || toolName === "get_limitless_market";
+        const isMyriadTool =
+          toolName === "search_myriad_markets" || toolName === "get_myriad_market";
+        const isPredictFunTool =
+          toolName === "search_predictfun_markets" ||
+          toolName === "get_predictfun_market";
         // Enforce provider constraint if requested
         if (
           effectiveOnlyProvider === "polymarket" &&
-          (toolName === "search_kalshi" || toolName === "get_kalshi_event")
+          (isKalshiTool || isLimTool || isMyriadTool || isPredictFunTool)
         ) {
           result = { skipped: true, reason: "onlyProvider=polymarket" };
         } else if (
           effectiveOnlyProvider === "kalshi" &&
-          (toolName === "search_polymarket" || toolName === "get_polymarket_event")
+          (isPolyTool || isLimTool || isMyriadTool || isPredictFunTool)
         ) {
           result = { skipped: true, reason: "onlyProvider=kalshi" };
+        } else if (
+          effectiveOnlyProvider === "limitless" &&
+          (isKalshiTool || isPolyTool || isMyriadTool || isPredictFunTool)
+        ) {
+          result = { skipped: true, reason: "onlyProvider=limitless" };
+        } else if (
+          effectiveOnlyProvider === "myriad" &&
+          (isKalshiTool || isPolyTool || isLimTool || isPredictFunTool)
+        ) {
+          result = { skipped: true, reason: "onlyProvider=myriad" };
+        } else if (
+          effectiveOnlyProvider === "predictfun" &&
+          (isKalshiTool || isPolyTool || isLimTool || isMyriadTool)
+        ) {
+          result = { skipped: true, reason: "onlyProvider=predictfun" };
         } else {
           result = fn ? await fn(toolArgs) : { error: `Unknown tool: ${toolName}` };
         }
@@ -935,6 +1465,9 @@ export function getUsableRaptorXMarketData(agentOutput: any): any | null {
 
   const kalshi = agentOutput.kalshi ?? null;
   const polymarket = agentOutput.polymarket ?? null;
+  const limitless = agentOutput.limitless ?? null;
+  const myriad = agentOutput.myriad ?? null;
+  const predictfun = agentOutput.predictfun ?? null;
 
   const kalshiSearch =
     (Array.isArray(kalshi?.searchResults) && kalshi.searchResults) ||
@@ -944,19 +1477,43 @@ export function getUsableRaptorXMarketData(agentOutput: any): any | null {
     (Array.isArray(polymarket?.searchResults) && polymarket.searchResults) ||
     (Array.isArray(polymarket?.results) && polymarket.results) ||
     [];
+  const limitlessSearch =
+    (Array.isArray(limitless?.searchResults) && limitless.searchResults) ||
+    (Array.isArray(limitless?.results) && limitless.results) ||
+    [];
+  const myriadSearch =
+    (Array.isArray(myriad?.searchResults) && myriad.searchResults) ||
+    (Array.isArray(myriad?.results) && myriad.results) ||
+    [];
+  const predictfunSearch =
+    (Array.isArray(predictfun?.searchResults) && predictfun.searchResults) ||
+    (Array.isArray(predictfun?.results) && predictfun.results) ||
+    [];
 
   const kalshiHas =
     (kalshi && typeof kalshi === "object" && !!kalshi.details) || kalshiSearch.length > 0;
   const polyHas =
     (polymarket && typeof polymarket === "object" && !!polymarket.details) ||
     polySearch.length > 0;
+  const limitlessHas =
+    (limitless && typeof limitless === "object" && !!limitless.details) ||
+    limitlessSearch.length > 0;
+  const myriadHas =
+    (myriad && typeof myriad === "object" && !!myriad.details) || myriadSearch.length > 0;
+  const predictfunHas =
+    (predictfun && typeof predictfun === "object" && !!predictfun.details) ||
+    predictfunSearch.length > 0;
 
-  if (!kalshiHas && !polyHas) return null;
+  if (!kalshiHas && !polyHas && !limitlessHas && !myriadHas && !predictfunHas)
+    return null;
 
   return {
     isMarketQuestion: true,
     ...(kalshiHas ? { kalshi } : {}),
     ...(polyHas ? { polymarket } : {}),
+    ...(limitlessHas ? { limitless } : {}),
+    ...(myriadHas ? { myriad } : {}),
+    ...(predictfunHas ? { predictfun } : {}),
   };
 }
 
@@ -984,11 +1541,35 @@ export function buildRexmarketsEmbedsFromMarketData(
       marketDetails: usable.kalshi.details,
     });
   }
+  if (usable.limitless?.details) {
+    embeds.push({
+      kind: "rexmarkets",
+      provider: "limitless",
+      raptorxUrl: originalRaptorxUrl,
+      marketDetails: usable.limitless.details,
+    });
+  }
+  if (usable.myriad?.details) {
+    embeds.push({
+      kind: "rexmarkets",
+      provider: "myriad",
+      raptorxUrl: originalRaptorxUrl,
+      marketDetails: usable.myriad.details,
+    });
+  }
+  if (usable.predictfun?.details) {
+    embeds.push({
+      kind: "rexmarkets",
+      provider: "predictfun",
+      raptorxUrl: originalRaptorxUrl,
+      marketDetails: usable.predictfun.details,
+    });
+  }
 
   return embeds;
 }
 
-// Top prediction markets tool (top N Polymarket + top N Kalshi by volume)
+// Top prediction markets tool (top N per platform: Polymarket, Limitless, Kalshi by volume)
 export {
   isTopPredictionMarketsIntent,
   extractTopMarketsCategory,

@@ -7,6 +7,8 @@ import { RexMarketsReport, RexMarketsTable } from "./_components";
 import RexHeader from "@/components/ui/layout/Header";
 import type { MarketReport } from "@/hooks/useGenerateMarketReport";
 import Footer from "@/components/ui/layout/Footer";
+import { stashPendingGeneratedReport } from "@/lib/rexmarkets/pendingGeneratedReport";
+import { useOpenPilotSidebarOnMobileReportGen } from "@/hooks/useOpenPilotSidebarOnMobileReportGen";
 
 export default function RexMarketsPage() {
   const { authenticated: privyAuthenticated, user: privyUser, ready } = usePrivy();
@@ -85,6 +87,7 @@ export default function RexMarketsPage() {
   }, [ready, authenticated, privyUser?.id, phantomUser?.id, privyAuthenticated, phantomAuthenticated]);
 
   const handleReportGenerated = useCallback((report: MarketReport) => {
+    stashPendingGeneratedReport(report);
     setGeneratedReport(report);
     setShowReportSidebar(true);
   }, []);
@@ -95,6 +98,7 @@ export default function RexMarketsPage() {
 
   const handleMarketSelected = useCallback(
     (eventTicker: string, marketTitle: string, totalVolume: number, eventId?: string) => {
+      setGeneratedReport(null);
       setSelectedMarketTicker(eventTicker);
       setSelectedMarketTitle(marketTitle);
       setSelectedMarketVolume(totalVolume);
@@ -102,6 +106,11 @@ export default function RexMarketsPage() {
       setShowReportSidebar(true);
     },
     []
+  );
+
+  useOpenPilotSidebarOnMobileReportGen(
+    selectedMarketTicker,
+    setShowReportSidebar,
   );
 
   return (
@@ -153,7 +162,7 @@ export default function RexMarketsPage() {
             maxHeight: '100dvh', // Use dynamic viewport height for mobile
           }}
         >
-          <div className="h-full overflow-y-auto overflow-x-hidden bg-[#141414] custom-sidebar-scrollbar" style={{
+          <div className="h-full min-h-0 overflow-y-auto overflow-x-hidden bg-[#141414] custom-sidebar-scrollbar" style={{
             WebkitOverflowScrolling: 'touch',
             touchAction: 'pan-y',
             overscrollBehavior: 'contain',
@@ -167,6 +176,7 @@ export default function RexMarketsPage() {
               selectedMarketVolume={selectedMarketVolume}
               selectedMarketEventId={selectedMarketEventId}
               onClose={() => setShowReportSidebar(false)}
+              onClearSessionReport={() => setGeneratedReport(null)}
             />
           </div>
         </div>

@@ -1,5 +1,6 @@
 import { SubscriptionPlan } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { userHasSubscriptionBypass } from "@/lib/subscription/bypass";
 
 /** RexScreener free tier: 2 coin reports/day (3rd triggers paywall), 2 queries per report/day (3rd per report triggers paywall). */
 export const FREE_LIMITS = {
@@ -64,6 +65,10 @@ export async function checkAndIncrementUsage(
   const user = await prisma.user.findUnique({ where: { id: userId } });
   if (!user) {
     return { ok: false, plan: null, reason: "NO_ACTIVE_PLAN" };
+  }
+
+  if (userHasSubscriptionBypass(user)) {
+    return { ok: true, plan: "CLAW_PRO", remaining: null };
   }
 
   const data: Record<string, unknown> = {};
@@ -242,9 +247,14 @@ const SUBSCRIPTION_PERIOD_DAYS = 30;
 export async function activateProSubscription(userId: string): Promise<boolean> {
   const existing = await prisma.user.findUnique({
     where: { id: userId },
-    select: { id: true },
+    select: { id: true, username: true, email: true },
   });
   if (!existing) return false;
+
+  // Bypass users keep DB subscription fields as-is (no 30-day rollover from webhooks).
+  if (userHasSubscriptionBypass(existing)) {
+    return true;
+  }
 
   const now = new Date();
   const periodEnd = new Date(now);
@@ -280,6 +290,12 @@ export async function recordSubscriptionHistory(
   params: RecordSubscriptionHistoryParams,
 ): Promise<void> {
   const { userId, transactionId } = params;
+  const u = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { username: true, email: true },
+  });
+  if (u && userHasSubscriptionBypass(u)) return;
+
   await prisma.subscription.create({
     data: {
       userId,

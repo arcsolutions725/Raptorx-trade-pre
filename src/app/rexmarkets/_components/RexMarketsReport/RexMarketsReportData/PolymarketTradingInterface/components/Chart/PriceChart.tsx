@@ -19,7 +19,13 @@ import {
   ChartStatsDot,
   getStatsLabelsForPoint,
   CHART_STATS_DOT_MARGIN,
+  CHART_LEGEND_WRAPPER_STYLE,
+  isChartLegendCheckboxTarget,
 } from "../../../shared/ChartStatsDot";
+import {
+  formatChartAxisPercent,
+  formatChartPercentValue,
+} from "../../../shared/chartPercentFormat";
 
 type MarketWithClobToken = {
   clobTokenId: string;
@@ -96,7 +102,6 @@ const CustomTooltip = ({
     year: "numeric",
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
   });
 
   // Only show data for visible markets (hidden lines are excluded from tooltip)
@@ -212,7 +217,9 @@ const CustomTooltip = ({
                       color: market.color,
                     }}
                   >
-                    {typeof price === "number" ? price.toFixed(2) : "N/A"}%
+                    {typeof price === "number"
+                      ? `${formatChartPercentValue(price, 2)}%`
+                      : "N/A"}
                   </span>
                 ) : (
                   <span
@@ -623,7 +630,7 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
               type="number"
               domain={["dataMin", "dataMax"]}
               stroke="#ffffff40"
-              tick={{ fill: "#ffffff60", fontSize: 11 }}
+              tick={{ fill: "#ffc000", fontSize: 11 }}
               interval="preserveStartEnd"
               tickFormatter={(value) => {
                 // value is time in milliseconds
@@ -636,18 +643,20 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
             />
             <YAxis
               stroke="#ffffff40"
-              tick={{ fill: "#ffffff60", fontSize: 11 }}
+              tick={{ fill: "#ffc000", fontSize: 11 }}
               domain={yDomain}
               ticks={yTicks}
               allowDataOverflow={false}
               tickFormatter={(value) => {
-                // Ensure value is a number and format as percentage
                 const numValue =
                   typeof value === "number" ? value : parseFloat(value) || 0;
-                return `${numValue.toFixed(1)}%`;
+                return formatChartAxisPercent(numValue);
               }}
             />
             <Tooltip
+              filterNull={false}
+              allowEscapeViewBox={{ x: false, y: true }}
+              wrapperStyle={{ zIndex: 10000 }}
               content={(props) => (
                 <CustomTooltip
                   {...props}
@@ -658,16 +667,20 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
               )}
             />
             <Legend
-              wrapperStyle={{ color: "#fff", fontSize: "12px" }}
+              wrapperStyle={CHART_LEGEND_WRAPPER_STYLE}
               content={() => (
-                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2" style={{ color: "#fff", fontSize: "12px" }}>
+                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2 pointer-events-auto touch-manipulation">
                   {marketKeys.map((market) => {
                     const visible = !hiddenMarketKeys.has(market.key);
                     const lastPrice = lastPrices.get(market.key);
                     return (
                       <div
                         key={market.key}
-                        className="flex items-center gap-2 select-none"
+                        className="flex items-center gap-2 select-none cursor-pointer touch-manipulation"
+                        onClick={(e) => {
+                          if (isChartLegendCheckboxTarget(e.target)) return;
+                          toggleMarketVisibility(market.key);
+                        }}
                       >
                         <Checkbox
                           checked={visible}
@@ -679,7 +692,10 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
                           style={{ backgroundColor: market.color }}
                         />
                         <span className="text-white/90">
-                          {market.title} {lastPrice !== undefined ? `${lastPrice.toFixed(1)}%` : ""}
+                          {market.title}{" "}
+                          {lastPrice !== undefined
+                            ? `${formatChartPercentValue(lastPrice, 2)}%`
+                            : ""}
                         </span>
                       </div>
                     );

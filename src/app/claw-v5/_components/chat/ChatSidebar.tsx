@@ -18,6 +18,19 @@ import ChatContextMenu from "./ChatContextMenu";
 import RenameChatModal from "../modals/RenameChatModal";
 import DeleteChatModal from "../modals/DeleteChatModal";
 
+/** Matches Tailwind `w-16` / `w-64` at default scale (1rem = 16px). */
+export const CLAW_CHAT_SIDEBAR_WIDTH_COLLAPSED_PX = 64;
+export const CLAW_CHAT_SIDEBAR_WIDTH_EXPANDED_PX = 256;
+
+/** Shift header pill nav right by half the sidebar width gain so its center tracks the main column (md+). */
+export function clawV5HeaderNavShiftPx(sidebarCollapsed: boolean): number {
+  if (sidebarCollapsed) return 0;
+  return (
+    (CLAW_CHAT_SIDEBAR_WIDTH_EXPANDED_PX - CLAW_CHAT_SIDEBAR_WIDTH_COLLAPSED_PX) /
+    2
+  );
+}
+
 interface ChatSidebarProps {
   chats: Chat[];
   isLoading?: boolean;
@@ -27,6 +40,9 @@ interface ChatSidebarProps {
   onChatDelete?: (chatId: string) => void;
   isMobileOpen?: boolean;
   onMobileClose?: () => void;
+  /** Controlled collapse (narrow `w-16`). Omit for uncontrolled local state. */
+  collapsed?: boolean;
+  onCollapsedChange?: (collapsed: boolean) => void;
 }
 
 interface ChatItemProps {
@@ -131,8 +147,19 @@ function ChatSidebar({
   onChatDelete,
   isMobileOpen = false,
   onMobileClose,
+  collapsed: collapsedProp,
+  onCollapsedChange,
 }: ChatSidebarProps) {
-  const [isCollapsed, setIsCollapsed] = useState(false);
+  const [internalCollapsed, setInternalCollapsed] = useState(false);
+  const isCollapsed =
+    collapsedProp !== undefined ? collapsedProp : internalCollapsed;
+
+  const setCollapsed = (next: boolean) => {
+    if (collapsedProp === undefined) {
+      setInternalCollapsed(next);
+    }
+    onCollapsedChange?.(next);
+  };
   const [searchQuery, setSearchQuery] = useState("");
   const [showAllChats, setShowAllChats] = useState(false);
   const router = useRouter();
@@ -194,7 +221,7 @@ function ChatSidebar({
 
       {/* Sidebar */}
       <div
-        className={`bg-[#1a1a1a] border-r border-[#2a2a2a] flex flex-col h-full transition-transform duration-300 ease-in-out
+        className={`bg-[#1a1a1a] border-r border-[#2a2a2a] flex flex-col h-full min-h-0 transition-transform duration-300 ease-in-out
           ${isCollapsed ? "w-16" : "w-64"}
           ${
             isMobileOpen
@@ -228,7 +255,7 @@ function ChatSidebar({
             )}
             {/* Collapse Button - Hidden on mobile */}
             <button
-              onClick={() => setIsCollapsed(!isCollapsed)}
+              onClick={() => setCollapsed(!isCollapsed)}
               className="hidden md:block p-1 rounded transition-colors hover:bg-[#2a2a2a]"
               aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
@@ -263,8 +290,7 @@ function ChatSidebar({
                 placeholder="Search chats"
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-3 h-10 bg-[#262626] border border-[#3C3C3C] text-white/80 placeholder-white/50 rounded focus:outline-none focus:ring-1 focus:ring-[#FFC000] text-sm"
-                style={{ fontSize: "14px" }}
+                className="w-full pl-10 pr-3 h-10 bg-[#262626] border border-[#3C3C3C] text-white/80 placeholder-white/50 rounded focus:outline-none focus:ring-1 focus:ring-[#FFC000] text-base"
               />
             </div>
           ) : (
@@ -289,7 +315,7 @@ function ChatSidebar({
         {!isCollapsed && (
           <>
             {/* Chats Section */}
-            <div className="flex-1 overflow-y-auto px-4 pt-5.5 pb-4 custom-chat-messages-scrollbar">
+            <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-5.5 pb-4 custom-chat-messages-scrollbar">
               <div className="mb-2">
                 <h3
                   className="text-[#FFC000] uppercase tracking-wider mb-2"

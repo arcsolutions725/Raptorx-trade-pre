@@ -271,7 +271,7 @@ export function ReferralShare({ userId, referralCode }: ReferralShareProps) {
         </div>
         <button
           onClick={copyReferralCode}
-          className="flex items-center justify-center gap-1 bg-black text-[#F9B80C] border border-[#6D4F03] w-20.25 h-10 rounded-lg transition-colors text-[14px]"
+          className="flex items-center justify-center gap-1 text-[#F9B80C] border border-[#6D4F03] w-20.25 h-10 rounded-lg transition-colors text-[14px]"
         >
           {!copied ? (
             <Copy className="w-4 h-4" />

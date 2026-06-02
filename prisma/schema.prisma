@@ -178,6 +178,28 @@ model SystemReport {
   @@map("systemreports")
 }
 
+/// Golden Report program: curated contracts whose teams may publish "Team Updates" (shown in RexScreener before What It Is).
+/// Rows are created/updated from the RaptorX internal metrics dashboard via `/api/internal/golden-reports/projects` (shared secret).
+/// Same table holds Pump Reports listings: `isGolden` true = Golden (default); false = Pump.
+model GoldenReportProject {
+  id                     String    @id @default(cuid())
+  contractAddress        String
+  chain                  String    @default("solana")
+  /// true = Golden Reports tier (default); false = Pump Reports tier.
+  isGolden               Boolean   @default(true)
+  /// RaptorX user emails allowed to publish updates (must match `User.email` at login). Set from internal dashboard.
+  authorizedEditorEmails String[]  @default([])
+  teamUpdatesContent     String    @default("")
+  teamUpdatesPublishedAt DateTime?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+
+  @@unique([contractAddress, chain])
+  @@index([chain])
+  @@index([isGolden])
+  @@map("golden_report_projects")
+}
+
 model SwapTransaction {
   id              String   @id @default(cuid())
   userId          String

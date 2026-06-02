@@ -43,7 +43,8 @@ import { useGenerateMarketReport } from "@/hooks/useGenerateMarketReport";
 
 import { useReportGenStatus } from "@/lib/storage/reportGenStore";
 import { usePrivy } from "@privy-io/react-auth";
-import { PaywallModal } from "@/components/subscription/PaywallModal";
+import { PaywallModal } from "@/components/ui/modal/PaywallModal";
+import { useRexMarketsGenerateReportOptional } from "@/app/rexmarkets/_components/RexMarketsGenerateReportContext";
 
 type TabId = "holders";
 
@@ -65,6 +66,7 @@ type LimitlessTradingInterfaceProps = {
   onBack?: () => void;
   onReportGenerated?: (report: any) => void;
   userId?: string | null;
+  sessionSavedReportId?: string | null;
 };
 
 export default function LimitlessTradingInterface({
@@ -75,6 +77,7 @@ export default function LimitlessTradingInterface({
   onBack,
   onReportGenerated,
   userId,
+  sessionSavedReportId,
 }: LimitlessTradingInterfaceProps) {
   const { marketDetails, isLoading: isLoadingDetails } = useMarketDetails(
     eventTicker || null,
@@ -105,6 +108,10 @@ export default function LimitlessTradingInterface({
   const [countdown, setCountdown] = useState<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+
+  useEffect(() => {
+    if (!sessionSavedReportId) setHasGenerated(false);
+  }, [sessionSavedReportId]);
 
   // Initialize countdown when generation starts
   useEffect(() => {
@@ -187,6 +194,13 @@ export default function LimitlessTradingInterface({
     }
   }, [authenticated, login, marketForGeneration, ready, generateFromMarket]);
 
+  const generateReportSidebar = useRexMarketsGenerateReportOptional();
+  useEffect(() => {
+    if (!generateReportSidebar) return;
+    generateReportSidebar.registerGenerateHandler(() => handleGenerateClick());
+    return () => generateReportSidebar.registerGenerateHandler(null);
+  }, [generateReportSidebar, handleGenerateClick]);
+
   // Yes/No prices in 0-1 form (API may return cents 0-100, 0-1, or "—" for group events)
   const yesPrice = useMemo(() => {
     const d = marketDetails as LimitlessMarketDetails | null;
@@ -209,6 +223,8 @@ export default function LimitlessTradingInterface({
     return 0.5;
   }, [marketDetails]);
   const [selectedOrderBookOutcome, setSelectedOrderBookOutcome] = useState<"Yes" | "No">("Yes");
+  const [mobileOrderBookDepthExpanded, setMobileOrderBookDepthExpanded] =
+    useState(true);
   const [selectedChartInterval, setSelectedChartInterval] = useState("1W");
   const [selectedMarketIndex, setSelectedMarketIndex] = useState(0);
   const [isBuySellModalOpen, setIsBuySellModalOpen] = useState(false);
@@ -370,7 +386,7 @@ export default function LimitlessTradingInterface({
     }
     return [
       {
-        slug: String(eventTicker ?? d.ticker ?? ""),
+        slug: String(d.slug ?? d.ticker ?? eventTicker ?? ""),
         title: String((typeof marketTitle === "string" ? marketTitle : d.title) ?? "Market"),
         yesPrice: eventYes,
         noPrice: eventNo,
@@ -518,15 +534,15 @@ export default function LimitlessTradingInterface({
 
       {/* Main content area - scrollable like Polymarket/Kalshi so user can scroll to see all content below */}
       <div
-        className="flex-1 overflow-y-auto custom-sidebar-scrollbar min-h-0"
-        style={{ paddingBottom: "80px", WebkitOverflowScrolling: "touch" }}
+        className="flex-1 overflow-y-auto rexmarkets-scroll-pane-y min-h-0 pb-2"
+        style={{ WebkitOverflowScrolling: "touch" }}
       >
-        <div className="flex flex-col min-h-full">
+        <div className="flex flex-col">
           {/* Top section - Row 1: Chart | BuySellWidget only (same as Polymarket/Kalshi) */}
           <div className="flex flex-col lg:flex-row border-b border-white/10 shrink-0">
             {/* Chart */}
             <div className="flex-1 flex flex-col min-w-0 w-full min-h-100 lg:w-auto lg:min-h-130">
-              <div className="shrink-0 flex items-center justify-between px-4 py-2 border-b border-white/10">
+              <div className="shrink-0 flex items-center justify-start px-4 py-2 border-b border-white/10">
                 <div className="flex items-center gap-2 overflow-x-auto">
                   {chartIntervals.map((interval) => (
                     <button
@@ -541,9 +557,6 @@ export default function LimitlessTradingInterface({
                       {interval}
                     </button>
                   ))}
-                </div>
-                <div className="text-sm text-white/60 hidden sm:block truncate max-w-50">
-                  {typeof marketTitle === "string" ? marketTitle : ""}
                 </div>
               </div>
               <div className="h-87.5 lg:h-auto lg:flex-1 lg:min-h-112.5 relative bg-[#0a0a0a]">
@@ -562,15 +575,42 @@ export default function LimitlessTradingInterface({
               </div>
             </div>
 
-            {/* Mobile: Order book only; Buy/Sell opens in modal (like Polymarket/Kalshi) */}
+            {/* Mobile: Buy/Sell directly under chart; order book follows */}
+            <div className="lg:hidden w-full shrink-0 border-t border-white/10">
+              <BuySellWidget
+                currentYesPrice={effectiveYesPrice}
+                currentNoPrice={effectiveNoPrice}
+                availableYesShares={availableYesShares}
+                availableNoShares={availableNoShares}
+                symbolImageUrl={typeof details.symbol_image_url === "string" ? details.symbol_image_url : typeof details.image === "string" ? details.image : undefined}
+                marketTitle={selectedMarket?.title ?? (typeof marketTitle === "string" ? marketTitle : undefined)}
+                marketSlug={selectedMarket?.slug ?? eventTicker}
+                venue={selectedMarket?.venue ?? venue}
+                positionIds={selectedMarket?.positionIds ?? positionIds}
+                marketsForTrading={marketsForTrading}
+                selectedMarketIndex={selectedMarketIndex}
+                onMarketIndexChange={setSelectedMarketIndex}
+                usdcBalance={baseUsdcBalance}
+                usdcBalanceFormatted={baseUsdcFormatted}
+                nativeBalanceFormatted={baseEthFormatted}
+                nativeLabel="Base"
+              />
+            </div>
+
+            {/* Mobile: Order book below buy/sell */}
             <div className="lg:hidden w-full shrink-0 border-t border-white/10 flex flex-col">
-              <div className="min-h-80 overflow-hidden">
+              <div
+                className={`overflow-hidden ${
+                  mobileOrderBookDepthExpanded ? "min-h-80" : ""
+                }`}
+              >
                 <LimitlessOrderBook
                   marketSlug={selectedMarket?.slug ?? eventTicker}
                   yesPrice={effectiveYesPrice}
                   noPrice={effectiveNoPrice}
                   onBuyClick={handleOrderBookBuyClick}
                   selectedOutcome={selectedOrderBookOutcome}
+                  onDepthExpandedChange={setMobileOrderBookDepthExpanded}
                 />
               </div>
             </div>
@@ -599,7 +639,7 @@ export default function LimitlessTradingInterface({
           </div>
 
           {/* Bottom section - Row 2: Top Holders | Orderbook (Comments/Activity removed for Limitless) */}
-          <div className="flex min-h-100 flex-col shrink-0 border-t border-white/10">
+          <div className="flex min-h-0 flex-col shrink-0 border-t border-white/10">
             <div className="flex flex-col lg:flex-row items-stretch gap-4 p-4 shrink-0" style={{ maxHeight: "750px" }}>
               {/* Top Holders - left side */}
               <div className="flex-1 flex flex-col min-w-0 w-full lg:w-auto">
@@ -617,7 +657,7 @@ export default function LimitlessTradingInterface({
                     </button>
                   ))}
                 </div>
-                <div className="flex-1 min-h-0 overflow-y-auto custom-select-scrollbar">
+                <div className="flex-1 min-h-0 overflow-y-auto rexmarkets-scroll-pane-y">
                   <TopHolders marketSlug={selectedMarket?.slug ?? eventTicker} />
                 </div>
               </div>
@@ -631,6 +671,7 @@ export default function LimitlessTradingInterface({
                     noPrice={effectiveNoPrice}
                     onBuyClick={setSelectedOrderBookOutcome}
                     selectedOutcome={selectedOrderBookOutcome}
+                    showDepthToggle={false}
                   />
                 </div>
               </div>

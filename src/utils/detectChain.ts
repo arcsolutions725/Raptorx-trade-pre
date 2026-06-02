@@ -1,9 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
  * Detect blockchain chain from DexScreener data or other sources
- * Returns normalized chain identifier: "bnb", "base", "solana", or "monad"
+ * Returns normalized chain identifier: "bsc", "ethereum", "base", "solana", or "monad"
  */
-export function detectChainFromDexData(dexData: any): "bsc" | "base" | "solana" | "monad" {
+export function detectChainFromDexData(
+  dexData: any
+): "bsc" | "ethereum" | "base" | "solana" | "monad" {
   if (!dexData) return "solana";
 
   const chainId = dexData.chainId?.toLowerCase?.() ?? String(dexData.chainId ?? "");
@@ -21,6 +23,11 @@ export function detectChainFromDexData(dexData: any): "bsc" | "base" | "solana" 
     chainId === "56"
   ) {
     return "bsc";
+  }
+
+  // Ethereum mainnet detection
+  if (chainId === "ethereum" || chainId === "eth" || chainId === "1") {
+    return "ethereum";
   }
 
   // Monad chain detection
@@ -58,7 +65,7 @@ export function detectChain(params: {
   dexData?: any;
   address?: string;
   explicitChain?: string;
-}): "bsc" | "base" | "solana" | "monad" {
+}): "bsc" | "ethereum" | "base" | "solana" | "monad" {
   const { dexData, address, explicitChain } = params;
 
   // If explicitly provided (e.g. from frontend token.chainId), use it
@@ -66,6 +73,8 @@ export function detectChain(params: {
     const normalized = explicitChain.toLowerCase().trim();
     if (normalized === "base" || normalized === "8453") return "base";
     if (normalized === "bsc" || normalized === "bnb" || normalized === "56") return "bsc";
+    if (normalized === "ethereum" || normalized === "eth" || normalized === "1")
+      return "ethereum";
     if (normalized === "monad" || normalized === "10143") return "monad";
     return "solana";
   }
@@ -83,4 +92,26 @@ export function detectChain(params: {
 
   // Default to Solana
   return "solana";
+}
+
+/**
+ * True only for BSC when we would show BNB holder/safety analytics UI.
+ * Non-EVM (base58) mints are never BSC for this purpose, even if chain metadata is wrong.
+ */
+export function isBscForBnbAnalyticsSections(params: {
+  explicitChain?: string | null;
+  dexData?: any;
+  contractAddress?: string | null;
+}): boolean {
+  const addr = (params.contractAddress ?? "").trim();
+  if (addr && !addr.startsWith("0x")) {
+    return false;
+  }
+  return (
+    detectChain({
+      dexData: params.dexData,
+      address: addr || undefined,
+      explicitChain: params.explicitChain ?? undefined,
+    }) === "bsc"
+  );
 }

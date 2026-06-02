@@ -19,7 +19,9 @@ import { useReportGenStatus } from "@/lib/storage/reportGenStore";
 import { useEventMetadata } from "@/hooks/useEventMetadata";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import clsx from "clsx";
-import { PaywallModal } from "@/components/subscription/PaywallModal";
+import { PaywallModal } from "@/components/ui/modal/PaywallModal";
+import { getMarketReportGenKey } from "@/lib/rexmarkets/marketRoutes";
+import { PREDICT_FUN_LOGO_SRC } from "@/lib/predictfun/assets";
 
 type MarketReportData = {
   id: string;
@@ -33,9 +35,17 @@ type MarketReportData = {
 
 type TableRowProps = {
   market: (KalashiMarket | PolymarketMarket | LimitlessMarket) & {
-    _source?: "kalshi" | "polymarket" | "limitless";
+    _source?: "kalshi" | "polymarket" | "limitless" | "myriad" | "predictfun";
   };
-  onMarketClick?: (market: KalashiMarket | PolymarketMarket | LimitlessMarket) => void;
+  onMarketClick?: (
+    market: KalashiMarket | PolymarketMarket | LimitlessMarket
+  ) => void;
+  onMarketSelected?: (
+    eventTicker: string,
+    marketTitle: string,
+    totalVolume: number,
+    eventId?: string
+  ) => void;
   onReportGenerated?: (report: MarketReportData) => void;
   currentUserId: string;
   index?: number;
@@ -58,6 +68,7 @@ function formatVolume(volume?: number): string {
 function TableRow({
   market,
   onMarketClick,
+  onMarketSelected,
   onReportGenerated,
   currentUserId,
   index = 0,
@@ -81,8 +92,14 @@ function TableRow({
   const isPolymarket = marketSource === "polymarket";
   const isKalshi = marketSource === "kalshi";
   const isLimitless = marketSource === "limitless";
+  const isMyriad = marketSource === "myriad";
+  const isPredictFun = marketSource === "predictfun";
+  const isLimitlessLike = isLimitless || isMyriad || isPredictFun;
 
-  const { isGenerating, startedAt } = useReportGenStatus(market?.ticker);
+  const reportGenKey = getMarketReportGenKey(market as any);
+  const { isGenerating, startedAt } = useReportGenStatus(
+    reportGenKey || undefined
+  );
   const [hasGenerated, setHasGenerated] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -132,12 +149,12 @@ function TableRow({
         }.webp?size=sm`;
       }
     }
-    if (isLimitless) {
+    if (isLimitlessLike) {
       const limitlessMarket = market as LimitlessMarket;
       return limitlessMarket?.image || limitlessMarket?.icon || null;
     }
     return null;
-  }, [metadataImageUrl, market, isPolymarket, isKalshi, isLimitless]);
+  }, [metadataImageUrl, market, isPolymarket, isKalshi, isLimitlessLike]);
 
   // Memoize formatted values - use marketSource to determine which structure to use
   const yesPrice = useMemo(() => {
@@ -152,7 +169,7 @@ function TableRow({
       const kalshiMarket = market as KalashiMarket;
       return isBinaryMarket ? formatPrice(kalshiMarket.yes_bid) : "—";
     }
-    if (isLimitless) {
+    if (isLimitlessLike) {
       const limitlessMarket = market as LimitlessMarket;
       if (limitlessMarket.yesPrice === "—") return "—";
       return typeof limitlessMarket.yesPrice === "number"
@@ -160,7 +177,7 @@ function TableRow({
         : limitlessMarket.yesPrice;
     }
     return "—";
-  }, [isBinaryMarket, market, isPolymarket, isKalshi, isLimitless]);
+  }, [isBinaryMarket, market, isPolymarket, isKalshi, isLimitlessLike]);
 
   const noPrice = useMemo(() => {
     if (isPolymarket) {
@@ -174,7 +191,7 @@ function TableRow({
       const kalshiMarket = market as KalashiMarket;
       return isBinaryMarket ? formatPrice(kalshiMarket.no_ask) : "—";
     }
-    if (isLimitless) {
+    if (isLimitlessLike) {
       const limitlessMarket = market as LimitlessMarket;
       if (limitlessMarket.noPrice === "—") return "—";
       return typeof limitlessMarket.noPrice === "number"
@@ -182,7 +199,7 @@ function TableRow({
         : limitlessMarket.noPrice;
     }
     return "—";
-  }, [isBinaryMarket, market, isPolymarket, isKalshi, isLimitless]);
+  }, [isBinaryMarket, market, isPolymarket, isKalshi, isLimitlessLike]);
 
   const choice1Price = useMemo(() => {
     if (isPolymarket) {
@@ -197,7 +214,7 @@ function TableRow({
         ? formatPrice(topTwoChoices[0]?.yes_ask_dollars)
         : "—";
     }
-    if (isLimitless) {
+    if (isLimitlessLike) {
       const limitlessMarket = market as LimitlessMarket;
       if (limitlessMarket.choiceI === "—") return "—";
       return typeof limitlessMarket.choiceI === "number"
@@ -205,7 +222,7 @@ function TableRow({
         : limitlessMarket.choiceI;
     }
     return "—";
-  }, [isMultiChoice, topTwoChoices, market, isPolymarket, isKalshi, isLimitless]);
+  }, [isMultiChoice, topTwoChoices, market, isPolymarket, isKalshi, isLimitlessLike]);
 
   const choice2Price = useMemo(() => {
     if (isPolymarket) {
@@ -220,7 +237,7 @@ function TableRow({
         ? formatPrice(topTwoChoices[1]?.yes_ask_dollars)
         : "—";
     }
-    if (isLimitless) {
+    if (isLimitlessLike) {
       const limitlessMarket = market as LimitlessMarket;
       if (limitlessMarket.choiceII === "—") return "—";
       return typeof limitlessMarket.choiceII === "number"
@@ -228,7 +245,7 @@ function TableRow({
         : limitlessMarket.choiceII;
     }
     return "—";
-  }, [isMultiChoice, topTwoChoices, market, isPolymarket, isKalshi, isLimitless]);
+  }, [isMultiChoice, topTwoChoices, market, isPolymarket, isKalshi, isLimitlessLike]);
 
   const volume24h = useMemo(() => {
     if (isPolymarket) {
@@ -239,13 +256,13 @@ function TableRow({
       const kalshiMarket = market as KalashiMarket;
       return formatVolume(kalshiMarket.volume_24h);
     }
-    if (isLimitless) {
+    if (isLimitlessLike) {
       const limitlessMarket = market as LimitlessMarket;
       // Always format from numeric value for consistent $X.XXK / $X.XXM display
       return formatVolume(limitlessMarket.volume24hr);
     }
     return "—";
-  }, [market, isPolymarket, isKalshi, isLimitless]);
+  }, [market, isPolymarket, isKalshi, isLimitlessLike]);
 
   // Reset image error when market or image URL changes
   useEffect(() => {
@@ -279,7 +296,7 @@ function TableRow({
       intervalRef.current = null;
     }
 
-    if (countdown !== null && countdown > 0 && isGenerating && market?.ticker) {
+    if (countdown !== null && countdown > 0 && isGenerating && reportGenKey) {
       intervalRef.current = setInterval(() => {
         setCountdown((prev) => {
           if (prev === null) return null;
@@ -294,17 +311,25 @@ function TableRow({
         }
       };
     }
-  }, [countdown, isGenerating, market?.ticker]);
+  }, [countdown, isGenerating, reportGenKey]);
 
   const handleClick = useCallback(() => {
     onMarketClick?.(market);
   }, [onMarketClick, market]);
 
   const onGenerateClick = useCallback(
-    async (selectedMarket: KalashiMarket | PolymarketMarket) => {
+    async (selectedMarket: KalashiMarket | PolymarketMarket | LimitlessMarket) => {
       if (!selectedMarket) return;
+      const key = getMarketReportGenKey(selectedMarket as any);
+      const vol =
+        (selectedMarket as any).volume ?? (selectedMarket as any).volume24hr ?? 0;
+      const eid =
+        (selectedMarket as any).id != null
+          ? String((selectedMarket as any).id)
+          : undefined;
+      onMarketSelected?.(key, selectedMarket.title ?? "", vol, eid);
       try {
-        await generateFromMarket(selectedMarket);
+        await generateFromMarket(selectedMarket as KalashiMarket | PolymarketMarket);
         setHasGenerated(true);
       } catch (err: any) {
         if (err?.status === 402) {
@@ -318,7 +343,7 @@ function TableRow({
         }
       }
     },
-    [generateFromMarket]
+    [generateFromMarket, onMarketSelected]
   );
 
   const handleSignIn = useCallback(async () => {
@@ -395,6 +420,22 @@ function TableRow({
                     />
                   ) : isLimitless ? (
                     <span className="text-[#8B5CF6] font-bold text-sm">L</span>
+                  ) : isMyriad ? (
+                    <Image
+                      src="/images/myriad.webp"
+                      alt="Myriad"
+                      width={16}
+                      height={16}
+                      className="w-4 h-4 object-contain"
+                    />
+                  ) : isPredictFun ? (
+                    <Image
+                      src={PREDICT_FUN_LOGO_SRC}
+                      alt="Predict.fun"
+                      width={16}
+                      height={16}
+                      className="w-4 h-4 object-contain"
+                    />
                   ) : (
                     <span className="text-[#17cb91] font-bold text-sm">K</span>
                   )}
@@ -455,7 +496,7 @@ function TableRow({
             style={{ flexShrink: 0, pointerEvents: "auto" }}
           >
             <Image
-              src="/images/generate.png"
+              src="/images/generate.webp"
               alt="generate report"
               width={100}
               height={40}

@@ -1,6 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { userHasSubscriptionBypass } from "@/lib/subscription/bypass";
 import {
   checkAndIncrementUsage,
   FREE_LIMITS,
@@ -74,14 +75,21 @@ export async function POST(
         const user = await prisma.user.findUnique({
           where: { id: userId },
           select: {
+            username: true,
+            email: true,
             subscriptionPlan: true,
             subscriptionPeriodEnd: true,
           },
         });
         const hasPaidBundle =
-          user?.subscriptionPlan === "CLAW_PRO" &&
-          user?.subscriptionPeriodEnd &&
-          new Date(user.subscriptionPeriodEnd) > new Date();
+          (user &&
+            userHasSubscriptionBypass({
+              username: user.username,
+              email: user.email,
+            })) ||
+          (user?.subscriptionPlan === "CLAW_PRO" &&
+            user?.subscriptionPeriodEnd &&
+            new Date(user.subscriptionPeriodEnd) > new Date());
 
         if (!hasPaidBundle) {
           // Free tier: 2 queries per report per day; from 3rd question → paywall
@@ -128,14 +136,21 @@ export async function POST(
         const user = await prisma.user.findUnique({
           where: { id: userId },
           select: {
+            username: true,
+            email: true,
             subscriptionPlan: true,
             subscriptionPeriodEnd: true,
           },
         });
         const hasPaidBundle =
-          user?.subscriptionPlan === "CLAW_PRO" &&
-          user?.subscriptionPeriodEnd &&
-          new Date(user.subscriptionPeriodEnd) > new Date();
+          (user &&
+            userHasSubscriptionBypass({
+              username: user.username,
+              email: user.email,
+            })) ||
+          (user?.subscriptionPlan === "CLAW_PRO" &&
+            user?.subscriptionPeriodEnd &&
+            new Date(user.subscriptionPeriodEnd) > new Date());
 
         if (!hasPaidBundle) {
           // Free tier: count tech vs news user messages in this report's conversation today

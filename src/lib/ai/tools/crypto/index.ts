@@ -10,14 +10,14 @@ export type CryptoToolIntent =
   | {
       kind: "technical_report";
       rawTokenQuery: string;
-      chainHint?: "solana" | "bsc" | "all";
+      chainHint?: "solana" | "ethereum" | "bsc" | "base" | "monad" | "all";
     }
   | {
       kind: "indicator";
       indicatorType: CryptoIndicatorType;
       rawTokenQuery: string;
       timeframe?: string;
-      chainHint?: "solana" | "bsc" | "all";
+      chainHint?: "solana" | "ethereum" | "bsc" | "base" | "monad" | "all";
     };
 
 export type ResolvedToken = {
@@ -51,7 +51,7 @@ export type TechnicalReportResult = {
   metadata?: any;
 };
 
-function stripTickerPrefix(s: string) {
+export function stripTickerPrefix(s: string) {
   return s.replace(/^\$/, "").trim();
 }
 
@@ -86,6 +86,15 @@ function extractAddressFromText(text: string): string | null {
   if (solMatch) return solMatch[0];
 
   return null;
+}
+
+/** True when a technical_report intent was triggered by an explicit mint/contract (not ticker/name heuristics). */
+export function isAddressDrivenTechnicalIntent(
+  intent: CryptoToolIntent | null,
+): boolean {
+  if (!intent || intent.kind !== "technical_report") return false;
+  const q = intent.rawTokenQuery.trim();
+  return looksLikeEvmAddress(q) || looksLikeSolanaAddress(q);
 }
 
 export function detectCryptoToolIntent(
@@ -164,7 +173,12 @@ export function detectCryptoToolIntent(
       lower,
     );
 
-  if (genericAnalysis) {
+  const looksLikePredictionMarketDeepDive =
+    /\bprediction market\b/i.test(lower) ||
+    /\/rexmarkets\/(polymarket|kalshi|limitless)\b/i.test(text) ||
+    /https?:\/\/(?:[a-z0-9-]+\.)?raptorx\.trade\/rexmarkets\//i.test(text);
+
+  if (genericAnalysis && !looksLikePredictionMarketDeepDive) {
     return {
       kind: "technical_report",
       rawTokenQuery,
@@ -180,11 +194,13 @@ export function detectCryptoToolIntent(
       lower,
     )
   ) {
-    return {
-      kind: "technical_report",
-      rawTokenQuery,
-      chainHint: "all",
-    };
+    if (!looksLikePredictionMarketDeepDive) {
+      return {
+        kind: "technical_report",
+        rawTokenQuery,
+        chainHint: "all",
+      };
+    }
   }
 
   // -----------------------------
@@ -206,7 +222,7 @@ export function detectCryptoToolIntent(
 export async function resolveTokenFromQuery(opts: {
   baseUrl: string;
   rawTokenQuery: string;
-  chainHint?: "solana" | "bsc" | "all";
+  chainHint?: "solana" | "ethereum" | "bsc" | "base" | "monad" | "all";
 }): Promise<ResolvedToken | null> {
   const chain = opts.chainHint || "all";
   const qRaw = stripTickerPrefix(opts.rawTokenQuery);
@@ -342,6 +358,8 @@ export async function fetchTechnicalReport(opts: {
   ticker: string;
   projectName?: string;
   forceRefresh?: boolean;
+  /** Matches generate-report body `chain` (e.g. solana, base, bsc, monad). */
+  chain?: string;
 }): Promise<TechnicalReportResult> {
   const req = new Request("http://internal/api/generate-report", {
     method: "POST",
@@ -351,6 +369,7 @@ export async function fetchTechnicalReport(opts: {
       ticker: opts.ticker,
       projectName: opts.projectName,
       forceRefresh: opts.forceRefresh ?? false,
+      ...(opts.chain ? { chain: opts.chain } : {}),
     }),
   });
   const res = await generateReportPOST(req as any);
@@ -358,11 +377,12 @@ export async function fetchTechnicalReport(opts: {
   if (!res.ok) {
     throw new Error(json?.error || `Generate report failed (${res.status})`);
   }
+  const meta = json?.metadata as any;
   return {
-    contractAddress: opts.contractAddress,
-    ticker: opts.ticker,
-    projectName: opts.projectName,
-    chain: json?.metadata?.chain,
+    contractAddress: meta?.contractAddress ?? opts.contractAddress,
+    ticker: meta?.ticker ?? opts.ticker,
+    projectName: meta?.projectName ?? opts.projectName,
+    chain: meta?.chain,
     report: json?.report || "",
     tokenData: json?.tokenData,
     tweets: json?.tweets,
@@ -372,11 +392,114 @@ export async function fetchTechnicalReport(opts: {
   };
 }
 
+/** Same as /api/generate-report with `stream: true` — streams DeepSeek tokens via SSE (RexScreener-compatible). */
+export async function fetchTechnicalReportStream(opts: {
+  userId: string;
+  contractAddress: string;
+  ticker: string;
+  projectName?: string;
+  forceRefresh?: boolean;
+  /** Optional chain hint (e.g. base) forwarded to generate-report. */
+  explicitChain?: string;
+  onToken: (text: string) => void;
+}): Promise<TechnicalReportResult> {
+  const req = new Request("http://internal/api/generate-report", {
+    method: "POST",
+    headers: { "content-type": "application/json", "x-user-id": opts.userId },
+    body: JSON.stringify({
+      contractAddress: opts.contractAddress,
+      ticker: opts.ticker,
+      projectName: opts.projectName,
+      forceRefresh: opts.forceRefresh ?? false,
+      stream: true,
+      ...(opts.explicitChain ? { chain: opts.explicitChain } : {}),
+    }),
+  });
+  const res = await generateReportPOST(req as any);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as any)?.error || `Generate report failed (${res.status})`);
+  }
+  const reader = res.body?.getReader();
+  if (!reader) {
+    throw new Error("Generate report stream missing body");
+  }
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let donePayload: any = null;
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+    for (const block of parts) {
+      const line = block.trim();
+      if (!line.startsWith("data: ")) continue;
+      let data: {
+        type?: string;
+        text?: string;
+        message?: string;
+        report?: string;
+        metadata?: any;
+        tokenData?: any;
+        tweets?: any;
+        holderAnalytics?: any;
+        securityAnalytics?: any;
+      };
+      try {
+        data = JSON.parse(line.slice(6));
+      } catch {
+        continue;
+      }
+      if (data.type === "token" && data.text) opts.onToken(data.text);
+      if (data.type === "done") donePayload = data;
+      if (data.type === "error") {
+        throw new Error(data.message || "Report stream error");
+      }
+    }
+  }
+
+  if (!donePayload) {
+    throw new Error("Report stream ended unexpectedly");
+  }
+  const meta = donePayload.metadata as any;
+  return {
+    contractAddress: meta?.contractAddress ?? opts.contractAddress,
+    ticker: meta?.ticker ?? opts.ticker,
+    projectName: meta?.projectName ?? opts.projectName,
+    chain: meta?.chain,
+    report: String(donePayload.report || ""),
+    tokenData: donePayload.tokenData,
+    tweets: donePayload.tweets,
+    holderAnalytics: donePayload.holderAnalytics,
+    securityAnalytics: donePayload.securityAnalytics,
+    metadata: donePayload.metadata,
+  };
+}
+
+function trendingChainFromUiClaw(
+  chain: "solana" | "ethereum" | "base" | "bnb" | "monad",
+): "solana" | "ethereum" | "bsc" | "base" | "monad" {
+  return chain === "bnb" ? "bsc" : chain;
+}
+
+function reportChainFromUiClaw(
+  chain: "solana" | "ethereum" | "base" | "bnb" | "monad"
+): string {
+  return chain === "bnb" ? "bsc" : chain;
+}
+
 export async function getCryptoToolOutputsForQuery(opts: {
   baseUrl: string;
   userId: string;
   userText: string;
   forceRefresh?: boolean;
+  /** When set (Claw Crypto tab + chain), resolution and reports stay on this network. */
+  forcedUiCryptoChain?: "solana" | "ethereum" | "base" | "bnb" | "monad";
+  /** When set, full reports stream tokens (e.g. Claw NDJSON reportDelta) instead of blocking on JSON. */
+  onTechnicalReportToken?: (text: string) => void;
 }): Promise<
   | { kind: "none" }
   | { kind: "needs_token"; reason: string }
@@ -396,10 +519,31 @@ export async function getCryptoToolOutputsForQuery(opts: {
   const intent = detectCryptoToolIntent(opts.userText);
   if (!intent) return { kind: "none" };
 
+  const forcedTrending = opts.forcedUiCryptoChain
+    ? trendingChainFromUiClaw(opts.forcedUiCryptoChain)
+    : undefined;
+  const forcedReportChain = opts.forcedUiCryptoChain
+    ? reportChainFromUiClaw(opts.forcedUiCryptoChain)
+    : undefined;
+
+  const resolveChainHint:
+    | "solana"
+    | "ethereum"
+    | "bsc"
+    | "base"
+    | "monad"
+    | "all" =
+    forcedTrending ??
+    (intent.chainHint === "bsc"
+      ? "bsc"
+      : intent.chainHint === "solana"
+        ? "solana"
+        : "all");
+
   const token = await resolveTokenFromQuery({
     baseUrl: opts.baseUrl,
     rawTokenQuery: intent.rawTokenQuery,
-    chainHint: intent.chainHint,
+    chainHint: resolveChainHint,
   });
 
   if (!token) {
@@ -416,15 +560,39 @@ export async function getCryptoToolOutputsForQuery(opts: {
       stripTickerPrefix(intent.rawTokenQuery) ||
       ""
     ).toString();
-    const report = await fetchTechnicalReport({
-      baseUrl: opts.baseUrl,
-      userId: opts.userId,
-      contractAddress: token.tokenAddress,
-      ticker,
-      projectName: token.name,
-      forceRefresh: opts.forceRefresh ?? false,
-    });
-    return { kind: "technical_report", intent, token, report };
+    const report = opts.onTechnicalReportToken
+      ? await fetchTechnicalReportStream({
+          userId: opts.userId,
+          contractAddress: token.tokenAddress,
+          ticker,
+          projectName: token.name,
+          forceRefresh: opts.forceRefresh ?? false,
+          explicitChain: forcedReportChain,
+          onToken: opts.onTechnicalReportToken,
+        })
+      : await fetchTechnicalReport({
+          baseUrl: opts.baseUrl,
+          userId: opts.userId,
+          contractAddress: token.tokenAddress,
+          ticker,
+          projectName: token.name,
+          forceRefresh: opts.forceRefresh ?? false,
+          ...(forcedReportChain ? { chain: forcedReportChain } : {}),
+        });
+    // Align Claw embed with cached Rex report (correct ticker/chain after contract-only DB hit).
+    const displayToken = {
+      ...token,
+      tokenAddress: report.contractAddress || token.tokenAddress,
+      chainId: report.chain || token.chainId,
+      symbol: report.ticker || token.symbol,
+      name: report.projectName ?? token.name,
+    };
+    return {
+      kind: "technical_report",
+      intent,
+      token: displayToken,
+      report,
+    };
   }
 
   const analysis = await fetchTechnicalAnalysis({
@@ -454,7 +622,10 @@ export function getCryptoOpenRouterTools() {
               description:
                 "Ticker like SOL, a name, or a mint/contract address.",
             },
-            chain: { type: "string", enum: ["solana", "bsc", "all"] },
+            chain: {
+              type: "string",
+              enum: ["solana", "ethereum", "bsc", "base", "monad", "all"],
+            },
           },
           required: ["query"],
         },
@@ -511,6 +682,8 @@ export async function runCryptoToolAgent(_opts: {
   userId: string;
   userText: string;
   forceRefresh?: boolean;
+  forcedUiCryptoChain?: "solana" | "ethereum" | "base" | "bnb" | "monad";
+  onTechnicalReportToken?: (text: string) => void;
 }) {
   // For now we use deterministic keyword routing via detectCryptoToolIntent().
   // This keeps behavior stable and aligns with the UX of your existing buttons.
@@ -519,5 +692,7 @@ export async function runCryptoToolAgent(_opts: {
     userId: _opts.userId,
     userText: _opts.userText,
     forceRefresh: _opts.forceRefresh ?? false,
+    forcedUiCryptoChain: _opts.forcedUiCryptoChain,
+    onTechnicalReportToken: _opts.onTechnicalReportToken,
   });
 }

@@ -80,13 +80,13 @@ Analyze sentiment from Twitter, community channels, and user chatter based on th
 
 Example style: "The community on X are bullishly rallying around $AURA. 24-hour timeline shows activity that has picked up where engagement has 5X'd with people calling for all sorts of high valuations. While the majority of emotions are bullishly high, some request to exercise caution due to bundling, etc."
 
-## 5. Individual Tweets
+## 5. Top Tweets
 Show the **5 most relevant tweets** based on engagement from the provided tweets data. For each tweet, format as:
 **@Username:** Tweet content
 - Extract individual tweets from the tweetsData array provided
 - Include usernames, tweet content, and media when available
 - Prioritize tweets containing the ticker, contract address, or project name
-- If no tweets provided, state "No tweet data available for analysis"
+- If no tweets in input, write one brief line that tweet cards load from live data when the user refreshes the report (do not use the phrase "No tweet data available for analysis")
 
 ## 6. Coin-O-Metry
 Present key statistics in a structured format:
@@ -493,7 +493,7 @@ ${JSON.stringify(securityAnalytics, null, 2)}`
 - Follow the exact report structure outlined in the system prompt
 - Include all available stats, links, and relevant insights
 - Analyze the tweets for sentiment, trends, and key mentions in the Community Chatter section
-- For Individual Tweets section, extract and format the 5 most relevant tweets from the provided data
+- For Top Tweets section, extract and format the 5 most relevant tweets from the provided data
 - ${
       holderAnalytics
         ? "Include the Holder Analytics section with comprehensive analysis of the provided holder data"

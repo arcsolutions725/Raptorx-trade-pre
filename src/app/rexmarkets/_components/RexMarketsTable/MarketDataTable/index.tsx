@@ -20,6 +20,16 @@ import {
 } from "@/hooks/useKalashiMarkets";
 import { usePolymarketMarkets } from "@/hooks/usePolymarketMarkets";
 import { useLimitlessMarkets } from "@/hooks/useLimitlessMarkets";
+import { useMyriadMarkets } from "@/hooks/useMyriadMarkets";
+import { usePredictFunMarkets } from "@/hooks/usePredictFunMarkets";
+import { usePredictFunNavigation } from "@/hooks/usePredictFunNavigation";
+import {
+  PREDICT_FUN_DEFAULT_CATEGORY_VALUE,
+  predictFunLabelFromValue,
+  predictFunTagIdFromLabel,
+  predictFunTagIdFromValue,
+} from "@/lib/predictfun/navigation";
+import { sortLimitlessMarketsByVolumeDesc } from "@/lib/limitless/sortMarketsByVolume";
 import { useLimitlessNavigation } from "@/hooks/useLimitlessNavigation";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import TableHeader from "./TableHeader";
@@ -27,9 +37,15 @@ import TableRow from "./TableRow";
 import MarketCategory from "./MarketCategory";
 import PageLoaderOverlay from "@/components/PageLoaderOverlay";
 import RexMarketsSearch from "../RexMarketsSearch";
-import { useTopbar } from "@/contexts/TopbarContext";
-import { Search, X } from "lucide-react";
+import RexMarketsCardView from "./RexMarketsCardView";
+import {
+  getRexmarketsDetailHref,
+  getMarketReportGenKey,
+} from "@/lib/rexmarkets/marketRoutes";
+import { LayoutGrid, Search, Table, X } from "lucide-react";
 import PolymarketTradingInterface from "../../RexMarketsReport/RexMarketsReportData/PolymarketTradingInterface";
+
+type MarketsLayoutView = "table" | "card";
 
 type RowsPerPageSelectProps = {
   value: number;
@@ -156,7 +172,6 @@ export default function MarketDataTable({
     totalVolume: number;
     eventId?: string;
   } | null>(null);
-  const { isTopbarVisible } = useTopbar();
   const { dataSource } = useDataSource();
   const isAllMode = dataSource === "all";
   const [category, setCategory] = useState<CategoryType | string>("all");
@@ -165,6 +180,7 @@ export default function MarketDataTable({
     string | null
   >(null);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [layoutView, setLayoutView] = useState<MarketsLayoutView>("table");
 
   // Extract source and tag from tag string in "all" mode
   const { kalshiTag, polymarketTag, limitlessTag, kalshiCategory, polymarketCategory, limitlessCategory } = useMemo(() => {
@@ -281,6 +297,47 @@ export default function MarketDataTable({
     dataSource === "limitless" || dataSource === "all"
   );
 
+  const myriadTopic =
+    dataSource === "myriad" ? (originalCategoryName ?? undefined) : undefined;
+
+  const myriadMarkets = useMyriadMarkets(
+    myriadTopic ?? null,
+    searchQuery ?? null,
+    dataSource === "myriad"
+  );
+
+  const { nameToTagId: predictFunNameToTagId } = usePredictFunNavigation(
+    dataSource === "predictfun"
+  );
+
+  const predictfunTagId = useMemo(() => {
+    if (dataSource !== "predictfun") return null;
+
+    // Sub-tag under a category (e.g. NBA under Sports)
+    const fromSubTag =
+      predictFunTagIdFromValue(tag) ??
+      predictFunTagIdFromLabel(tag) ??
+      (tag ? predictFunNameToTagId[tag.toLowerCase().trim()] : undefined);
+    if (fromSubTag) return fromSubTag;
+
+    // Primary category tab (e.g. predictfun:4 → Sports → GET /categories?tagIds=4)
+    return (
+      predictFunTagIdFromValue(originalCategoryName) ??
+      predictFunTagIdFromLabel(
+        predictFunLabelFromValue(originalCategoryName) ?? originalCategoryName
+      ) ??
+      (originalCategoryName
+        ? predictFunNameToTagId[originalCategoryName.toLowerCase().trim()]
+        : null)
+    );
+  }, [dataSource, tag, originalCategoryName, predictFunNameToTagId]);
+
+  const predictFunMarkets = usePredictFunMarkets(
+    predictfunTagId,
+    searchQuery ?? null,
+    dataSource === "predictfun"
+  );
+
   // Merge markets when in "all" mode, or add source identifier when in single-source mode
   const mergedMarkets = useMemo(() => {
     if (!isAllMode) {
@@ -291,9 +348,21 @@ export default function MarketDataTable({
           _source: "polymarket" as const,
         }));
       } else if (dataSource === "limitless") {
-        return limitlessMarkets.markets.map((market: any) => ({
+        return sortLimitlessMarketsByVolumeDesc(
+          limitlessMarkets.markets.map((market: any) => ({
+            ...market,
+            _source: "limitless" as const,
+          })),
+        );
+      } else if (dataSource === "myriad") {
+        return myriadMarkets.markets.map((market: any) => ({
           ...market,
-          _source: "limitless" as const,
+          _source: "myriad" as const,
+        }));
+      } else if (dataSource === "predictfun") {
+        return predictFunMarkets.markets.map((market: any) => ({
+          ...market,
+          _source: "predictfun" as const,
         }));
       } else {
         // dataSource === "kalshi"
@@ -315,21 +384,31 @@ export default function MarketDataTable({
       _source: "polymarket" as const,
     }));
     
-    const limitlessMarketsWithSource = limitlessMarkets.markets.map((market: any) => ({
-      ...market,
-      _source: "limitless" as const,
-    }));
-    
-    // Sort by volume (24h) descending
+    const limitlessMarketsWithSource = sortLimitlessMarketsByVolumeDesc(
+      limitlessMarkets.markets.map((market: any) => ({
+        ...market,
+        _source: "limitless" as const,
+      })),
+    );
+
+    // Sort by volume (24h) descending — coerce to number for correct ordering
     const combined = [...kalshiMarketsWithSource, ...polymarketMarketsWithSource, ...limitlessMarketsWithSource];
     combined.sort((a, b) => {
-      const volumeA = a.volume_24h || a.volume24hr || a.volume || 0;
-      const volumeB = b.volume_24h || b.volume24hr || b.volume || 0;
+      const volumeA = Number(a.volume_24h ?? a.volume24hr ?? a.volume ?? 0);
+      const volumeB = Number(b.volume_24h ?? b.volume24hr ?? b.volume ?? 0);
       return volumeB - volumeA;
     });
     
     return combined;
-  }, [isAllMode, dataSource, kalshiMarkets.markets, polymarketMarkets.markets, limitlessMarkets.markets]);
+  }, [
+    isAllMode,
+    dataSource,
+    kalshiMarkets.markets,
+    polymarketMarkets.markets,
+    limitlessMarkets.markets,
+    myriadMarkets.markets,
+    predictFunMarkets.markets,
+  ]);
 
   // Select the appropriate data source
   const {
@@ -351,12 +430,25 @@ export default function MarketDataTable({
   } = isAllMode
     ? {
         markets: mergedMarkets,
-        isLoading: kalshiMarkets.isLoading || polymarketMarkets.isLoading || limitlessMarkets.isLoading,
-        isError: kalshiMarkets.isError || polymarketMarkets.isError || limitlessMarkets.isError,
+        isLoading:
+          kalshiMarkets.isLoading ||
+          polymarketMarkets.isLoading ||
+          limitlessMarkets.isLoading,
+        isError:
+          kalshiMarkets.isError ||
+          polymarketMarkets.isError ||
+          limitlessMarkets.isError,
         refetch: async () => {
-          await Promise.all([kalshiMarkets.refetch(), polymarketMarkets.refetch(), limitlessMarkets.refetch()]);
+          await Promise.all([
+            kalshiMarkets.refetch(),
+            polymarketMarkets.refetch(),
+            limitlessMarkets.refetch(),
+          ]);
         },
-        isFetching: kalshiMarkets.isFetching || polymarketMarkets.isFetching || limitlessMarkets.isFetching,
+        isFetching:
+          kalshiMarkets.isFetching ||
+          polymarketMarkets.isFetching ||
+          limitlessMarkets.isFetching,
         pageIndex: Math.max(kalshiMarkets.pageIndex, polymarketMarkets.pageIndex, limitlessMarkets.pageIndex),
         pageSize: Math.max(kalshiMarkets.pageSize, polymarketMarkets.pageSize, limitlessMarkets.pageSize),
         totalPages: undefined, // Combined pagination is complex, so we'll handle it differently
@@ -386,16 +478,26 @@ export default function MarketDataTable({
         isPageLoading: kalshiMarkets.isPageLoading || polymarketMarkets.isPageLoading || limitlessMarkets.isPageLoading,
       }
     : dataSource === "polymarket"
-    ? polymarketMarkets
+    ? { ...polymarketMarkets, markets: mergedMarkets }
     : dataSource === "limitless"
-    ? limitlessMarkets
-    : kalshiMarkets;
+    ? { ...limitlessMarkets, markets: mergedMarkets }
+    : dataSource === "myriad"
+    ? { ...myriadMarkets, markets: mergedMarkets }
+    : dataSource === "predictfun"
+    ? { ...predictFunMarkets, markets: mergedMarkets }
+    : { ...kalshiMarkets, markets: mergedMarkets };
 
   // Reset category and page when data source changes (but not when switching to/from "all")
   useEffect(() => {
     if (dataSource !== "all") {
       setCategory("all");
-      setOriginalCategoryName(null);
+      setOriginalCategoryName(
+        dataSource === "myriad"
+          ? "all"
+          : dataSource === "predictfun"
+            ? PREDICT_FUN_DEFAULT_CATEGORY_VALUE
+            : null
+      );
       setTag(null);
       setPageIndex(1);
     }
@@ -409,42 +511,51 @@ export default function MarketDataTable({
   // --- Refs for scroll synchronization
   const topScrollRef = useRef<HTMLDivElement | null>(null);
   const mainScrollRef = useRef<HTMLDivElement | null>(null);
+  /** Horizontal scroll layer (table view); same pattern as RexScreener for iOS */
+  const horizScrollRef = useRef<HTMLDivElement | null>(null);
+  const headerContentRef = useRef<HTMLDivElement | null>(null);
   const contentRef = useRef<HTMLDivElement | null>(null);
 
   // --- State
   const [ghostWidth, setGhostWidth] = useState(1);
   const [ready, setReady] = useState(false); // when true, allow top bar interaction
+  const syncHeaderScrollPosition = useCallback((left: number) => {
+    if (!headerContentRef.current) return;
+    headerContentRef.current.style.transform = `translateX(-${left}px)`;
+  }, []);
 
   // prevent scroll feedback loops
-  const syncingFrom = useRef<"top" | "main" | null>(null);
+  const syncingFrom = useRef<"top" | "horiz" | null>(null);
 
   // ---- Measuring ----
   const measure = useCallback(() => {
     const content = contentRef.current;
     const main = mainScrollRef.current;
-    if (!content || !main) return;
+    const horiz = horizScrollRef.current;
+    if (!content || !main || !horiz) return;
 
     const widths = [
       content.scrollWidth,
       content.clientWidth,
       content.offsetWidth,
-      main.scrollWidth,
+      horiz.scrollWidth,
+      horiz.clientWidth,
       main.clientWidth,
-      main.offsetWidth,
     ].map((n) => (typeof n === "number" ? n : 0));
     const width = Math.max(...widths, 1);
 
     setGhostWidth(width);
 
-    if (topScrollRef.current && main) {
-      topScrollRef.current.scrollLeft = main.scrollLeft;
+    if (topScrollRef.current && layoutView === "table") {
+      topScrollRef.current.scrollLeft = horiz.scrollLeft;
     }
-  }, []);
+    syncHeaderScrollPosition(horiz.scrollLeft);
+  }, [layoutView, syncHeaderScrollPosition]);
 
   useLayoutEffect(() => {
     measure();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [markets.length, pageSize, pageIndex]);
+  }, [markets.length, pageSize, pageIndex, layoutView]);
 
   const deferredMeasure = useCallback(() => {
     requestAnimationFrame(() => {
@@ -484,46 +595,61 @@ export default function MarketDataTable({
   }, [deferredMeasure]);
 
   const onTopScroll = useCallback((e: UIEvent<HTMLDivElement>) => {
-    if (syncingFrom.current === "main") {
+    if (syncingFrom.current === "horiz") {
       syncingFrom.current = null;
       return;
     }
     const top = e.currentTarget;
-    const main = mainScrollRef.current;
-    if (!main) return;
+    const horiz = horizScrollRef.current;
+    if (!horiz) return;
 
     syncingFrom.current = "top";
-    main.scrollLeft = top.scrollLeft;
+    horiz.scrollLeft = top.scrollLeft;
+    syncHeaderScrollPosition(top.scrollLeft);
     requestAnimationFrame(() => {
       if (syncingFrom.current === "top") syncingFrom.current = null;
     });
   }, []);
 
-  const onMainScroll = useCallback((e: UIEvent<HTMLDivElement>) => {
+  const onHorizScroll = useCallback((e: UIEvent<HTMLDivElement>) => {
+    if (layoutView !== "table") return;
     if (syncingFrom.current === "top") {
       syncingFrom.current = null;
       return;
     }
-    const main = e.currentTarget;
+    const horiz = e.currentTarget;
     const top = topScrollRef.current;
     if (!top) return;
 
-    syncingFrom.current = "main";
-    top.scrollLeft = (main as unknown as HTMLDivElement).scrollLeft;
+    syncingFrom.current = "horiz";
+    top.scrollLeft = horiz.scrollLeft;
+    syncHeaderScrollPosition(horiz.scrollLeft);
     requestAnimationFrame(() => {
-      if (syncingFrom.current === "main") syncingFrom.current = null;
+      if (syncingFrom.current === "horiz") syncingFrom.current = null;
     });
-  }, []);
+  }, [layoutView]);
 
   const handleCategoryChange = useCallback(
     (newCategory: string | null) => {
+      if (dataSource === "predictfun") {
+        setOriginalCategoryName(
+          newCategory && newCategory !== "all"
+            ? newCategory
+            : PREDICT_FUN_DEFAULT_CATEGORY_VALUE
+        );
+        setCategory("all");
+        setTag(null);
+        setPageIndex(1);
+        return;
+      }
+
       if (!newCategory) {
         setOriginalCategoryName(null);
         setCategory("all");
         setPageIndex(1);
         return;
       }
-      
+
       // In "all" mode, keep the normalized category name for Polymarket
       // but also map it for Kalshi
       if (isAllMode) {
@@ -539,7 +665,7 @@ export default function MarketDataTable({
       }
       setPageIndex(1);
     },
-    [setPageIndex, isAllMode]
+    [setPageIndex, isAllMode, dataSource]
   );
 
   const handleTagChange = useCallback(
@@ -550,36 +676,27 @@ export default function MarketDataTable({
     [setPageIndex]
   );
 
-  // Need to fix in here
   const handleMarketClick = useCallback(
-    (m: { event_ticker?: string; ticker?: string; slug?: string; id?: string; title: string; volume?: number; volume24hr?: number; _source?: "kalshi" | "polymarket" | "limitless" }) => {
-      const ticker = m.event_ticker || m.ticker || "";
-      const slug = (m as any).slug || ""; // Polymarket and Limitless markets have slug field
+    (m: {
+      event_ticker?: string;
+      ticker?: string;
+      slug?: string;
+      id?: string;
+      title: string;
+      volume?: number;
+      volume24hr?: number;
+      _source?: "kalshi" | "polymarket" | "limitless" | "myriad" | "predictfun";
+    }) => {
+      const href = getRexmarketsDetailHref(m as any, dataSource);
+      if (href) {
+        router.push(href);
+        return;
+      }
+      const ticker = getMarketReportGenKey(m as any);
       const volume = m.volume || m.volume24hr || 0;
-      const eventId = m.id; // For Polymarket and Limitless markets, this is the event ID
-      
-      // Check market source
-      const marketSource = m._source || dataSource;
-      const isPolymarket = marketSource === "polymarket" || (dataSource === "all" && eventId && marketSource !== "limitless" && marketSource !== "kalshi");
-      const isKalshi = marketSource === "kalshi" || (dataSource === "all" && !eventId && ticker && marketSource !== "limitless" && marketSource !== "polymarket");
-      const isLimitless = marketSource === "limitless" || (dataSource === "all" && eventId && marketSource !== "polymarket" && marketSource !== "kalshi");
-      
-      if (isPolymarket && (slug || ticker)) {
-        // For Polymarket: navigate to dedicated route using slug (preferred) or ticker as fallback
-        const routeParam = slug || ticker;
-        router.push(`/rexmarkets/polymarket/${routeParam}`);
-      } else if (isKalshi && ticker) {
-        // For Kalshi: navigate to dedicated route using event_ticker
-        router.push(`/rexmarkets/kalshi/${ticker}`);
-      } else if (isLimitless && (slug || ticker)) {
-        // For Limitless: navigate to dedicated route using slug (preferred) or ticker as fallback
-        const routeParam = slug || ticker;
-        router.push(`/rexmarkets/limitless/${routeParam}`);
-      } else {
-        // Fallback: use original behavior (just open sidebar)
-        if (onMarketSelected) {
-          onMarketSelected(ticker, m.title, volume, eventId);
-        }
+      const eventId = m.id != null ? String(m.id) : undefined;
+      if (onMarketSelected) {
+        onMarketSelected(ticker, m.title, volume, eventId);
       }
     },
     [onMarketSelected, dataSource, router]
@@ -684,7 +801,7 @@ export default function MarketDataTable({
   }
 
   return (
-    <div className="w-full h-full flex flex-col overflow-hidden pb-4">
+    <div className="w-full h-full flex flex-col overflow-hidden min-h-0">
       <div className="flex-shrink-0 mb-4 pt-3 px-3 sm:px-6">
         {/* Desktop: category + search side by side */}
         <div className="hidden sm:flex flex-col sm:flex-row items-start sm:items-start gap-4 sm:gap-6">
@@ -696,11 +813,49 @@ export default function MarketDataTable({
               selectedTag={tag}
             />
           </div>
-          <div className="w-full sm:w-[300px] sm:flex-shrink-0">
-            <RexMarketsSearch
-              onSearch={onSearchChange}
-              searchQuery={searchQuery}
-            />
+          <div className="w-full sm:w-auto sm:max-w-[320px] md:max-w-[360px] sm:shrink-0">
+            <div className="flex items-center gap-2">
+              <div className="flex-1 min-w-0">
+                <RexMarketsSearch
+                  onSearch={onSearchChange}
+                  searchQuery={searchQuery}
+                />
+              </div>
+              <div
+                className="flex w-fit shrink-0 rounded-md border border-white/15 p-[2px] bg-black/40"
+                role="group"
+                aria-label="Markets layout"
+              >
+                <button
+                  type="button"
+                  onClick={() => setLayoutView("card")}
+                  aria-label="Card view"
+                  title="Card view"
+                  className={clsx(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] transition",
+                    layoutView === "card"
+                      ? "bg-[#FFD700] text-black"
+                      : "text-white/70 hover:text-white"
+                  )}
+                >
+                  <LayoutGrid className="size-3.5" strokeWidth={2} aria-hidden />
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setLayoutView("table")}
+                  aria-label="Table view"
+                  title="Table view"
+                  className={clsx(
+                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] transition",
+                    layoutView === "table"
+                      ? "bg-[#FFD700] text-black"
+                      : "text-white/70 hover:text-white"
+                  )}
+                >
+                  <Table className="size-3.5" strokeWidth={2} aria-hidden />
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -729,6 +884,40 @@ export default function MarketDataTable({
             >
               <Search className="w-6 h-6" />
             </button>
+            <div
+              className="flex-shrink-0 mt-1 flex rounded-md border border-white/15 p-[2px] bg-black/40"
+              role="group"
+              aria-label="Markets layout"
+            >
+              <button
+                type="button"
+                onClick={() => setLayoutView("card")}
+                aria-label="Card view"
+                title="Card view"
+                className={clsx(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] transition",
+                  layoutView === "card"
+                    ? "bg-[#FFD700] text-black"
+                    : "text-white/70 hover:text-white"
+                )}
+              >
+                <LayoutGrid className="size-3.5" strokeWidth={2} aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayoutView("table")}
+                aria-label="Table view"
+                title="Table view"
+                className={clsx(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] transition",
+                  layoutView === "table"
+                    ? "bg-[#FFD700] text-black"
+                    : "text-white/70 hover:text-white"
+                )}
+              >
+                <Table className="size-3.5" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
           </div>
 
           {/* Row 2: Full-width search bar + close (slides in from right when open) */}
@@ -744,6 +933,40 @@ export default function MarketDataTable({
                 searchQuery={searchQuery}
               />
             </div>
+            <div
+              className="flex w-fit shrink-0 rounded-md border border-white/15 p-[2px] bg-black/40"
+              role="group"
+              aria-label="Markets layout"
+            >
+              <button
+                type="button"
+                onClick={() => setLayoutView("card")}
+                aria-label="Card view"
+                title="Card view"
+                className={clsx(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] transition",
+                  layoutView === "card"
+                    ? "bg-[#FFD700] text-black"
+                    : "text-white/70 hover:text-white"
+                )}
+              >
+                <LayoutGrid className="size-3.5" strokeWidth={2} aria-hidden />
+              </button>
+              <button
+                type="button"
+                onClick={() => setLayoutView("table")}
+                aria-label="Table view"
+                title="Table view"
+                className={clsx(
+                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] transition",
+                  layoutView === "table"
+                    ? "bg-[#FFD700] text-black"
+                    : "text-white/70 hover:text-white"
+                )}
+              >
+                <Table className="size-3.5" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
             <button
               type="button"
               onClick={() => setMobileSearchOpen(false)}
@@ -756,11 +979,17 @@ export default function MarketDataTable({
         </div>
       </div>
 
-      <div className="flex-1 min-h-0 relative flex flex-col h-[calc(100vh-450px)] sm:h-[calc(100vh-355px)]">
+      <div className="flex-1 min-h-0 relative flex flex-col">
         {/* Show PageLoaderOverlay for Kalshi (pagination and category changes) */}
         {/* For Polymarket and Limitless, only show when fetching data after category change (not pagination) */}
         {(dataSource === "kalshi" && (isPageLoading || (isFetching && markets.length > 0))) ||
-        ((dataSource === "polymarket" || dataSource === "limitless") && isFetching && markets.length > 0 && !isPageLoading) ? (
+        ((dataSource === "polymarket" ||
+          dataSource === "limitless" ||
+          dataSource === "myriad" ||
+          dataSource === "predictfun") &&
+          isFetching &&
+          markets.length > 0 &&
+          !isPageLoading) ? (
           <PageLoaderOverlay />
         ) : null}
 
@@ -788,58 +1017,114 @@ export default function MarketDataTable({
           </div>
         )}
 
-        {/* Always-visible top scrollbar */}
-        <div
-          ref={topScrollRef}
-          className={clsx(
-            "sticky top-0 z-10 custom-hscroll-top bg-black/0 h-[16px] overflow-x-scroll overflow-y-hidden",
-            ready ? null : "pointer-events-none opacity-80"
-          )}
-          onScroll={onTopScroll}
-          aria-hidden="true"
-          style={{ scrollbarGutter: "stable both-edges" as any }}
-        >
-          <div style={{ width: ghostWidth, height: 1 }} />
-        </div>
+        {/* Desktop: synced horizontal scrollbar (table only); hidden on phones like RexScreener */}
+        {layoutView === "table" ? (
+          <div
+            ref={topScrollRef}
+            className={clsx(
+              "custom-hscroll-top z-10 hidden shrink-0 overflow-x-scroll overflow-y-hidden bg-black/0 lg:block lg:h-[16px]",
+              ready ? null : "pointer-events-none opacity-80"
+            )}
+            onScroll={onTopScroll}
+            aria-hidden="true"
+            style={{
+              scrollbarGutter: "stable both-edges" as any,
+              WebkitOverflowScrolling: "touch",
+              overscrollBehavior: "contain",
+              touchAction: "pan-x",
+            }}
+          >
+            <div style={{ width: ghostWidth, height: 1 }} />
+          </div>
+        ) : null}
 
-        {/* Main scrollable table area */}
+        {/* Vertical outer + horizontal inner (table); single column scroll (card) */}
         <div
           ref={mainScrollRef}
-          className="relative flex-1 overflow-y-auto overflow-x-auto hide-vert-scroll hide-bottom-hscroll"
-          onScroll={onMainScroll}
+          className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden hide-vert-scroll touch-manipulation"
+          style={{
+            WebkitOverflowScrolling: "touch",
+            overscrollBehaviorY: "contain",
+          }}
         >
-          <div ref={contentRef} className="align-top w-full">
-            <TableHeader showSourceColumn={false} />
-
-            {!isLoading && !isError && markets.length === 0 && (
-              <div className="p-4 text-white/70">No markets found.</div>
-            )}
-
-            {!isLoading && !isError && markets.length > 0 && (
-              <div className="divide-y divide-white/10 w-full">
-                {markets.map((market, i) => (
-                  <TableRow
-                    key={`${market._source || dataSource}-${market.ticker || market.id}`}
-                    market={market}
-                    onMarketClick={handleMarketClick}
-                    onReportGenerated={onReportGenerated}
-                    currentUserId={currentUserId}
-                    index={i}
-                    showSourceColumn={false}
-                    showSourceLogo={isAllMode}
-                  />
-                ))}
+          {layoutView === "table" ? (
+            <div className="sticky top-0 z-40 overflow-hidden bg-black/95 backdrop-blur-sm">
+              <div
+                ref={headerContentRef}
+                className="will-change-transform"
+                style={{
+                  width: ghostWidth,
+                  transform: "translateX(0px)",
+                }}
+              >
+                <TableHeader showSourceColumn={false} />
               </div>
+            </div>
+          ) : null}
+
+          <div
+            ref={horizScrollRef}
+            className={clsx(
+              "min-w-0 w-full overflow-y-visible",
+              layoutView === "table"
+                ? "hide-bottom-hscroll overflow-x-auto"
+                : "hide-bottom-hscroll overflow-x-hidden"
             )}
+            onScroll={layoutView === "table" ? onHorizScroll : undefined}
+            style={{
+              WebkitOverflowScrolling: "touch",
+              ...(layoutView === "table"
+                ? { overscrollBehaviorX: "contain" as const }
+                : {}),
+            }}
+          >
+            <div ref={contentRef} className="align-top w-full">
+              {layoutView === "table" ? (
+                <>
+                  {!isLoading && !isError && markets.length === 0 && (
+                    <div className="p-4 text-white/70">No markets found.</div>
+                  )}
+
+                  {!isLoading && !isError && markets.length > 0 && (
+                    <div className="divide-y divide-white/10 w-full">
+                      {markets.map((market, i) => (
+                        <TableRow
+                          key={`${market._source || dataSource}-${market.ticker || market.id}`}
+                          market={market}
+                          onMarketClick={handleMarketClick}
+                          onMarketSelected={onMarketSelected}
+                          onReportGenerated={onReportGenerated}
+                          currentUserId={currentUserId}
+                          index={i}
+                          showSourceColumn={false}
+                          showSourceLogo={isAllMode}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </>
+              ) : (
+                <>
+                  {!isLoading && !isError && markets.length === 0 && (
+                    <div className="p-4 text-white/70">No markets found.</div>
+                  )}
+                  {!isLoading && !isError && markets.length > 0 && (
+                    <RexMarketsCardView
+                      markets={markets as any}
+                      onMarketClick={handleMarketClick as any}
+                      onMarketSelected={onMarketSelected}
+                      onReportGenerated={onReportGenerated}
+                      currentUserId={currentUserId}
+                    />
+                  )}
+                </>
+              )}
+            </div>
           </div>
         </div>
       </div>
 
-      <div className={`flex-shrink-0 flex flex-col gap-3 text-sm text-white/80 px-2 sm:px-4 pt-4 ${
-        isTopbarVisible 
-          ? "pb-[90px] sm:pb-[65px]"
-          : "pb-[80px] sm:pb-[55px]"
-      }`}>
+      <div className="flex-shrink-0 flex flex-col gap-3 text-sm text-white/80 px-2 sm:px-4 pt-3 pb-2">
         <div className="flex flex-col sm:justify-between sm:flex-row lg:items-center gap-3">
           <div className="flex flex-row justify-between sm:items-center gap-2 sm:gap-3">
             <div className="flex items-center gap-2">

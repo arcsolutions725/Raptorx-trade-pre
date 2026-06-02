@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import { ChevronDown, ChevronRight, Square } from "lucide-react";
 import {
   useMarketDetails,
   useMarketSummary,
@@ -16,7 +16,38 @@ import {
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { usePathname } from "next/navigation";
 import ProbabilityChart from "./shared/ProbabilityChart";
+import LimitlessPriceChart from "./LimitlessTradingInterface/components/Chart/PriceChart";
 import { useLimitlessHistoricalPrice } from "@/hooks/useLimitlessHistoricalPrice";
+import { formatRexPilotChatLines } from "@/lib/formatRexPilotChatLines";
+import {
+  buildMyriadMultiChart,
+  MYRIAD_CHART_INTERVALS,
+  type ChartTimeframeKey,
+} from "@/lib/myriad/parsePriceChart";
+import type {
+  MyriadMarketDetailApi,
+  MyriadOutcomeDetail,
+} from "@/lib/myriad/mapMyriadMarketDetails";
+import {
+  buildPredictFunSingleChart,
+  PREDICT_FUN_CHART_INTERVALS,
+  type PredictFunChartTimeframeKey,
+} from "@/lib/predictfun/parsePriceChart";
+import {
+  buildPredictFunPilotTableOutcomes,
+  getPredictFunChildMarketsFromDetails,
+  selectPredictFunTopChartMarkets,
+} from "@/lib/predictfun/predictFunPilotData";
+import {
+  buildPredictFunCryptoChartContext,
+  isPredictFunCryptoUpDownRaw,
+  resolvePredictFunNumericMarketId,
+} from "@/lib/predictfun/predictFunCryptoMarket";
+import PredictFunCryptoUpDownChart from "./PredictFunTradingInterface/components/PredictFunCryptoUpDownChart";
+import { usePredictFunMultiTimeseries } from "@/hooks/usePredictFunMultiTimeseries";
+import { usePredictFunTimeseries } from "@/hooks/usePredictFunTimeseries";
+import { predictFunDisplayVolumeUsd, predictFunDisplayOutcomeVolume } from "@/lib/predictfun/mapPredictFunMarketRow";
+import { usePredictFunPilotSubMarkets } from "@/hooks/usePredictFunPilotSubMarkets";
 
 // Format price to match RexMarketsTable style: $XX.XX¢
 function formatPrice(price?: number | string): string {
@@ -41,6 +72,20 @@ function formatBidAsk(value?: number | string): string {
   if (numValue < 1 && numValue > 0) return numValue.toFixed(2);
   if (numValue >= 100) return numValue.toFixed(0);
   return numValue.toFixed(1);
+}
+
+/** Predict.fun bid/ask depth: USD notional when > 100, else top-of-book price in cents. */
+function formatPredictFunBidAsk(value?: number | string): string {
+  const numValue = typeof value === "string" ? Number(value) : value;
+  if (typeof numValue !== "number" || !Number.isFinite(numValue) || numValue <= 0) {
+    return "—";
+  }
+  if (numValue > 100) {
+    if (numValue >= 1_000_000) return `$${(numValue / 1_000_000).toFixed(2)}M`;
+    if (numValue >= 1_000) return `$${(numValue / 1_000).toFixed(1)}K`;
+    return `$${Math.round(numValue).toLocaleString()}`;
+  }
+  return formatBidAsk(numValue);
 }
 
 /** Effective liquidity: use API liquidity when > 0, else bid+ask depth as proxy (e.g. Limitless). */
@@ -77,15 +122,23 @@ export default function MarketsData({
   const { dataSource } = useDataSource();
   const pathname = usePathname();
   const isLimitlessRoute = pathname?.startsWith("/rexmarkets/limitless/");
+  const isMyriadRoute = pathname?.startsWith("/rexmarkets/myriad/");
+  const isPredictFunRoute = pathname?.startsWith("/rexmarkets/predict-fun/");
+  const isPredictFun = isPredictFunRoute || dataSource === "predictfun";
   const { marketDetails, isLoading: isLoadingDetails } = useMarketDetails(
     eventTicker || null,
     eventId || null,
-    isLimitlessRoute ? eventTicker ?? null : undefined,
+    isLimitlessRoute || isMyriadRoute || isPredictFun
+      ? eventTicker ?? null
+      : undefined,
   );
 
   const [imageError, setImageError] = useState(false);
   const [probabilityTableExpanded, setProbabilityTableExpanded] = useState(true);
   const [probabilityChartExpanded, setProbabilityChartExpanded] = useState(true);
+  const [myriadChartTf, setMyriadChartTf] = useState<ChartTimeframeKey>("7d");
+  const [predictFunChartTf, setPredictFunChartTf] =
+    useState<PredictFunChartTimeframeKey>("all");
 
   // Chat state
   const [messages, setMessages] = useState<MarketChatMessage[]>([]);
@@ -97,11 +150,17 @@ export default function MarketsData({
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const shouldAutoScrollRef = useRef(true);
   const hadStreamingRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
 
   // Reset image error when market details change
   useEffect(() => {
     setImageError(false);
   }, [marketDetails?.symbol_image_url]);
+
+  useEffect(() => {
+    setMyriadChartTf("7d");
+    setPredictFunChartTf("all");
+  }, [eventTicker]);
 
   // Load chat history from localStorage when eventTicker changes
   useEffect(() => {
@@ -166,10 +225,140 @@ export default function MarketsData({
     }
   }, [inputMessage]);
 
-  // For Limitless, build outcomes from rawEventData.markets (same shape as Kalshi/Polymarket) for table + insights
+  const predictFunChildMarkets = useMemo(
+    () => getPredictFunChildMarketsFromDetails(marketDetails),
+    [marketDetails]
+  );
+
+  const { enrichedChildren: predictFunEnrichedChildren } =
+    usePredictFunPilotSubMarkets(marketDetails, isPredictFun);
+
+  const predictFunRaw = marketDetails?.rawEventData as
+    | (Record<string, unknown> & { parentCategory?: Record<string, unknown> })
+    | undefined;
+
+  const predictFunIsCryptoUpDown = useMemo(() => {
+    const parent = predictFunRaw?.parentCategory;
+    return (
+      isPredictFunCryptoUpDownRaw(predictFunRaw) ||
+      isPredictFunCryptoUpDownRaw(parent)
+    );
+  }, [predictFunRaw]);
+
+  const predictFunCryptoChartContext = useMemo(() => {
+    if (!predictFunIsCryptoUpDown) return null;
+    const parent = predictFunRaw?.parentCategory;
+    const activeMarket =
+      predictFunChildMarkets[0] ??
+      (predictFunRaw as Record<string, unknown> | undefined);
+    return buildPredictFunCryptoChartContext(
+      activeMarket as Record<string, unknown>,
+      parent ?? predictFunRaw
+    );
+  }, [predictFunIsCryptoUpDown, predictFunChildMarkets, predictFunRaw]);
+
+  const predictFunTopChartMarkets = useMemo(
+    () =>
+      predictFunIsCryptoUpDown
+        ? []
+        : selectPredictFunTopChartMarkets(predictFunChildMarkets),
+    [predictFunChildMarkets, predictFunIsCryptoUpDown]
+  );
+
+  const predictFunCategoryMultiChart = predictFunTopChartMarkets.length > 0;
+
+  const predictFunSingleChartMarketId = useMemo(() => {
+    if (!isPredictFun || predictFunCategoryMultiChart) return "";
+    const raw = marketDetails?.rawEventData as Record<string, unknown> | undefined;
+    const parent = raw?.parentCategory as Record<string, unknown> | undefined;
+    return resolvePredictFunNumericMarketId(
+      predictFunChildMarkets[0] as Record<string, unknown>,
+      raw,
+      parent,
+      { id: marketDetails?.ticker }
+    );
+  }, [
+    isPredictFun,
+    predictFunCategoryMultiChart,
+    marketDetails?.rawEventData,
+    marketDetails?.ticker,
+    predictFunChildMarkets,
+  ]);
+
+  const {
+    chartData: predictFunMultiChartData,
+    marketKeys: predictFunMultiMarketKeys,
+    isLoading: predictFunMultiChartLoading,
+    isFetching: predictFunMultiChartFetching,
+  } = usePredictFunMultiTimeseries(
+    predictFunTopChartMarkets,
+    predictFunChartTf,
+    isPredictFun && predictFunCategoryMultiChart
+  );
+
+  const {
+    series: predictFunSingleSeries,
+    isLoading: predictFunSingleChartLoading,
+    isFetching: predictFunSingleChartFetching,
+  } = usePredictFunTimeseries(
+    predictFunSingleChartMarketId || null,
+    predictFunChartTf,
+    isPredictFun && !predictFunCategoryMultiChart && !!predictFunSingleChartMarketId
+  );
+
+  const predictFunSingleChartBuilt = useMemo(() => {
+    const raw = marketDetails?.rawEventData as {
+      outcomes?: { name?: string }[];
+    } | undefined;
+    const outs = Array.isArray(raw?.outcomes) ? raw!.outcomes! : [];
+    const yesIdx = outs.findIndex((o) => /^yes$/i.test(String(o?.name ?? "").trim()));
+    const label = String(outs[yesIdx >= 0 ? yesIdx : 0]?.name ?? "Yes").trim() || "Yes";
+    return buildPredictFunSingleChart(predictFunSingleSeries, predictFunChartTf, label);
+  }, [predictFunSingleSeries, predictFunChartTf, marketDetails?.rawEventData]);
+
+  const predictFunChartLoading = predictFunCategoryMultiChart
+    ? predictFunMultiChartLoading || predictFunMultiChartFetching
+    : predictFunSingleChartLoading || predictFunSingleChartFetching;
+
+  const { chartData: predictFunChartData, marketKeys: predictFunMarketKeys } =
+    useMemo(() => {
+      if (predictFunCategoryMultiChart) {
+        return {
+          chartData: predictFunMultiChartData,
+          marketKeys: predictFunMultiMarketKeys,
+        };
+      }
+      return {
+        chartData: predictFunSingleChartBuilt.chartData,
+        marketKeys: predictFunSingleChartBuilt.marketKeys,
+      };
+    }, [
+      predictFunCategoryMultiChart,
+      predictFunMultiChartData,
+      predictFunMultiMarketKeys,
+      predictFunSingleChartBuilt,
+    ]);
+
+  const predictFunPilotVolumeFormatted = useMemo(() => {
+    const raw = marketDetails?.rawEventData;
+    const vol = predictFunDisplayVolumeUsd(raw);
+    if (!vol) return "$0";
+    if (vol >= 1_000_000) return `$${(vol / 1_000_000).toFixed(2)}M`;
+    if (vol >= 1_000) return `$${(vol / 1_000).toFixed(2)}K`;
+    return `$${vol.toLocaleString()}`;
+  }, [marketDetails?.rawEventData]);
+
+  // For Limitless / Predict.fun, build outcomes from rawEventData for table + insights
   const outcomesForInsightsAndTable = useMemo((): import("@/hooks/useMarketDetails").MarketOutcome[] | null => {
     if (!marketDetails) return null;
     let raw: import("@/hooks/useMarketDetails").MarketOutcome[] | null = null;
+
+    if (isPredictFun) {
+      return buildPredictFunPilotTableOutcomes(
+        marketDetails,
+        predictFunEnrichedChildren
+      );
+    }
 
     if (pathname?.startsWith("/rexmarkets/limitless/")) {
       const rawEvent = (marketDetails as { rawEventData?: {
@@ -250,13 +439,13 @@ export default function MarketsData({
     // Sort by liquidity descending (highest first)
     filtered.sort((a, b) => getEffectiveLiquidity(b) - getEffectiveLiquidity(a));
     return filtered;
-  }, [marketDetails, pathname]);
+  }, [marketDetails, pathname, isPredictFun, predictFunEnrichedChildren]);
 
   // Outcomes for insights: do NOT filter by liquidity so insights still generate when volume/liquidity is $0
   const outcomesForInsights = useMemo((): import("@/hooks/useMarketDetails").MarketOutcome[] | null => {
     if (!marketDetails) return null;
     let raw: import("@/hooks/useMarketDetails").MarketOutcome[] | null = null;
-    if (pathname?.startsWith("/rexmarkets/limitless/")) {
+    if (isPredictFun || pathname?.startsWith("/rexmarkets/limitless/")) {
       const sameAsTable = outcomesForInsightsAndTable;
       return sameAsTable && sameAsTable.length > 0 ? sameAsTable : null;
     }
@@ -264,7 +453,7 @@ export default function MarketsData({
     if (!raw || raw.length === 0) return raw;
     const filtered = raw.filter((o) => !isCompletedMarket(o));
     return filtered.length > 0 ? filtered : raw;
-  }, [marketDetails, pathname, outcomesForInsightsAndTable]);
+  }, [marketDetails, pathname, outcomesForInsightsAndTable, isPredictFun]);
 
   const { summary, isGenerating: isGeneratingSummary } = useMarketSummary(
     marketTitle || marketDetails?.title || null,
@@ -383,10 +572,38 @@ export default function MarketsData({
     return raw?.volumeFormatted;
   }, [isLimitlessRoute, marketDetails]);
 
+  const myriadOutcomes = useMemo((): MyriadOutcomeDetail[] => {
+    if (!isMyriadRoute || !marketDetails) return [];
+    const raw = marketDetails.rawEventData as MyriadMarketDetailApi | undefined;
+    const list = raw?.outcomes;
+    return Array.isArray(list) ? (list as MyriadOutcomeDetail[]) : [];
+  }, [isMyriadRoute, marketDetails]);
+
+  const { chartData: myriadChartData, marketKeys: myriadMarketKeys } = useMemo(
+    () => buildMyriadMultiChart(myriadOutcomes, myriadChartTf),
+    [myriadOutcomes, myriadChartTf],
+  );
+
+  const myriadPilotVolumeFormatted = useMemo(() => {
+    const vol = totalVolume ?? marketDetails?.total_volume ?? 0;
+    if (!vol) return "$0";
+    if (vol >= 1_000_000) return `$${(vol / 1_000_000).toFixed(2)}M`;
+    if (vol >= 1_000) return `$${(vol / 1_000).toFixed(2)}K`;
+    return `$${vol.toLocaleString()}`;
+  }, [totalVolume, marketDetails?.total_volume]);
+
+  const handleStop = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
+
   // Chat message sending
   const handleSend = useCallback(async () => {
     if (!inputMessage.trim() || isSending || !eventTicker || !marketTitle)
       return;
+
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+    let acc = "";
 
     try {
       setIsSending(true);
@@ -427,13 +644,13 @@ export default function MarketsData({
           marketData: marketDetails,
           history,
         }),
+        signal: controller.signal,
       });
 
       if (!resp.ok) throw new Error("Failed to get response");
 
       const reader = resp.body?.getReader();
       const decoder = new TextDecoder();
-      let acc = "";
 
       if (reader) {
         while (true) {
@@ -454,10 +671,32 @@ export default function MarketsData({
       setMessages((prev) => [...prev, assistantMessage]);
       saveMarketChatMessage(eventTicker, marketTitle, assistantMessage);
       setStreamingContent("");
-    } catch (err) {
-      console.error("Chat error:", err);
+    } catch (err: unknown) {
+      const isAbort =
+        (err as { name?: string })?.name === "AbortError" ||
+        (err as { cause?: { name?: string } })?.cause?.name === "AbortError" ||
+        (typeof DOMException !== "undefined" &&
+          err instanceof DOMException &&
+          err.name === "AbortError");
+
+      if (isAbort) {
+        if (acc.trim()) {
+          const assistantMessage: MarketChatMessage = {
+            role: "assistant",
+            content: `${acc.trim()}\n\n_Generation stopped._`,
+            timestamp: new Date().toISOString(),
+          };
+          setMessages((prev) => [...prev, assistantMessage]);
+          saveMarketChatMessage(eventTicker, marketTitle, assistantMessage);
+        }
+        setStreamingContent("");
+      } else {
+        console.error("Chat error:", err);
+      }
     } finally {
+      abortControllerRef.current = null;
       setIsSending(false);
+      setStreamingContent("");
     }
   }, [
     inputMessage,
@@ -473,47 +712,17 @@ export default function MarketsData({
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        handleSend();
+        if (!isSending) handleSend();
       }
     },
-    [handleSend],
+    [handleSend, isSending],
   );
-
-  const formatMessage = (content: string) =>
-    content.split("\n").map((line, i) => {
-      const html = line
-        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-        .replace(/\*(.*?)\*/g, "<strong>$1</strong>")
-        .replace(/^---+$/, "");
-      if (!html.trim()) return null;
-      return (
-        <div key={i} className="mb-2">
-          {html.startsWith("## ") ? (
-            <h3 className="mt-4 mb-2">
-              <span dangerouslySetInnerHTML={{ __html: html.substring(3) }} />
-            </h3>
-          ) : html.startsWith("### ") ? (
-            <h4 className="text-md font-semibold mt-3 mb-1">
-              <span dangerouslySetInnerHTML={{ __html: html.substring(4) }} />
-            </h4>
-          ) : html.startsWith("- ") ? (
-            <div className="ml-4 text-[18px]">
-              • <span dangerouslySetInnerHTML={{ __html: html.substring(2) }} />
-            </div>
-          ) : (
-            <span
-              className="text-[18px]"
-              dangerouslySetInnerHTML={{ __html: html }}
-            />
-          )}
-        </div>
-      );
-    });
 
   // Detect market source from route or marketDetails structure
   const detectedSource = useMemo(() => {
-    const isLimitlessRoute = pathname?.startsWith("/rexmarkets/limitless/");
     if (isLimitlessRoute) return "limitless";
+    if (isMyriadRoute) return "myriad";
+    if (isPredictFun) return "predictfun";
     if (!marketDetails) return dataSource;
 
     // Kalshi markets have ranged_group_name (unique to Kalshi)
@@ -522,44 +731,7 @@ export default function MarketsData({
     if (marketDetails.ticker) return "polymarket";
 
     return dataSource;
-  }, [marketDetails, dataSource, pathname]);
-
-  // Generate external link URL based on detected source
-  const getExternalLinkUrl = (): string | null => {
-    if (!marketDetails || !eventTicker) return null;
-
-    const source = detectedSource;
-
-    if (source === "kalshi") {
-      const seriesTicker = marketDetails.series_ticker || eventTicker;
-      const eventTickerValue = marketDetails.event_ticker || eventTicker;
-      const rangedGroupName = marketDetails.ranged_group_name || "";
-
-      if (!seriesTicker || !eventTickerValue || !rangedGroupName) {
-        return null;
-      }
-
-      // Convert ranged_group_name to kebab-case (e.g., "super bowl" -> "super-bowl")
-      const kebabCaseName = rangedGroupName
-        .toLowerCase()
-        .replace(/\s+/g, "-")
-        .replace(/[^a-z0-9-]/g, "");
-
-      return `https://kalshi.com/markets/${seriesTicker}/${kebabCaseName}/${eventTickerValue}`;
-    } else if (source === "polymarket") {
-      const ticker = marketDetails.ticker || eventTicker;
-      if (!ticker) return null;
-      return `https://polymarket.com/event/${ticker}`;
-    } else if (source === "limitless") {
-      const slug = marketDetails.ticker || eventTicker;
-      if (!slug) return null;
-      return `https://limitless.exchange/markets/${slug}`;
-    }
-
-    return null;
-  };
-
-  const externalLinkUrl = getExternalLinkUrl();
+  }, [marketDetails, dataSource, isLimitlessRoute, isMyriadRoute, isPredictFun]);
 
   // Show placeholder when no market is selected
   if (!eventTicker || !marketTitle) {
@@ -601,7 +773,7 @@ export default function MarketsData({
   // Show market details (for both Kalshi and Polymarket markets in sidebar)
   return (
     <div
-      className="text-white flex flex-col h-full relative overflow-hidden min-h-0"
+      className="rex-pilot-panel text-white flex flex-col h-full relative overflow-hidden min-h-0"
       style={{
         maxHeight: "100dvh", // Use dynamic viewport height for mobile
       }}
@@ -640,74 +812,9 @@ export default function MarketsData({
               </div>
             )}
             <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-3 mb-2 flex-wrap">
-                <h1 className="text-2xl font-bold text-[#ffc000] break-words">
+              <div className="mb-2">
+                <h1 className="rex-pilot-market-title break-words">
                   {marketTitle}
-                  {externalLinkUrl && (
-                    <>
-                      {" "}
-                      <button
-                        className={`inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-md font-semibold text-xs transition-all duration-200 hover:scale-105 shadow-md align-middle ${
-                          detectedSource === "kalshi"
-                            ? "bg-gradient-to-r from-[#09C285] to-[#07A875] hover:from-[#007A5E] hover:to-[#006B52] text-white border border-[#0AE09A]/20"
-                            : detectedSource === "limitless"
-                              ? "bg-black text-white border border-black/20"
-                              : "bg-gradient-to-r from-[#265CFF] to-[#1E4DD9] hover:from-[#1A4BCC] hover:to-[#1539A8] text-white border border-[#4A7AFF]/20"
-                        }`}
-                      aria-label={`View on ${
-                        detectedSource === "kalshi"
-                          ? "Kalshi"
-                          : detectedSource === "limitless"
-                            ? "Limitless"
-                            : "Polymarket"
-                      }`}
-                      title={`View on ${
-                        detectedSource === "kalshi"
-                          ? "Kalshi"
-                          : detectedSource === "limitless"
-                            ? "Limitless"
-                            : "Polymarket"
-                      }`}
-                    >
-                      {detectedSource === "kalshi" ? (
-                        <>
-                          <span className="text-white font-bold text-base">
-                            K
-                          </span>
-                          <span className="hidden sm:inline font-medium text-xs">
-                            Kalshi
-                          </span>
-                        </>
-                      ) : detectedSource === "limitless" ? (
-                        <>
-                          <Image
-                            src="/images/limitless-logo.png"
-                            alt="Limitless"
-                            width={14}
-                            height={14}
-                            className="w-[14px] h-[14px]"
-                          />
-                          <span className="hidden sm:inline font-medium text-xs">
-                            Limitless
-                          </span>
-                        </>
-                      ) : (
-                        <>
-                          <Image
-                            src="/images/polymarket.png"
-                            alt="Polymarket"
-                            width={14}
-                            height={14}
-                            className="w-[14px] h-[14px]"
-                          />
-                          <span className="hidden sm:inline font-medium text-xs">
-                            Polymarket
-                          </span>
-                        </>
-                      )}
-                    </button>
-                    </>
-                  )}
                 </h1>
               </div>
             </div>
@@ -716,17 +823,22 @@ export default function MarketsData({
 
         {/* Situation Brief Section */}
         <div className="flex-shrink-0 pb-6">
-          <p className="!text-[18px] font-semibold text-white mb-3">
-            Situation{" "}
-            <span className="font-semibold text-[#ffc000]">Brief:</span>
+          <p className="rex-pilot-section-heading mb-3">
+            Situation Brief:
           </p>
           <div className="">
             {isGeneratingSummary ? (
-              <div className="text-white/60 italic">Generating summary...</div>
+              <div className="text-white/60 italic text-[15px] leading-[1.65]">
+                Generating summary...
+              </div>
             ) : summary ? (
-              <p className="text-white/90 leading-relaxed">{summary}</p>
+              <div className="rex-pilot-body-text">
+                {formatRexPilotChatLines(summary)}
+              </div>
             ) : (
-              <p className="text-white/60 italic">No summary available</p>
+              <p className="text-white/60 italic text-[15px] leading-[1.65]">
+                No summary available
+              </p>
             )}
           </div>
         </div>
@@ -809,17 +921,27 @@ export default function MarketsData({
                           </td>
                           <td className="px-3 py-3 text-white whitespace-nowrap">
                             {(
-                              (outcome.volume_24h ?? outcome.volume) ?? 0
-                            ).toLocaleString()}
+                              isPredictFun
+                                ? predictFunDisplayOutcomeVolume(outcome)
+                                : (outcome.volume_24h ?? outcome.volume) ?? 0
+                            ).toLocaleString(undefined, {
+                              maximumFractionDigits: isPredictFun ? 0 : undefined,
+                            })}
                           </td>
                           <td className="px-3 py-3 text-white whitespace-nowrap">
-                            {formatBidAsk(outcome.yes_bid)}
+                            {(isPredictFun
+                              ? formatPredictFunBidAsk
+                              : formatBidAsk)(outcome.yes_bid)}
                           </td>
                           <td className="px-3 py-3 text-white whitespace-nowrap">
-                            {formatBidAsk(outcome.yes_ask)}
+                            {(isPredictFun
+                              ? formatPredictFunBidAsk
+                              : formatBidAsk)(outcome.yes_ask)}
                           </td>
                           <td className="px-3 py-3 text-white whitespace-nowrap">
-                            {(outcome.liquidity || 0).toLocaleString()}
+                            {(outcome.liquidity || 0).toLocaleString(undefined, {
+                              maximumFractionDigits: 0,
+                            })}
                           </td>
                         </tr>
                       ))
@@ -842,6 +964,8 @@ export default function MarketsData({
 
         {/* Market Data Chart (collapsible) - Limitless: PriceChart; Kalshi/Polymarket: ProbabilityChart */}
         {(detectedSource === "limitless" ||
+          detectedSource === "myriad" ||
+          detectedSource === "predictfun" ||
           (marketDetails?.markets && marketDetails.markets.length > 0)) && (
           <div className="flex-shrink-0 pb-6">
             <button
@@ -866,9 +990,58 @@ export default function MarketsData({
             </button>
             {probabilityChartExpanded && (
               <div>
-                {isLoadingLimitlessChart && detectedSource === "limitless" ? (
+                {(isLoadingLimitlessChart && detectedSource === "limitless") ||
+                (predictFunChartLoading && detectedSource === "predictfun") ? (
                   <div className="flex items-center justify-center py-8 text-white/60">
                     Loading chart...
+                  </div>
+                ) : detectedSource === "predictfun" ? (
+                  <div className="w-full">
+                    {!predictFunIsCryptoUpDown ? (
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 w-full">
+                          <div className="text-white/80 text-sm shrink-0">
+                            {predictFunPilotVolumeFormatted}
+                          </div>
+                          <div className="flex items-center gap-1 bg-white/10 rounded p-1 flex-wrap">
+                            {PREDICT_FUN_CHART_INTERVALS.map(({ key, label }) => (
+                              <button
+                                key={key}
+                                type="button"
+                                onClick={() => setPredictFunChartTf(key)}
+                                className={`px-2 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap ${
+                                  predictFunChartTf === key
+                                    ? "bg-[#ffc000] text-black"
+                                    : "text-white/70 hover:text-white hover:bg-white/10"
+                                }`}
+                              >
+                                {label}
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ) : null}
+                    <div className="w-full h-[400px] relative overflow-visible pl-0 pr-1 sm:pr-3">
+                      {predictFunIsCryptoUpDown && predictFunCryptoChartContext ? (
+                        <PredictFunCryptoUpDownChart
+                          context={predictFunCryptoChartContext}
+                          className="h-full rounded-md overflow-hidden border border-white/10"
+                        />
+                      ) : predictFunChartData.length > 0 &&
+                        predictFunMarketKeys.length > 0 ? (
+                        <LimitlessPriceChart
+                          key={`pilot-pf-${predictFunTopChartMarkets.map((m) => m.id).join("-")}-${predictFunChartTf}`}
+                          chartData={predictFunChartData}
+                          marketKeys={predictFunMarketKeys}
+                          accentColor="#ffc000"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center text-white/60 text-sm px-4 text-center">
+                          No price history for this range yet.
+                        </div>
+                      )}
+                    </div>
                   </div>
                 ) : detectedSource === "limitless" ? (
                   <ProbabilityChart
@@ -878,6 +1051,45 @@ export default function MarketsData({
                     limitlessHistory={limitlessChartHistory}
                     limitlessVolumeFormatted={limitlessVolumeFormatted}
                   />
+                ) : detectedSource === "myriad" ? (
+                  <div className="w-full">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
+                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 w-full">
+                        <div className="text-white/80 text-sm shrink-0">
+                          {myriadPilotVolumeFormatted}
+                        </div>
+                        <div className="flex items-center gap-1 bg-white/10 rounded p-1 flex-wrap">
+                          {MYRIAD_CHART_INTERVALS.map(({ label, api }) => (
+                            <button
+                              key={api}
+                              type="button"
+                              onClick={() => setMyriadChartTf(api)}
+                              className={`px-2 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap ${
+                                myriadChartTf === api
+                                  ? "bg-[#ffc000] text-black"
+                                  : "text-white/70 hover:text-white hover:bg-white/10"
+                              }`}
+                            >
+                              {label}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+                    <div className="w-full h-[400px] relative overflow-visible pl-0 pr-1 sm:pr-3">
+                      {myriadChartData.length > 0 && myriadMarketKeys.length > 0 ? (
+                        <LimitlessPriceChart
+                          chartData={myriadChartData}
+                          marketKeys={myriadMarketKeys}
+                          accentColor="#ffc000"
+                        />
+                      ) : (
+                        <div className="absolute inset-0 flex items-center justify-center text-white/60 text-sm px-4 text-center">
+                          No price history for this range yet.
+                        </div>
+                      )}
+                    </div>
+                  </div>
                 ) : (
                   <ProbabilityChart
                     markets={marketDetails!.markets}
@@ -899,18 +1111,21 @@ export default function MarketsData({
                   Generating insights...
                 </div>
               ) : insights && insights.length > 0 ? (
-                <ul className="space-y-3">
-                  {insights.map((insight, idx) => (
-                    <li key={idx} className="flex items-start gap-3">
-                      <span className="text-[#ffc000] font-bold flex-shrink-0">
-                        {idx + 1}.
-                      </span>
-                      <span className="text-white/90 leading-relaxed">
-                        {insight}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <p className="rex-pilot-section-heading mb-3">Market Insights:</p>
+                  <ul className="space-y-3">
+                    {insights.map((insight, idx) => (
+                      <li key={idx} className="flex items-start gap-3">
+                        <span className="text-[#f0cf7a] font-semibold flex-shrink-0 pt-0.5">
+                          {idx + 1}.
+                        </span>
+                        <div className="rex-pilot-body-text min-w-0 flex-1">
+                          {formatRexPilotChatLines(insight)}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               ) : (
                 <div className="flex w-full items-center justify-center">
                   <p className="text-white/60 italic">No insights available</p>
@@ -982,8 +1197,8 @@ export default function MarketsData({
                           </div>
                         )}
                       </div>
-                      <div className="text-white/90 break-words">
-                        {formatMessage(m.content)}
+                      <div className="rex-pilot-body-text break-words">
+                        {formatRexPilotChatLines(m.content)}
                       </div>
                     </div>
                   </div>
@@ -1005,8 +1220,8 @@ export default function MarketsData({
                       height={80}
                     />
                   </div>
-                  <div className="text-white/90 break-words">
-                    {formatMessage(streamingContent)}
+                  <div className="rex-pilot-body-text break-words">
+                    {formatRexPilotChatLines(streamingContent)}
                     <span className="inline-block w-2 h-4 bg-white/60 animate-pulse ml-1" />
                   </div>
                 </div>
@@ -1035,26 +1250,37 @@ export default function MarketsData({
             onKeyDown={onKeyDown}
             placeholder="Ask any questions about this market..."
             disabled={isSending}
-            className="w-full max-w-full bg-[#262626] border-[0.5px] border-[#3C3C3C] text-[#BEBEBE] placeholder-[#BEBEBE] rounded-[8px] pl-4 pr-20 py-2.5 resize-none outline-none disabled:opacity-50 min-h-[50px] max-h-[200px] break-words text-[14px]"
+            className="w-full max-w-full bg-[#262626] border-[0.5px] border-[#3C3C3C] text-[#BEBEBE] placeholder-[#BEBEBE] rounded-[8px] pl-4 pr-20 py-2.5 resize-none outline-none disabled:opacity-50 min-h-[50px] max-h-[200px] break-words text-[15px] leading-[1.65]"
             rows={2}
             aria-label="Message input"
           />
-          <button
-            onClick={handleSend}
-            disabled={!inputMessage.trim() || isSending}
-            className="absolute right-2 bottom-0 transform -translate-y-1/3 text-white font-semibold rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-            aria-label="Send message"
-          >
-            <Image
-              src="/images/banner.png"
-              width={40}
-              height={40}
-              alt="Send"
-              className={`transition-transform duration-300 ${
-                isSending ? "scale-125 animate-pulse" : "scale-100"
-              }`}
-            />
-          </button>
+          {isSending ? (
+            <button
+              type="button"
+              onClick={handleStop}
+              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg bg-white/10 text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+              aria-label="Stop generating"
+              title="Stop generating"
+            >
+              <Square className="h-4 w-4 fill-current text-white" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!inputMessage.trim()}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-white font-semibold rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              aria-label="Send message"
+            >
+              <Image
+                src="/images/banner.png"
+                width={40}
+                height={40}
+                alt="Send"
+                className="scale-100 transition-transform duration-300"
+              />
+            </button>
+          )}
         </div>
       </div>
     </div>

@@ -6,10 +6,16 @@ import RexHeader from "@/components/ui/layout/Header";
 import { useMarketDetails } from "@/hooks/useMarketDetails";
 import { usePrivy } from "@privy-io/react-auth";
 import { useParams, useRouter } from "next/navigation";
-import { Suspense, useCallback, useEffect, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useState } from "react";
 import KalshiTradingInterface from "../../_components/RexMarketsReport/RexMarketsReportData/KalshiTradingInterface";
 import { RexMarketsReport } from "../../_components";
 import type { MarketReport } from "@/hooks/useGenerateMarketReport";
+import {
+  peekPendingGeneratedReport,
+  clearPendingGeneratedReport,
+} from "@/lib/rexmarkets/pendingGeneratedReport";
+import { useOpenPilotSidebarOnMobileReportGen } from "@/hooks/useOpenPilotSidebarOnMobileReportGen";
+import { RexMarketsGenerateReportProvider } from "../../_components/RexMarketsGenerateReportContext";
 
 function KalshiEventPageContent() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
@@ -118,6 +124,15 @@ function KalshiEventPageContent() {
     phantomAuthenticated,
   ]);
 
+  useLayoutEffect(() => {
+    const report = peekPendingGeneratedReport();
+    if (!report) return;
+    setGeneratedReport(report);
+    setShowReportSidebar(true);
+    const t = window.setTimeout(() => clearPendingGeneratedReport(), 400);
+    return () => clearTimeout(t);
+  }, []);
+
   const handleReportGenerated = useCallback((report: MarketReport) => {
     setGeneratedReport(report);
     setShowReportSidebar(true);
@@ -126,6 +141,8 @@ function KalshiEventPageContent() {
   const handleBack = useCallback(() => {
     router.push("/rexmarkets");
   }, [router]);
+
+  useOpenPilotSidebarOnMobileReportGen(eventTicker, setShowReportSidebar);
 
   if (isLoadingDetails) {
     return (
@@ -196,6 +213,7 @@ function KalshiEventPageContent() {
   }
 
   return (
+    <RexMarketsGenerateReportProvider>
     <div
       className="relative w-full h-screen flex flex-col overflow-hidden"
       aria-busy={loadingUser}
@@ -223,6 +241,7 @@ function KalshiEventPageContent() {
               onBack={handleBack}
               onReportGenerated={handleReportGenerated}
               userId={currentUserId}
+              sessionSavedReportId={generatedReport?.id ?? null}
             />
           </div>
           <Footer />
@@ -230,9 +249,9 @@ function KalshiEventPageContent() {
 
         <div
           className={`fixed top-0 right-0 h-screen lg:h-full w-full sm:w-[500px] lg:w-[700px] bg-black z-[60] lg:z-auto transform transition-transform duration-500 ease-in-out ${
-            showReportSidebar 
-              ? "translate-x-0 lg:relative lg:flex-shrink-0" 
-              : "translate-x-full lg:absolute"
+            showReportSidebar
+              ? "translate-x-0 lg:relative lg:flex-shrink-0 pointer-events-auto"
+              : "translate-x-full lg:absolute pointer-events-none"
           }`}
           role="dialog"
           aria-modal="true"
@@ -243,7 +262,7 @@ function KalshiEventPageContent() {
             maxHeight: '100dvh',
           }}
         >
-          <div className="h-full overflow-y-auto overflow-x-hidden bg-[#141414] custom-sidebar-scrollbar" style={{
+          <div className="h-full min-h-0 overflow-y-auto overflow-x-hidden bg-[#141414] custom-sidebar-scrollbar" style={{
             WebkitOverflowScrolling: 'touch',
             touchAction: 'pan-y',
             overscrollBehavior: 'contain',
@@ -257,6 +276,7 @@ function KalshiEventPageContent() {
               selectedMarketVolume={totalVolume}
               selectedMarketEventId={eventId}
               onClose={() => setShowReportSidebar(false)}
+              onClearSessionReport={() => setGeneratedReport(null)}
             />
           </div>
         </div>
@@ -271,6 +291,7 @@ function KalshiEventPageContent() {
         )}
       </div>
     </div>
+    </RexMarketsGenerateReportProvider>
   );
 }
 

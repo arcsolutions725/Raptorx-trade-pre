@@ -94,7 +94,7 @@ export default function Footer() {
   const duplicatedItems = allItems.length > 0 ? [...allItems, ...allItems] : [];
 
   return (
-    <footer className="fixed bottom-0 left-0 right-0 w-full bg-[#141414] border-t-[0.5px] border-[#B58405]">
+    <footer className="relative w-full shrink-0 bg-[#141414] border-t-[0.5px] border-[#B58405] pb-[env(safe-area-inset-bottom,0px)]">
       <div className="w-full flex flex-col gap-2 sm:gap-0 sm:flex-row justify-center sm:justify-between items-center px-3 sm:px-5 py-2">
         <div className="flex items-center justify-center gap-2 sm:gap-4 sm:flex-1 min-w-0">
           <div className="flex items-center gap-2 shrink-0">

@@ -174,7 +174,7 @@ export default function Comments({ marketId, eventId, seriesId }: CommentsProps)
   }
 
   return (
-    <div className="space-y-4 overflow-y-auto custom-select-scrollbar px-1">
+    <div className="space-y-4 px-1">
       {topLevelComments.map((comment) => (
         <div key={comment.id} className="pb-4 border-b border-white/10 last:border-b-0">
           <CommentItem

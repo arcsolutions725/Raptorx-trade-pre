@@ -17,6 +17,9 @@ import { WalletContext } from "@/contexts/WalletContext";
 /** Base chain id – when user is on Base (e.g. Limitless withdraw), do not force Polygon */
 const BASE_CHAIN_ID = base.id;
 
+/** BSC — Myriad order book; do not auto-switch back to Polygon while user trades there */
+const MYRIAD_BSC_CHAIN_ID = 56;
+
 const publicClient = createPublicClient({
   chain: polygon,
   transport: http(POLYGON_RPC_URL),
@@ -53,7 +56,12 @@ export default function WalletProvider({ children }: { children: ReactNode }) {
 
         setWalletClient(client);
 
-        const ethersProvider = new providers.Web3Provider(provider);
+        // "any" = follow the wallet’s active chain (BSC for Myriad, Base, Polygon).
+        // Without this, gas estimation / simulation can stay on the wrong chain after switchChain.
+        const ethersProvider = new providers.Web3Provider(
+          provider as providers.ExternalProvider,
+          "any"
+        );
         setEthersSigner(ethersProvider.getSigner());
       } catch (err) {
         console.error("Failed to initialize wallet client:", err);
@@ -73,8 +81,11 @@ export default function WalletProvider({ children }: { children: ReactNode }) {
         const chainId = wallet.chainId;
         const isPolygon = chainId === `eip155:${polygon.id}` || chainId === String(polygon.id);
         const isBase = chainId === `eip155:${BASE_CHAIN_ID}` || chainId === String(BASE_CHAIN_ID);
+        const isBsc =
+          chainId === `eip155:${MYRIAD_BSC_CHAIN_ID}` || chainId === String(MYRIAD_BSC_CHAIN_ID);
         // Do not switch away from Base (e.g. user is doing Limitless withdraw on Base)
         if (isBase) return;
+        if (isBsc) return;
         if (!isPolygon) {
           await wallet.switchChain(polygon.id);
         }

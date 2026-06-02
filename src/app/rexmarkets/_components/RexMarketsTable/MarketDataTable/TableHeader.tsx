@@ -10,7 +10,7 @@ export default function TableHeader({ showSourceColumn = false }: TableHeaderPro
     : "[grid-template-columns:minmax(300px,2fr)_minmax(100px,1fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)] sm:[grid-template-columns:minmax(400px,2.5fr)_minmax(100px,1fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)]";
   
   return (
-    <div className={`sticky top-0 z-20 grid ${gridColumns} bg-black text-white font-semibold shadow-sm`}>
+    <div className={`grid ${gridColumns} border-b border-white/10 bg-black/95 backdrop-blur-sm text-white font-semibold shadow-sm`}>
       {/* Markets */}
       <div 
         className="sm:sticky sm:left-0 sm:z-30 flex items-center px-3 py-2 whitespace-nowrap truncate bg-black sm:shadow-[2px_0_4px_rgba(0,0,0,0.3)] sm:isolation-auto"

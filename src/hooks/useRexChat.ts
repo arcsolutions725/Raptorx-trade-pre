@@ -21,6 +21,16 @@ type UseRexChatOptions = {
   }>;
 };
 
+function isAbortError(e: unknown): boolean {
+  return (
+    (e as { name?: string })?.name === "AbortError" ||
+    (e as { cause?: { name?: string } })?.cause?.name === "AbortError" ||
+    (typeof DOMException !== "undefined" &&
+      e instanceof DOMException &&
+      e.name === "AbortError")
+  );
+}
+
 export function useRexChat(opts: UseRexChatOptions = {}) {
   const { report, userId, initialMessages } = opts;
   const [messages, setMessages] = useState<Message[]>([]);
@@ -28,6 +38,7 @@ export function useRexChat(opts: UseRexChatOptions = {}) {
   const [streamingContent, setStreamingContent] = useState("");
   const [error, setError] = useState<string | null>(null);
   const inFlightRef = useRef(false);
+  const abortControllerRef = useRef<AbortController | null>(null);
   const appendMessage = useAppendMessage(userId || "");
   const prevInitialMessagesRef = useRef<string>("");
 
@@ -72,6 +83,10 @@ export function useRexChat(opts: UseRexChatOptions = {}) {
     }
   }, [initialMessages]);
 
+  const stopGeneration = useCallback(() => {
+    abortControllerRef.current?.abort();
+  }, []);
+
   const sendMessage = useCallback(
     async (userMessage: string) => {
       if (!userMessage.trim() || !report || !report.id || !userId) {
@@ -84,6 +99,10 @@ export function useRexChat(opts: UseRexChatOptions = {}) {
       inFlightRef.current = true;
       setIsSending(true);
       setStreamingContent("");
+
+      const controller = new AbortController();
+      abortControllerRef.current = controller;
+      let acc = "";
 
       try {
         // Add user message to history
@@ -123,13 +142,13 @@ export function useRexChat(opts: UseRexChatOptions = {}) {
             marketData: report.marketData,
             history,
           }),
+          signal: controller.signal,
         });
 
         if (!resp.ok) throw new Error("Failed to get response");
 
         const reader = resp.body?.getReader();
         const decoder = new TextDecoder();
-        let acc = "";
 
         if (reader) {
           while (true) {
@@ -160,12 +179,45 @@ export function useRexChat(opts: UseRexChatOptions = {}) {
         }
 
         return acc;
-      } catch (err: any) {
-        setError(err?.message || "Failed to send message.");
+      } catch (err: unknown) {
+        if (isAbortError(err)) {
+          if (acc.trim()) {
+            const stoppedContent = `${acc.trim()}\n\n_Generation stopped._`;
+            const assistantMsg: Message = {
+              role: "assistant",
+              content: stoppedContent,
+              timestamp: new Date().toISOString(),
+            };
+            setMessages((prev) => [...prev, assistantMsg]);
+            setStreamingContent("");
+            if (canSaveMessages) {
+              try {
+                await appendMessage.mutateAsync({
+                  reportId: report.id,
+                  role: "assistant",
+                  content: stoppedContent,
+                  timestamp: new Date().toISOString(),
+                });
+              } catch (persistErr) {
+                console.error("Failed to save partial reply:", persistErr);
+              }
+            }
+          } else {
+            setStreamingContent("");
+          }
+          return acc;
+        }
+        const msg =
+          err && typeof err === "object" && "message" in err
+            ? String((err as { message: string }).message)
+            : "Failed to send message.";
+        setError(msg);
         throw err;
       } finally {
+        abortControllerRef.current = null;
         setIsSending(false);
         inFlightRef.current = false;
+        setStreamingContent("");
       }
     },
     [report, messages, userId, appendMessage, canSaveMessages]
@@ -183,6 +235,7 @@ export function useRexChat(opts: UseRexChatOptions = {}) {
     streamingContent,
     error,
     sendMessage,
+    stopGeneration,
     clearMessages,
   };
 }

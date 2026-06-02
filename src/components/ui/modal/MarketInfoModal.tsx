@@ -11,7 +11,7 @@ import {
 import { X } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { usePrivy } from "@privy-io/react-auth";
+import { usePrivy, useWallets as usePrivyEvmWallets } from "@privy-io/react-auth";
 import {
   useSignAndSendTransaction,
   useWallets,
@@ -40,6 +40,17 @@ import {
 } from "@/hooks/useLimitlessPortfolio";
 import { useLimitlessAuth } from "@/hooks/useLimitlessAuth";
 import { useLimitlessRedeem } from "@/hooks/useLimitlessRedeem";
+import {
+  useMyriadOrdersHistory,
+  useMyriadUserMarketsModal,
+  useMyriadUserTradeEvents,
+} from "@/hooks/useMyriadOpenOrdersModal";
+import { MYRIAD_ORDER_BOOK_CHAIN_ID } from "@/lib/myriad/orderBookEip712";
+import { MYRIAD_PREDICTION_MARKET_BSC } from "@/lib/myriad/predictionMarket";
+import {
+  myriadPriceWeiToDecimal,
+  myriadShareWeiToNumber,
+} from "@/lib/myriad/parseMyriadModalApi";
 import { formatCurrency, formatShares, formatPercentage } from "@/utils/format";
 import { DUST_THRESHOLD } from "@/utils/validation";
 import { POLLING_DURATION, POLLING_INTERVAL } from "@/constants/query";
@@ -49,6 +60,7 @@ import {
   showErrorNotification,
   showSuccessNotification,
 } from "@/components/ui/notification";
+import PredictFunMarketInfoPanel from "@/components/ui/modal/PredictFunMarketInfoPanel";
 import bs58 from "bs58";
 import {
   Connection,
@@ -139,6 +151,7 @@ export default function MarketInfoModal({
   const initializeTradingSession = tradingContext?.initializeTradingSession;
   const { solanaAddress, source: solanaSource } = useSolanaWalletAddress();
   const { authenticated: privyAuthenticated, user: privyUser } = usePrivy();
+  const { wallets: evmWallets } = usePrivyEvmWallets();
   const { isAuthenticated: phantomAuthenticated } = usePhantomConnect();
   const { signAndSendTransaction: privySignAndSend } =
     useSignAndSendTransaction();
@@ -156,7 +169,7 @@ export default function MarketInfoModal({
   const [isInitializing, setIsInitializing] = useState(false);
   const [loadingMarketId, setLoadingMarketId] = useState<string | null>(null);
   const [platformTab, setPlatformTab] = useState<
-    "polymarket" | "kalshi" | "limitless"
+    "polymarket" | "kalshi" | "limitless" | "myriad" | "predictfun"
   >("polymarket");
   const [activeTab, setActiveTab] = useState<"trades" | "positions">("trades");
   const [hideDust, setHideDust] = useState(true);
@@ -172,6 +185,9 @@ export default function MarketInfoModal({
   >(null);
   const [redeemingLimitlessSlug, setRedeemingLimitlessSlug] = useState<
     string | null
+  >(null);
+  const [redeemingMyriadMarketId, setRedeemingMyriadMarketId] = useState<
+    number | null
   >(null);
   const [pendingVerification, setPendingVerification] = useState<
     Map<string, number>
@@ -568,6 +584,227 @@ export default function MarketInfoModal({
     enabled: isOpen && platformTab === "limitless",
   });
 
+  const myriadModalEnabled = isOpen && platformTab === "myriad";
+  const {
+    data: myriadOrders = [],
+    isLoading: isLoadingMyriadOrders,
+    error: myriadOrdersError,
+    refetch: refetchMyriadOrders,
+  } = useMyriadOrdersHistory(eoaAddress, myriadModalEnabled);
+  const {
+    data: myriadUserEvents = [],
+    isLoading: isLoadingMyriadUserEvents,
+    error: myriadUserEventsError,
+    refetch: refetchMyriadUserEvents,
+  } = useMyriadUserTradeEvents(eoaAddress, myriadModalEnabled);
+  const {
+    data: myriadUserMarkets = [],
+    isLoading: isLoadingMyriadUserMarkets,
+    error: myriadUserMarketsError,
+    refetch: refetchMyriadUserMarkets,
+  } = useMyriadUserMarketsModal(eoaAddress, myriadModalEnabled);
+
+  const myriadMarketMetaById = useMemo(() => {
+    const m = new Map<number, { slug: string; title: string }>();
+    for (const row of myriadUserMarkets) {
+      m.set(row.marketId, { slug: row.slug, title: row.title });
+    }
+    return m;
+  }, [myriadUserMarkets]);
+
+  /** Positions tab: only list markets where Yes or No shares exceed dust threshold. */
+  const MYRIAD_MODAL_POSITION_MIN_SHARES = 0.01;
+  const myriadUserMarketsVisible = useMemo(
+    () =>
+      myriadUserMarkets.filter(
+        (r) =>
+          r.yesShares > MYRIAD_MODAL_POSITION_MIN_SHARES ||
+          r.noShares > MYRIAD_MODAL_POSITION_MIN_SHARES,
+      ),
+    [myriadUserMarkets],
+  );
+
+  const myriadOrdersSorted = useMemo(() => {
+    return [...myriadOrders].sort((a, b) => {
+      const ta = a.createdAt ? Date.parse(a.createdAt) : 0;
+      const tb = b.createdAt ? Date.parse(b.createdAt) : 0;
+      return tb - ta;
+    });
+  }, [myriadOrders]);
+
+  const myriadUserEventsSorted = useMemo(() => {
+    return [...myriadUserEvents].sort((a, b) => b.timestamp - a.timestamp);
+  }, [myriadUserEvents]);
+
+  /** On-chain events + CLOB orders, newest first — same columns as Polymarket trades table. */
+  const myriadUnifiedTradesRows = useMemo(() => {
+    const outcomeWord = (outcomeId: number) => (outcomeId === 1 ? "No" : "Yes");
+
+    type UnifiedRow =
+      | {
+          kind: "event";
+          key: string;
+          marketTitle: string;
+          slugForLink: string;
+          sideLabel: string;
+          sideTone: "buy" | "sell" | "claim" | "neutral";
+          priceDisplay: string;
+          sizeDisplay: string;
+          role: string;
+          statusLabel: string;
+          statusStyle:
+            | "confirmed"
+            | "open"
+            | "cancelled"
+            | "pending"
+            | "expired"
+            | "muted";
+          timeStr: string;
+          sortMs: number;
+        }
+      | {
+          kind: "order";
+          key: string;
+          marketTitle: string;
+          slugForLink: string;
+          sideLabel: string;
+          isBuySide: boolean;
+          priceDisplay: string;
+          sizeDisplay: string;
+          role: string;
+          statusLabel: string;
+          statusStyle:
+            | "confirmed"
+            | "open"
+            | "cancelled"
+            | "pending"
+            | "expired"
+            | "muted";
+          timeStr: string;
+          sortMs: number;
+        };
+
+    const eventRows: UnifiedRow[] = myriadUserEventsSorted.map((ev, evIdx) => {
+      const slugForLink = ev.marketSlug?.trim() || String(ev.marketId);
+      const a = ev.action.toLowerCase();
+      let sideTone: "buy" | "sell" | "claim" | "neutral" = "neutral";
+      let sideLabel: string;
+      if (a === "buy") {
+        sideTone = "buy";
+        sideLabel = `BUY ${outcomeWord(ev.outcomeId)}`;
+      } else if (a === "sell") {
+        sideTone = "sell";
+        sideLabel = `SELL ${outcomeWord(ev.outcomeId)}`;
+      } else if (a.includes("claim")) {
+        sideTone = "claim";
+        sideLabel = "CLAIM";
+      } else {
+        sideLabel = ev.action
+          .split("_")
+          .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(" ")
+          .toUpperCase();
+      }
+
+      let priceDisplay = "—";
+      if ((a === "buy" || a === "sell") && ev.shares > 0 && ev.value > 0) {
+        priceDisplay = (ev.value / ev.shares).toFixed(4);
+      }
+
+      const sizeDisplay = ev.shares > 0 ? formatShares(ev.shares) : "—";
+
+      const timeStr =
+        ev.timestamp > 0
+          ? new Date(ev.timestamp * 1000).toLocaleString(undefined, {
+              dateStyle: "short",
+              timeStyle: "short",
+            })
+          : "—";
+
+      return {
+        kind: "event" as const,
+        key: `e-${ev.marketId}-${ev.timestamp}-${ev.blockNumber}-${evIdx}`,
+        marketTitle: ev.marketTitle || `Market #${ev.marketId}`,
+        slugForLink,
+        sideLabel,
+        sideTone,
+        priceDisplay,
+        sizeDisplay,
+        role: "TAKER",
+        statusLabel: "CONFIRMED",
+        statusStyle: "confirmed" as const,
+        timeStr,
+        sortMs: ev.timestamp > 0 ? ev.timestamp * 1000 : 0,
+      };
+    });
+
+    const orderRows: UnifiedRow[] = myriadOrdersSorted.map((ord) => {
+      const meta = myriadMarketMetaById.get(ord.marketId);
+      const slugForLink = meta?.slug?.trim() || String(ord.marketId);
+      const displayTitle = meta?.title?.trim() || `Market #${ord.marketId}`;
+      const sideLabel = `${ord.side === 0 ? "BUY" : "SELL"} ${outcomeWord(ord.outcomeId)}`;
+      const priceStr = myriadPriceWeiToDecimal(ord.priceWei).toFixed(4);
+      const st = ord.status.toLowerCase();
+      const sizeWei = st === "filled" ? ord.filledAmountWei : ord.amountWei;
+      const sizeStr = myriadShareWeiToNumber(sizeWei).toFixed(2);
+
+      let role = "TAKER";
+      if (st === "open") role = "MAKER";
+      else if (st === "cancelled" || st === "canceled" || st === "expired") {
+        role = "—";
+      }
+
+      let statusLabel = ord.status.toUpperCase();
+      let statusStyle: UnifiedRow["statusStyle"] = "muted";
+      if (st === "filled") {
+        statusLabel = "FILLED";
+        statusStyle = "confirmed";
+      } else if (st === "open") {
+        statusLabel = "OPEN";
+        statusStyle = "open";
+      } else if (st === "cancelled" || st === "canceled") {
+        statusStyle = "cancelled";
+      } else if (st === "expired") {
+        statusStyle = "expired";
+      }
+
+      const timeStr = ord.createdAt
+        ? (() => {
+            const d = new Date(ord.createdAt);
+            return Number.isNaN(d.getTime())
+              ? ord.createdAt
+              : d.toLocaleString(undefined, {
+                  dateStyle: "short",
+                  timeStyle: "short",
+                });
+          })()
+        : "—";
+      const sortMs = ord.createdAt ? Date.parse(ord.createdAt) : 0;
+
+      return {
+        kind: "order" as const,
+        key: `o-${ord.orderHash}`,
+        marketTitle: displayTitle,
+        slugForLink,
+        sideLabel,
+        isBuySide: ord.side === 0,
+        priceDisplay: priceStr,
+        sizeDisplay: sizeStr,
+        role,
+        statusLabel,
+        statusStyle,
+        timeStr,
+        sortMs,
+      };
+    });
+
+    return [...eventRows, ...orderRows].sort((a, b) => b.sortMs - a.sortMs);
+  }, [
+    myriadUserEventsSorted,
+    myriadOrdersSorted,
+    myriadMarketMetaById,
+  ]);
+
   // Fetch positions
   const {
     data: positions = [],
@@ -589,6 +826,114 @@ export default function MarketInfoModal({
   const { submitOrder, isSubmitting } = useClobOrder(clobClient, eoaAddress);
   const { redeem: limitlessRedeem, isRedeeming: isLimitlessRedeemLoading } =
     useLimitlessRedeem();
+
+  const handleMyriadClaim = useCallback(
+    async (marketId: number) => {
+      if (!eoaAddress) {
+        showErrorNotification("Claim", "Connect your EVM wallet.");
+        return;
+      }
+      if (!ethersSigner) {
+        showErrorNotification("Claim", "Wallet signer not ready.");
+        return;
+      }
+      setRedeemingMyriadMarketId(marketId);
+      try {
+        const wallet = evmWallets.find((w) => w.address === privyUser?.wallet?.address);
+        if (wallet) {
+          const cid = wallet.chainId;
+          const onBsc =
+            cid === `eip155:${MYRIAD_ORDER_BOOK_CHAIN_ID}` ||
+            cid === String(MYRIAD_ORDER_BOOK_CHAIN_ID);
+          if (!onBsc) {
+            await wallet.switchChain(MYRIAD_ORDER_BOOK_CHAIN_ID);
+            await new Promise((r) => setTimeout(r, 400));
+          }
+        }
+
+        let toAddr = MYRIAD_PREDICTION_MARKET_BSC;
+        let calldata: string | undefined;
+        let value = BigInt(0);
+
+        const claimRes = await fetch("/api/myriad/markets/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            market_id: marketId,
+            network_id: MYRIAD_ORDER_BOOK_CHAIN_ID,
+          }),
+        });
+        const claimJson = (await claimRes.json()) as {
+          error?: string;
+          calldata?: string;
+          to?: string;
+        };
+
+        if (
+          claimRes.ok &&
+          typeof claimJson.calldata === "string" &&
+          claimJson.calldata.startsWith("0x")
+        ) {
+          calldata = claimJson.calldata;
+          if (typeof claimJson.to === "string" && claimJson.to.startsWith("0x")) {
+            toAddr = claimJson.to;
+          }
+        } else {
+          const res = await fetch("/api/myriad/positions/redeem", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              market_id: marketId,
+              network_id: MYRIAD_ORDER_BOOK_CHAIN_ID,
+            }),
+          });
+          const j = (await res.json()) as {
+            error?: string;
+            to?: string;
+            calldata?: string;
+            value?: string | number;
+          };
+          if (!res.ok) {
+            throw new Error(
+              claimJson.error || j.error || "Claim failed (resolved markets use POST /markets/claim)"
+            );
+          }
+          if (!j.to || !j.calldata || !j.to.startsWith("0x")) {
+            throw new Error("Invalid redeem calldata from API");
+          }
+          toAddr = j.to;
+          calldata = j.calldata;
+          value =
+            j.value !== undefined && j.value !== null && j.value !== ""
+              ? BigInt(String(j.value))
+              : BigInt(0);
+        }
+
+        if (!calldata?.startsWith("0x")) {
+          throw new Error("No calldata returned for claim");
+        }
+
+        const tx = await ethersSigner.sendTransaction({
+          to: toAddr,
+          data: calldata,
+          value,
+        });
+        showSuccessNotification("Myriad claim", "Transaction submitted");
+        await tx.wait(1).catch(() => {});
+        queryClient.invalidateQueries({ queryKey: ["myriad-user-markets-modal"] });
+        queryClient.invalidateQueries({ queryKey: ["myriad-orders-history"] });
+        queryClient.invalidateQueries({ queryKey: ["myriad-user-events"] });
+        queryClient.invalidateQueries({ queryKey: ["myriad-user-portfolio"] });
+        queryClient.invalidateQueries({ queryKey: ["myriad-erc20-balance"] });
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : "Claim failed";
+        showErrorNotification("Myriad claim", msg);
+      } finally {
+        setRedeemingMyriadMarketId(null);
+      }
+    },
+    [eoaAddress, ethersSigner, evmWallets, privyUser?.wallet?.address, queryClient]
+  );
 
   // Extract unique market IDs (condition IDs) from trades
   const marketIds = useMemo(() => {
@@ -860,7 +1205,24 @@ export default function MarketInfoModal({
     if (isOpen && platformTab === "kalshi" && activeTab === "trades") {
       refetchKalshiFills();
     }
-  }, [isOpen, platformTab, clobClient, safeAddress, refetchTrades, refetchKalshiFills, activeTab]);
+    if (isOpen && platformTab === "myriad") {
+      /** Always refresh positions + activity + orders — tab-specific refetch left stale data when switching after a trade. */
+      void refetchMyriadOrders();
+      void refetchMyriadUserEvents();
+      void refetchMyriadUserMarkets();
+    }
+  }, [
+    isOpen,
+    platformTab,
+    clobClient,
+    safeAddress,
+    refetchTrades,
+    refetchKalshiFills,
+    refetchMyriadOrders,
+    refetchMyriadUserEvents,
+    refetchMyriadUserMarkets,
+    activeTab,
+  ]);
 
   // Handle click outside
   useEffect(() => {
@@ -910,11 +1272,12 @@ export default function MarketInfoModal({
             </button>
           </div>
 
-          {/* Platform tabs: Polymarket | Kalshi | Limitless */}
-          <div className="flex border-b border-white/10 sticky top-[73px] bg-[#0D0D0D] z-10 px-4 sm:px-6">
+          {/* Platform tabs */}
+          <div className="grid grid-cols-5 border-b border-white/10 sticky top-[73px] bg-[#0D0D0D] z-10 px-4 sm:px-6">
             <button
+              type="button"
               onClick={() => setPlatformTab("polymarket")}
-              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+              className={`px-1 sm:px-2 py-3 text-[10px] sm:text-sm font-medium transition-colors border-b-2 text-center ${
                 platformTab === "polymarket"
                   ? "border-[#2C59F7] text-[#2C59F7]"
                   : "border-transparent text-gray-400 hover:text-white"
@@ -923,11 +1286,12 @@ export default function MarketInfoModal({
               Polymarket
             </button>
             <button
+              type="button"
               onClick={() => {
                 setPlatformTab("kalshi");
                 setActiveTab("trades");
               }}
-              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+              className={`px-1 sm:px-2 py-3 text-[10px] sm:text-sm font-medium transition-colors border-b-2 text-center ${
                 platformTab === "kalshi"
                   ? "border-[#17cb91] text-[#17cb91]"
                   : "border-transparent text-gray-400 hover:text-white"
@@ -936,17 +1300,47 @@ export default function MarketInfoModal({
               Kalshi
             </button>
             <button
+              type="button"
               onClick={() => {
                 setPlatformTab("limitless");
                 setActiveTab("trades");
               }}
-              className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+              className={`px-1 sm:px-2 py-3 text-[10px] sm:text-sm font-medium transition-colors border-b-2 text-center ${
                 platformTab === "limitless"
-                  ? "border-grey text-white"
+                  ? "border-white text-white"
                   : "border-transparent text-gray-400 hover:text-white"
               }`}
             >
               Limitless
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPlatformTab("myriad");
+                setActiveTab("trades");
+              }}
+              className={`px-1 sm:px-2 py-3 text-[10px] sm:text-sm font-medium transition-colors border-b-2 text-center ${
+                platformTab === "myriad"
+                  ? "border-[#ffc000] text-[#ffc000]"
+                  : "border-transparent text-gray-400 hover:text-white"
+              }`}
+            >
+              Myriad
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setPlatformTab("predictfun");
+                setActiveTab("trades");
+              }}
+              className={`px-1 sm:px-2 py-3 text-[10px] sm:text-sm font-medium transition-colors border-b-2 text-center leading-tight ${
+                platformTab === "predictfun"
+                  ? "border-[#A855F7] text-[#A855F7]"
+                  : "border-transparent text-gray-400 hover:text-white"
+              }`}
+            >
+              <span className="sm:hidden">Predict</span>
+              <span className="hidden sm:inline">Predict.fun</span>
             </button>
           </div>
 
@@ -1637,6 +2031,317 @@ export default function MarketInfoModal({
                   </>
                 )}
               </>
+            ) : platformTab === "myriad" ? (
+              <>
+                <div className="flex border-b border-white/10 sticky top-[73px] bg-[#0D0D0D] z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 mb-0">
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("trades")}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+                      activeTab === "trades"
+                        ? "border-[#ffc000] text-[#ffc000]"
+                        : "border-transparent text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    Trades
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab("positions")}
+                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+                      activeTab === "positions"
+                        ? "border-[#ffc000] text-[#ffc000]"
+                        : "border-transparent text-gray-400 hover:text-white"
+                    }`}
+                  >
+                    Positions
+                  </button>
+                </div>
+
+                {activeTab === "trades" && (
+                  <>
+                    {!eoaAddress ? (
+                      <div className="text-center py-12">
+                        <p className="text-gray-400">
+                          Connect your wallet to view Myriad activity and order-book orders (BNB Chain).
+                        </p>
+                      </div>
+                    ) : isLoadingMyriadOrders && isLoadingMyriadUserEvents ? (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffc000]" />
+                      </div>
+                    ) : myriadOrdersError && myriadUserEventsError ? (
+                      <div className="text-center py-8">
+                        <p className="text-red-400">
+                          {myriadUserEventsError instanceof Error
+                            ? myriadUserEventsError.message
+                            : myriadOrdersError instanceof Error
+                              ? myriadOrdersError.message
+                              : "Failed to load Myriad data."}
+                        </p>
+                      </div>
+                    ) : myriadUserEventsSorted.length === 0 && myriadOrdersSorted.length === 0 ? (
+                      <div className="text-center py-12">
+                        <p className="text-gray-400 text-lg">No trades or activity yet.</p>
+                        <p className="text-gray-500 text-sm mt-2 max-w-md mx-auto">
+                          <span className="text-white/70">GET /users/…/events</span> lists AMM and other
+                          on-chain actions. <span className="text-white/70">GET /orders</span> lists signed
+                          order-book orders (resting and filled).
+                        </p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse min-w-[720px]">
+                          <thead>
+                            <tr className="border-b border-white/10">
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
+                                Market{" "}
+                                <span className="text-gray-500 text-xs font-normal">
+                                  (Click to view)
+                                </span>
+                              </th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
+                                Side
+                              </th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
+                                Price
+                              </th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
+                                Size
+                              </th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
+                                Role
+                              </th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
+                                Status
+                              </th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
+                                Time
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {myriadUnifiedTradesRows.map((row) => {
+                              const sideClass =
+                                row.kind === "order"
+                                  ? row.isBuySide
+                                    ? "bg-green-500/20 text-green-400"
+                                    : "bg-red-500/20 text-red-400"
+                                  : row.sideTone === "buy"
+                                    ? "bg-green-500/20 text-green-400"
+                                    : row.sideTone === "sell"
+                                      ? "bg-red-500/20 text-red-400"
+                                      : row.sideTone === "claim"
+                                        ? "bg-amber-500/20 text-amber-300"
+                                        : "bg-gray-500/20 text-gray-400";
+
+                              const statusClass =
+                                row.statusStyle === "confirmed"
+                                  ? "bg-green-500/20 text-green-400"
+                                  : row.statusStyle === "open"
+                                    ? "bg-blue-500/20 text-blue-300"
+                                    : row.statusStyle === "pending"
+                                      ? "bg-yellow-500/20 text-yellow-400"
+                                      : row.statusStyle === "cancelled"
+                                        ? "bg-red-500/20 text-red-400"
+                                        : row.statusStyle === "expired"
+                                          ? "bg-amber-500/15 text-amber-300"
+                                          : "bg-gray-500/20 text-gray-400";
+
+                              return (
+                                <tr
+                                  key={row.key}
+                                  className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                                >
+                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
+                                    <a
+                                      href={`/rexmarkets/myriad/${encodeURIComponent(row.slugForLink)}`}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        onClose();
+                                        router.push(
+                                          `/rexmarkets/myriad/${encodeURIComponent(row.slugForLink)}`
+                                        );
+                                      }}
+                                      className="max-w-[200px] truncate block text-left hover:text-[#ffc000] transition-colors cursor-pointer underline decoration-dotted underline-offset-2 hover:decoration-solid"
+                                      title={row.marketTitle}
+                                    >
+                                      {row.marketTitle}
+                                    </a>
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4">
+                                    <span
+                                      className={`inline-block px-2 py-1 rounded text-xs font-medium ${sideClass}`}
+                                    >
+                                      {row.sideLabel}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm tabular-nums font-medium">
+                                    {row.priceDisplay}
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm tabular-nums font-semibold">
+                                    {row.sizeDisplay}
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4">
+                                    {row.role === "—" ? (
+                                      <span className="text-gray-500 text-xs">—</span>
+                                    ) : (
+                                      <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400">
+                                        {row.role}
+                                      </span>
+                                    )}
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4">
+                                    <span
+                                      className={`inline-block px-2 py-1 rounded text-xs font-medium ${statusClass}`}
+                                    >
+                                      {row.statusLabel}
+                                    </span>
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4 text-gray-400 text-xs whitespace-nowrap">
+                                    {row.timeStr}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {activeTab === "positions" && (
+                  <>
+                    {!eoaAddress ? (
+                      <div className="text-center py-12">
+                        <p className="text-gray-400">
+                          Connect your wallet to view Myriad positions and claim on BNB Chain.
+                        </p>
+                      </div>
+                    ) : isLoadingMyriadUserMarkets ? (
+                      <div className="flex items-center justify-center py-12">
+                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffc000]" />
+                      </div>
+                    ) : myriadUserMarketsError ? (
+                      <div className="text-center py-8">
+                        <p className="text-red-400">
+                          {myriadUserMarketsError instanceof Error
+                            ? myriadUserMarketsError.message
+                            : "Failed to load Myriad positions."}
+                        </p>
+                      </div>
+                    ) : myriadUserMarketsVisible.length === 0 ? (
+                      <div className="text-center py-12">
+                        <p className="text-gray-400 text-lg">No positions found.</p>
+                      </div>
+                    ) : (
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse">
+                          <thead>
+                            <tr className="border-b border-white/10">
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
+                                Market
+                              </th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
+                                Yes (shares)
+                              </th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
+                                No (shares)
+                              </th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
+                                State
+                              </th>
+                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
+                                Claim
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {myriadUserMarketsVisible.map((row) => {
+                              const slugForLink = row.slug?.trim() || String(row.marketId);
+                              const isRedeeming = redeemingMyriadMarketId === row.marketId;
+                              return (
+                                <tr
+                                  key={row.marketId}
+                                  className="border-b border-white/5 hover:bg-white/5 transition-colors"
+                                >
+                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
+                                    <a
+                                      href={`/rexmarkets/myriad/${encodeURIComponent(slugForLink)}`}
+                                      onClick={(e) => {
+                                        e.preventDefault();
+                                        onClose();
+                                        router.push(
+                                          `/rexmarkets/myriad/${encodeURIComponent(slugForLink)}`
+                                        );
+                                      }}
+                                      className="max-w-[200px] truncate block hover:text-[#ffc000] transition-colors underline decoration-dotted"
+                                      title={row.title}
+                                    >
+                                      {row.title}
+                                    </a>
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm tabular-nums">
+                                    {row.yesShares.toLocaleString(undefined, {
+                                      maximumFractionDigits: 4,
+                                    })}
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm tabular-nums">
+                                    {row.noShares.toLocaleString(undefined, {
+                                      maximumFractionDigits: 4,
+                                    })}
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4 text-gray-300 text-xs sm:text-sm capitalize">
+                                    {row.state || "—"}
+                                  </td>
+                                  <td className="py-3 px-2 sm:px-4">
+                                    <button
+                                      type="button"
+                                      onClick={() => void handleMyriadClaim(row.marketId)}
+                                      disabled={isRedeeming || !row.redeemEligible}
+                                      title={
+                                        row.redeemEligible
+                                          ? "POST /markets/claim — submit calldata on BNB Smart Chain (fallback: order-book redeem)."
+                                          : "Claim is only available when the market is resolved and you have winnings or voided proceeds to claim (per API)."
+                                      }
+                                      className={`min-w-[88px] px-3 py-1.5 rounded text-xs font-medium transition-colors ${
+                                        isRedeeming
+                                          ? "bg-amber-600/70 cursor-wait text-white"
+                                          : row.redeemEligible
+                                            ? "bg-[#ffc000] hover:bg-[#ffd000] text-black"
+                                            : "bg-white/10 text-gray-500 cursor-not-allowed"
+                                      }`}
+                                    >
+                                      {isRedeeming ? (
+                                        <span className="flex items-center gap-1.5 justify-center">
+                                          <span className="inline-block w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" />
+                                          …
+                                        </span>
+                                      ) : (
+                                        "Claim"
+                                      )}
+                                    </button>
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                  </>
+                )}
+              </>
+            ) : platformTab === "predictfun" ? (
+              <PredictFunMarketInfoPanel
+                isOpen={isOpen}
+                onClose={onClose}
+                activeTab={activeTab}
+                setActiveTab={setActiveTab}
+                eoaAddress={eoaAddress}
+                signer={ethersSigner}
+              />
             ) : !tradingContext ? (
               <div className="text-center py-8">
                 <p className="text-gray-400">

@@ -79,7 +79,9 @@ export const ReportCache = {
 
     // Check if tweets data is incomplete
     const hasTweetSection =
-      content.includes("Individual Tweets") || content.includes("## 3.");
+      content.includes("Individual Tweets") ||
+      content.includes("Top Tweets") ||
+      content.includes("## 3.");
     const tweetsData = reportData.tweetsData;
 
     // If report should have tweets but doesn't, or has empty tweets array

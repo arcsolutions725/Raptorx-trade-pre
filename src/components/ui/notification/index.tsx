@@ -1,12 +1,15 @@
 "use client";
 
 import { toast } from "sonner";
+import type { ExternalToast } from "sonner";
 
 export { NotificationToaster } from "./NotificationToaster";
 
 export interface NotificationOptions {
   duration?: number;
   description?: string;
+  /** Sonner placement; defaults to the app Toaster position when omitted. */
+  position?: ExternalToast["position"];
 }
 
 /**
@@ -20,6 +23,7 @@ export function showSuccessNotification(
   toast.success(title, {
     description: message,
     duration: options?.duration ?? 5000,
+    ...(options?.position ? { position: options.position } : {}),
   });
 }
 
@@ -34,6 +38,7 @@ export function showErrorNotification(
   toast.error(title, {
     description: message,
     duration: options?.duration ?? 5000,
+    ...(options?.position ? { position: options.position } : {}),
   });
 }
 
@@ -48,6 +53,7 @@ export function showInfoNotification(
   toast.info(title, {
     description: message,
     duration: options?.duration ?? 5000,
+    ...(options?.position ? { position: options.position } : {}),
   });
 }
 
@@ -62,6 +68,7 @@ export function showWarningNotification(
   toast.warning(title, {
     description: message,
     duration: options?.duration ?? 5000,
+    ...(options?.position ? { position: options.position } : {}),
   });
 }
 

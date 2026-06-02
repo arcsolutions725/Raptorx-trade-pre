@@ -25,7 +25,13 @@ import {
   ChartStatsDot,
   getStatsLabelsForPoint,
   CHART_STATS_DOT_MARGIN,
+  CHART_LEGEND_WRAPPER_STYLE,
+  isChartLegendCheckboxTarget,
 } from "./ChartStatsDot";
+import {
+  formatChartAxisPercent,
+  formatChartPercentValue,
+} from "./chartPercentFormat";
 
 /** Interval options for Kalshi and Polymarket (match left PriceChart) */
 const CHART_INTERVALS = ["1H", "6H", "1D", "1W", "1M", "ALL"] as const;
@@ -397,10 +403,16 @@ export default function ProbabilityChart({
     isPolymarketWithClob &&
     polymarketQueries.some((q) => q.isLoading);
 
+  // Only use Kalshi mock chart when outcomes look like Kalshi (status "active").
+  // Otherwise Myriad/Limitless/etc. without clob_token_id would hit this branch, filter to zero
+  // active rows, and show an empty chart.
+  const hasKalshiStyleActiveOutcomes =
+    (markets?.some((m) => (m.status || "").toLowerCase() === "active") ?? false);
   const isKalshiMode =
     !isLimitlessMode &&
     !isPolymarketWithClob &&
-    (markets?.length ?? 0) > 0;
+    (markets?.length ?? 0) > 0 &&
+    hasKalshiStyleActiveOutcomes;
 
   const activeMarketsKalshi = useMemo(
     () => (isKalshiMode ? filterActiveMarketsKalshi(markets!) : []),
@@ -723,6 +735,7 @@ export default function ProbabilityChart({
                   tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
                 />
                 <Tooltip
+                  wrapperStyle={{ zIndex: 10000 }}
                   contentStyle={{
                     backgroundColor: "rgba(0, 0, 0, 0.9)",
                     border: "1px solid rgba(255, 255, 255, 0.2)",
@@ -730,15 +743,24 @@ export default function ProbabilityChart({
                     color: "#fff",
                   }}
                   formatter={(value: number | undefined) =>
-                    value !== undefined ? `${Number(value).toFixed(1)}%` : "—"
+                    value !== undefined
+                      ? `${formatChartPercentValue(Number(value), 2)}%`
+                      : "—"
                   }
                 />
                 <Legend
-                  wrapperStyle={{ color: "#fff", fontSize: "12px" }}
+                  wrapperStyle={CHART_LEGEND_WRAPPER_STYLE}
                   content={() => (
-                    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2" style={{ color: "#fff", fontSize: "12px" }}>
+                    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2 pointer-events-auto touch-manipulation">
                       {limitlessMarketKeys.map((market) => (
-                        <div key={market.key} className="flex items-center gap-2 select-none">
+                        <div
+                          key={market.key}
+                          className="flex items-center gap-2 select-none cursor-pointer touch-manipulation"
+                          onClick={(e) => {
+                            if (isChartLegendCheckboxTarget(e.target)) return;
+                            toggleMarketVisibility(market.key);
+                          }}
+                        >
                           <Checkbox
                             checked={!hiddenMarketKeys.has(market.key)}
                             onChange={() => toggleMarketVisibility(market.key)}
@@ -827,6 +849,7 @@ export default function ProbabilityChart({
                   tickFormatter={(v) => `${Number(v).toFixed(0)}%`}
                 />
                 <Tooltip
+                  wrapperStyle={{ zIndex: 10000 }}
                   contentStyle={{
                     backgroundColor: "rgba(0, 0, 0, 0.9)",
                     border: "1px solid rgba(255, 255, 255, 0.2)",
@@ -834,7 +857,9 @@ export default function ProbabilityChart({
                     color: "#fff",
                   }}
                   formatter={(value: number | undefined) =>
-                    value !== undefined ? `${Number(value).toFixed(1)}%` : "—"
+                    value !== undefined
+                      ? `${formatChartPercentValue(Number(value), 2)}%`
+                      : "—"
                   }
                 />
                 <Line
@@ -990,10 +1015,15 @@ export default function ProbabilityChart({
                 ticks={polymarketYTicks}
                 allowDataOverflow={false}
                 tickFormatter={(value) =>
-                  `${(typeof value === "number" ? value : parseFloat(String(value)) || 0).toFixed(1)}%`
+                  formatChartAxisPercent(
+                    typeof value === "number"
+                      ? value
+                      : parseFloat(String(value)) || 0
+                  )
                 }
               />
               <Tooltip
+                wrapperStyle={{ zIndex: 10000 }}
                 contentStyle={{
                   backgroundColor: "#000",
                   border: "1px solid rgba(255, 192, 0, 0.3)",
@@ -1002,7 +1032,7 @@ export default function ProbabilityChart({
                 }}
                 formatter={(value: number | undefined) =>
                   value !== undefined && !isNaN(value)
-                    ? `${Number(value).toFixed(2)}%`
+                    ? `${formatChartPercentValue(Number(value), 2)}%`
                     : "—"
                 }
                 labelFormatter={(value) => {
@@ -1017,19 +1047,20 @@ export default function ProbabilityChart({
                 }}
               />
               <Legend
-                wrapperStyle={{ color: "#fff", fontSize: "12px" }}
+                wrapperStyle={CHART_LEGEND_WRAPPER_STYLE}
                 content={() => (
-                  <div
-                    className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2"
-                    style={{ color: "#fff", fontSize: "12px" }}
-                  >
-                    {polymarketMarketKeys.map((market, index) => {
+                  <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2 pointer-events-auto touch-manipulation">
+                    {polymarketMarketKeys.map((market) => {
                       const visible = !hiddenMarketKeys.has(market.key);
                       const lastPrice = polymarketLastPrices.get(market.key);
                       return (
                         <div
                           key={market.key}
-                          className="flex items-center gap-2 select-none"
+                          className="flex items-center gap-2 select-none cursor-pointer touch-manipulation"
+                          onClick={(e) => {
+                            if (isChartLegendCheckboxTarget(e.target)) return;
+                            toggleMarketVisibility(market.key);
+                          }}
                         >
                           <Checkbox
                             checked={visible}
@@ -1043,7 +1074,7 @@ export default function ProbabilityChart({
                           <span className="text-white/90">
                             {market.title}{" "}
                             {lastPrice !== undefined
-                              ? `${lastPrice.toFixed(1)}%`
+                              ? `${formatChartPercentValue(lastPrice, 2)}%`
                               : ""}
                           </span>
                         </div>
@@ -1159,10 +1190,15 @@ export default function ProbabilityChart({
                   ticks={kalshiYTicks}
                   allowDataOverflow={false}
                   tickFormatter={(value) =>
-                    `${(typeof value === "number" ? value : parseFloat(String(value)) || 0).toFixed(1)}%`
+                    formatChartAxisPercent(
+                      typeof value === "number"
+                        ? value
+                        : parseFloat(String(value)) || 0
+                    )
                   }
                 />
                 <Tooltip
+                  wrapperStyle={{ zIndex: 10000 }}
                   contentStyle={{
                     backgroundColor: "#000",
                     border: "1px solid rgba(255, 192, 0, 0.3)",
@@ -1171,7 +1207,7 @@ export default function ProbabilityChart({
                   }}
                   formatter={(value: number | undefined) =>
                     value !== undefined && !isNaN(value)
-                      ? `${Number(value).toFixed(2)}%`
+                      ? `${formatChartPercentValue(Number(value), 2)}%`
                       : "—"
                   }
                   labelFormatter={(value) => {
@@ -1186,19 +1222,20 @@ export default function ProbabilityChart({
                   }}
                 />
                 <Legend
-                  wrapperStyle={{ color: "#fff", fontSize: "12px" }}
+                  wrapperStyle={CHART_LEGEND_WRAPPER_STYLE}
                   content={() => (
-                    <div
-                      className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2"
-                      style={{ color: "#fff", fontSize: "12px" }}
-                    >
+                    <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2 pointer-events-auto touch-manipulation">
                       {kalshiMarketKeys.map((market) => {
                         const visible = !hiddenMarketKeys.has(market.key);
                         const lastPrice = kalshiLastPrices.get(market.key);
                         return (
                           <div
                             key={market.key}
-                            className="flex items-center gap-2 select-none"
+                            className="flex items-center gap-2 select-none cursor-pointer touch-manipulation"
+                            onClick={(e) => {
+                              if (isChartLegendCheckboxTarget(e.target)) return;
+                              toggleMarketVisibility(market.key);
+                            }}
                           >
                             <Checkbox
                               checked={visible}
@@ -1212,7 +1249,7 @@ export default function ProbabilityChart({
                             <span className="text-white/90">
                               {market.title}{" "}
                               {lastPrice !== undefined
-                                ? `${lastPrice.toFixed(1)}%`
+                                ? `${formatChartPercentValue(lastPrice, 2)}%`
                                 : ""}
                             </span>
                           </div>
@@ -1320,6 +1357,7 @@ export default function ProbabilityChart({
               tickFormatter={(value) => `${(Number(value) * 100).toFixed(0)}%`}
             />
             <Tooltip
+              wrapperStyle={{ zIndex: 10000 }}
               contentStyle={{
                 backgroundColor: "rgba(0, 0, 0, 0.9)",
                 border: "1px solid rgba(255, 255, 255, 0.2)",
@@ -1327,25 +1365,28 @@ export default function ProbabilityChart({
                 color: "#fff",
               }}
               formatter={(value: number | undefined, name: string | undefined) => [
-                value !== undefined ? `${(value * 100).toFixed(1)}%` : "—",
+                value !== undefined
+                  ? `${formatChartPercentValue(value * 100, 2)}%`
+                  : "—",
                 name ?? "",
               ]}
               labelStyle={{ color: "#ffc000" }}
             />
             <Legend
-              wrapperStyle={{ color: "#fff", fontSize: "12px" }}
+              wrapperStyle={CHART_LEGEND_WRAPPER_STYLE}
               content={() => (
-                <div
-                  className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2"
-                  style={{ color: "#fff", fontSize: "12px" }}
-                >
+                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2 pointer-events-auto touch-manipulation">
                   {marketKeys.map((market) => {
                     const visible = !hiddenMarketKeys.has(market.key);
                     const prob = topMarkets.find((m) => m.ticker === market.key)?.probability;
                     return (
                       <div
                         key={market.key}
-                        className="flex items-center gap-2 select-none"
+                        className="flex items-center gap-2 select-none cursor-pointer touch-manipulation"
+                        onClick={(e) => {
+                          if (isChartLegendCheckboxTarget(e.target)) return;
+                          toggleMarketVisibility(market.key);
+                        }}
                       >
                         <Checkbox
                           checked={visible}
@@ -1358,7 +1399,9 @@ export default function ProbabilityChart({
                         />
                         <span className="text-white/90">
                           {market.title}{" "}
-                          {prob !== undefined ? `${(prob * 100).toFixed(1)}%` : ""}
+                          {prob !== undefined
+                            ? `${formatChartPercentValue(prob * 100, 2)}%`
+                            : ""}
                         </span>
                       </div>
                     );

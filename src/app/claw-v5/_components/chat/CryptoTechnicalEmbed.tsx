@@ -1,5 +1,7 @@
 "use client";
 
+import type React from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import Image from "next/image";
 import { BarChart2, LineChart, TrendingUp } from "lucide-react";
 import ReactMarkdown from "react-markdown";
@@ -10,6 +12,16 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { CoinOMetry } from "@/components/CoinOMetry";
 import { HolderAnalyticsComponent } from "@/components/analytics/HolderAnalytics";
 import { BirdeyeSafetyAnalyticsComponent } from "@/components/analytics/BirdeyeSafetyAnalytics";
+import { ReportMenuDropdown } from "@/components/report/ReportMenuDropdown";
+import {
+  displayReportSectionTitle,
+  parseRexScreenerReportSections,
+  stripBnbOnlyReportSectionsFromMarkdown,
+  type RexReportSection,
+} from "@/lib/reportToc";
+import { mergeGoldenTeamUpdatesSections } from "@/lib/goldenReportTeamUpdate";
+import { renderRexPilotMarkdownSection } from "@/app/(rexscreener)/_components/rexchat/rexPilotReportMarkdown";
+import { isBscForBnbAnalyticsSections } from "@/utils/detectChain";
 
 type ChartDataPoint = { time?: number; value: number };
 
@@ -69,29 +81,35 @@ const sanitizeSchema = {
 
 const markdownComponents = {
   h1: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h1 className="text-white font-semibold text-lg mt-3 mb-2" {...props} />
+    <h1 {...props} />
   ),
   h2: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h2 className="text-white font-semibold text-base! mt-3 mb-2" {...props} />
+    <h2 {...props} />
   ),
   h3: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h3
-      className="text-[#ffc000]/80 font-semibold text-sm! mt-3 mb-2"
-      {...props}
-    />
+    <h3 {...props} />
+  ),
+  h4: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h4 {...props} />
+  ),
+  h5: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h5 {...props} />
+  ),
+  h6: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h6 {...props} />
   ),
   p: ({ ...props }: React.HTMLAttributes<HTMLParagraphElement>) => (
-    <p className="text-white/80 leading-relaxed my-2 break-words" {...props} />
+    <p className="leading-relaxed my-2 break-words" {...props} />
   ),
   strong: ({ ...props }: React.HTMLAttributes<HTMLElement>) => (
-    <strong className="text-white font-semibold" {...props} />
+    <strong className="font-semibold" {...props} />
   ),
   em: ({ ...props }: React.HTMLAttributes<HTMLElement>) => (
-    <em className="text-white/80 italic" {...props} />
+    <em className="italic opacity-90" {...props} />
   ),
   a: ({ ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
     <a
-      className="text-[#ffc000] underline underline-offset-2 hover:text-[#ffda44] break-all whitespace-normal"
+      className="underline underline-offset-2 break-all whitespace-normal"
       target="_blank"
       rel="noopener noreferrer"
       {...props}
@@ -104,7 +122,7 @@ const markdownComponents = {
     <ol className="list-decimal list-inside my-2 space-y-1" {...props} />
   ),
   li: ({ ...props }: React.HTMLAttributes<HTMLLIElement>) => (
-    <li className="text-white/80 break-words" {...props} />
+    <li className="break-words" {...props} />
   ),
   blockquote: ({ ...props }: React.HTMLAttributes<HTMLQuoteElement>) => (
     <blockquote
@@ -149,7 +167,7 @@ const markdownComponents = {
   ),
   th: ({ ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) => (
     <th
-      className="border border-white/10 px-2 py-1 text-left text-white/80 break-words align-top"
+      className="border border-white/10 px-2 py-1 text-left break-words align-top font-semibold"
       {...props}
     />
   ),
@@ -163,24 +181,52 @@ const markdownComponents = {
 
 function renderMarkdownSection(body: string) {
   return (
-    <ReactMarkdown
-      remarkPlugins={[remarkGfm, remarkBreaks]}
-      rehypePlugins={[
-        rehypeRaw,
-        [rehypeSanitize as any, sanitizeSchema as any],
-      ]}
-      components={markdownComponents as any}
-    >
-      {body}
-    </ReactMarkdown>
+    <div className="rex-markets-report-md rex-markets-report-md--fluid">
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkBreaks]}
+        rehypePlugins={[
+          rehypeRaw,
+          [rehypeSanitize as any, sanitizeSchema as any],
+        ]}
+        components={markdownComponents as any}
+      >
+        {body}
+      </ReactMarkdown>
+    </div>
   );
 }
 
 function getSectionIcon(title: string) {
   const t = title.toLowerCase();
+  if (t.includes("team updates"))
+    return (
+      <Image
+        src="/images/golden-report-badge.webp"
+        alt="Golden Report"
+        width={28}
+        height={28}
+        className="shrink-0 object-contain inline-block align-middle"
+      />
+    );
   if (t.includes("what it is")) return "📘";
   if (t.includes("community")) return "🧠";
-  if (t.includes("tweet")) return "🐦";
+  if (t.includes("tweet"))
+    return (
+      <svg
+        width={25}
+        height={25}
+        viewBox="0 0 14 14"
+        fill="none"
+        xmlns="http://www.w3.org/2000/svg"
+        className="inline shrink-0 text-[#ffc000]"
+        aria-hidden
+      >
+        <path
+          d="M11.025 0.65625H13.172L8.482 6.03025L14 13.3442H9.68L6.294 8.90925L2.424 13.3442H0.275L5.291 7.59425L0 0.65725H4.43L7.486 4.71025L11.025 0.65625ZM10.27 12.0562H11.46L3.78 1.87725H2.504L10.27 12.0562Z"
+          fill="currentColor"
+        />
+      </svg>
+    );
   if (t.includes("coin-o-metry")) return "🧮";
   if (t.includes("holder")) return "👥";
   if (t.includes("safety")) return "🛡️";
@@ -664,17 +710,19 @@ function IndicatorEmbed({ payload }: { payload: any }) {
             <div className="text-white/80 text-xs font-semibold mb-2">
               AI analysis
             </div>
-            <div className="text-white/80 text-sm leading-relaxed">
-              <ReactMarkdown
-                remarkPlugins={[remarkGfm, remarkBreaks]}
-                rehypePlugins={[
-                  rehypeRaw,
-                  [rehypeSanitize as any, sanitizeSchema as any],
-                ]}
-                components={markdownComponents as any}
-              >
-                {String(analysis.analysis).trim()}
-              </ReactMarkdown>
+            <div className="text-sm leading-relaxed">
+              <div className="rex-markets-report-md rex-markets-report-md--fluid">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  rehypePlugins={[
+                    rehypeRaw,
+                    [rehypeSanitize as any, sanitizeSchema as any],
+                  ]}
+                  components={markdownComponents as any}
+                >
+                  {String(analysis.analysis).trim()}
+                </ReactMarkdown>
+              </div>
             </div>
           </div>
         )}
@@ -684,7 +732,7 @@ function IndicatorEmbed({ payload }: { payload: any }) {
 }
 
 function TechnicalReportEmbed({ payload }: { payload: any }) {
-  const reportText = String(
+  const reportTextRaw = String(
     payload?.report?.report || payload?.report || "",
   ).trim();
   const dexData =
@@ -735,18 +783,61 @@ function TechnicalReportEmbed({ payload }: { payload: any }) {
   if (!tweetsData) {
     tweetsData = null;
   }
-  const chain =
-    payload?.chain ||
-    payload?.report?.chain ||
-    payload?.metadata?.chain ||
-    payload?.report?.metadata?.chain ||
-    dexData?.chainId ||
-    dexData?.chain ||
+
+  const contractAddress =
+    payload?.token?.tokenAddress ??
+    payload?.report?.contractAddress ??
+    dexData?.baseToken?.address ??
     "";
-  const isBNBToken =
-    typeof chain === "string" &&
-    (chain.toLowerCase().includes("bsc") ||
-      chain.toLowerCase().includes("bnb"));
+
+  const isBNBToken = useMemo(
+    () =>
+      isBscForBnbAnalyticsSections({
+        explicitChain:
+          payload?.chain ||
+          payload?.report?.chain ||
+          payload?.metadata?.chain ||
+          payload?.report?.metadata?.chain ||
+          payload?.token?.chainId ||
+          dexData?.chainId ||
+          dexData?.chain,
+        dexData,
+        contractAddress,
+      }),
+    [
+      payload?.chain,
+      payload?.report?.chain,
+      payload?.metadata?.chain,
+      payload?.report?.metadata?.chain,
+      payload?.token?.chainId,
+      dexData,
+      contractAddress,
+    ],
+  );
+
+  const chainForGolden = useMemo(() => {
+    const raw =
+      (typeof payload?.chain === "string" && payload.chain) ||
+      (typeof payload?.report?.chain === "string" && payload.report.chain) ||
+      (typeof payload?.metadata?.chain === "string" && payload.metadata.chain) ||
+      (typeof payload?.report?.metadata?.chain === "string" &&
+        payload.report.metadata.chain) ||
+      (typeof dexData?.chain === "string" && dexData.chain) ||
+      (dexData?.chainId != null ? String(dexData.chainId) : "") ||
+      (typeof payload?.token?.chainId === "string" && payload.token.chainId) ||
+      "";
+    const c = String(raw).trim().toLowerCase();
+    if (c === "bsc" || c === "bnb" || c === "56") return "bsc";
+    if (c === "base" || c === "8453") return "base";
+    if (c === "monad" || c === "10143") return "monad";
+    if (c === "solana" || c === "sol") return "solana";
+    return "solana";
+  }, [payload, dexData]);
+
+  const reportText = useMemo(
+    () => stripBnbOnlyReportSectionsFromMarkdown(reportTextRaw, isBNBToken),
+    [reportTextRaw, isBNBToken],
+  );
 
   const tokenTitle =
     payload?.token?.symbol ||
@@ -766,6 +857,101 @@ function TechnicalReportEmbed({ payload }: { payload: any }) {
     payload?.report?.generatedAt ||
     null;
 
+  const embedRootRef = useRef<HTMLDivElement>(null);
+  const scrollRootRef = useRef<HTMLElement | null>(null);
+
+  const [goldenPublic, setGoldenPublic] = useState<{
+    eligible: boolean;
+    content: string;
+    publishedAt: string | null;
+  } | null>(null);
+
+  useEffect(() => {
+    const addr = contractAddress.trim();
+    if (!addr) {
+      setGoldenPublic(null);
+      return;
+    }
+    let cancelled = false;
+    (async () => {
+      try {
+        const u = new URL(
+          "/api/golden-reports/team-updates/public",
+          window.location.origin,
+        );
+        u.searchParams.set("contractAddress", addr);
+        u.searchParams.set("chain", chainForGolden);
+        const res = await fetch(u.toString());
+        const j = await res.json().catch(() => ({}));
+        if (cancelled) return;
+        if (j?.ok) {
+          setGoldenPublic({
+            eligible: Boolean(j.eligible),
+            content: typeof j.content === "string" ? j.content : "",
+            publishedAt:
+              typeof j.publishedAt === "string" ? j.publishedAt : null,
+          });
+        } else {
+          setGoldenPublic({
+            eligible: false,
+            content: "",
+            publishedAt: null,
+          });
+        }
+      } catch {
+        if (!cancelled) {
+          setGoldenPublic({
+            eligible: false,
+            content: "",
+            publishedAt: null,
+          });
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [contractAddress, chainForGolden]);
+
+  const parsedReportSections = useMemo(
+    () => parseRexScreenerReportSections(reportText, isBNBToken),
+    [reportText, isBNBToken],
+  );
+
+  const reportSections = useMemo(() => {
+    if (!goldenPublic?.eligible) return parsedReportSections;
+    return mergeGoldenTeamUpdatesSections(
+      parsedReportSections,
+      goldenPublic.content || "",
+      goldenPublic.publishedAt,
+    );
+  }, [parsedReportSections, goldenPublic]);
+  const reportMenuItems = useMemo(
+    () =>
+      reportSections.map((s) => ({
+        title: displayReportSectionTitle(s.title),
+        id: s.id,
+      })),
+    [reportSections],
+  );
+
+  useLayoutEffect(() => {
+    const el = embedRootRef.current;
+    if (!el) return;
+    let p: HTMLElement | null = el.parentElement;
+    while (p) {
+      const oy = getComputedStyle(p).overflowY;
+      if (oy === "auto" || oy === "scroll" || oy === "overlay") {
+        scrollRootRef.current = p;
+        return;
+      }
+      p = p.parentElement;
+    }
+    scrollRootRef.current = null;
+  }, [reportText]);
+
+  if (!reportText) return null;
+
   const formatAbsolute = (iso: string) => {
     const d = new Date(iso);
     if (Number.isNaN(d.getTime())) return "";
@@ -774,8 +960,6 @@ function TechnicalReportEmbed({ payload }: { payload: any }) {
       { hour: "2-digit", minute: "2-digit" },
     )}`;
   };
-
-  if (!reportText) return null;
 
   function renderTweetsSection(): React.ReactNode {
     if (!tweetsData || !Array.isArray(tweetsData) || tweetsData.length === 0) {
@@ -944,7 +1128,7 @@ function TechnicalReportEmbed({ payload }: { payload: any }) {
     const t = title.toLowerCase();
     const body = lines.join("\n");
 
-    if (t.includes("individual tweets")) {
+    if (t.includes("individual tweets") || t.includes("top tweets")) {
       return renderTweetsSection();
     }
 
@@ -984,7 +1168,29 @@ function TechnicalReportEmbed({ payload }: { payload: any }) {
       );
     }
 
+    if (t.includes("team updates")) {
+      return renderRexPilotMarkdownSection(body);
+    }
+
     return renderMarkdownSection(body);
+  }
+
+  function renderStructuredFromSections(sections: RexReportSection[]) {
+    return (
+      <div className="space-y-8">
+        {sections.map((s) => (
+          <div key={s.id} id={s.id} className="scroll-mt-24">
+            <h2 className="text-[#ffc000] mb-4 flex items-center gap-3">
+              {displayReportSectionTitle(s.title)}
+              <span>{getSectionIcon(s.title)}</span>
+            </h2>
+            <div className="space-y-3">
+              {renderSectionContent(s.title, s.body)}
+            </div>
+          </div>
+        ))}
+      </div>
+    );
   }
 
   function formatStructuredReport(text: string): React.ReactNode {
@@ -992,15 +1198,24 @@ function TechnicalReportEmbed({ payload }: { payload: any }) {
     let cur = "";
     const sections: Record<string, string[]> = {};
 
+    const startSection = (rawTitle: string) => {
+      cur = rawTitle.replace(/^\d+\.\s*/, "").trim();
+      if (!sections[cur]) sections[cur] = [];
+    };
+
     lines.forEach((line) => {
       if (line.startsWith("## ")) {
-        const raw = line.substring(3).trim();
-        cur = raw.replace(/^\d+\.\s*/, "");
-        sections[cur] = [];
+        startSection(line.substring(3).trim());
+      } else if (line.startsWith("# ") && !line.startsWith("##")) {
+        startSection(line.substring(2).trim());
       } else if (cur && line.trim()) {
         sections[cur].push(line);
       }
     });
+
+    if (Object.keys(sections).length === 0 && text.trim()) {
+      return renderMarkdownSection(text);
+    }
 
     return (
       <div className="space-y-8">
@@ -1009,7 +1224,8 @@ function TechnicalReportEmbed({ payload }: { payload: any }) {
           if (
             !isBNBToken &&
             (lowerTitle.includes("holder analytics") ||
-              lowerTitle.includes("safety analytics"))
+              lowerTitle.includes("safety analytics") ||
+              lowerTitle.includes("bnb tokens only"))
           ) {
             return null;
           }
@@ -1030,7 +1246,7 @@ function TechnicalReportEmbed({ payload }: { payload: any }) {
   }
 
   return (
-    <div className="w-full">
+    <div ref={embedRootRef} className="relative w-full">
       <div className="px-3 py-4 sm:px-4">
         <div className="flex flex-col w-full justify-center items-center gap-4">
           <div className="flex items-center gap-4">
@@ -1044,10 +1260,10 @@ function TechnicalReportEmbed({ payload }: { payload: any }) {
               />
             )}
             <div className="text-center">
-              <div className="text-white text-[22px] sm:text-[28px] leading-tight">
+              <div className="text-[#f0cf7a] text-[22px] sm:text-[28px] leading-tight font-semibold">
                 {tokenSymbol || tokenTitle} {tokenName ? `(${tokenName})` : ""}
               </div>
-              <div className="text-white/60 text-xs mt-1">Technical Report</div>
+              <div className="text-[#ffc000]/70 text-xs mt-1">Technical Report</div>
             </div>
           </div>
 
@@ -1118,7 +1334,19 @@ function TechnicalReportEmbed({ payload }: { payload: any }) {
           </div>
         </div>
 
-        <div className="pt-4">{formatStructuredReport(reportText)}</div>
+        {reportMenuItems.length > 0 && (
+          <ReportMenuDropdown
+            items={reportMenuItems}
+            scrollRootRef={scrollRootRef}
+            layout="embed"
+          />
+        )}
+
+        <div className="pt-4">
+          {reportSections.length > 0
+            ? renderStructuredFromSections(reportSections)
+            : formatStructuredReport(reportText)}
+        </div>
       </div>
     </div>
   );

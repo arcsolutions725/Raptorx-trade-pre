@@ -20,16 +20,10 @@ const systemPrompt = `You are a professional market analyst and technical writer
 
 ### Report Structure:
 
-## Title
-Create a compelling, descriptive title for this prediction market report that captures the essence of the question.
-
 ## Situation Summary
 Write a 5-6 line paragraph explaining the news and context related to this prediction question. This should provide background on why this question matters and what events have led to it becoming a prediction market. **Use NEWS APIs and current events to build this paragraph with factual, recent information.**
 
-## Featured Image
-Include 1 professionally-sourced image from the internet related to the prediction question. The image should be relevant to the topic and formatted with rounded corners in markdown. Use placeholder markdown syntax: ![Image Description](image-url-here)
-
-## 4. Recent Developments
+## Recent Developments
 List 3-5 key highlights showing the latest news developments around which this prediction question is based. Format as bullet points with dates where applicable.
 - **CRITICAL: Use ONLY the dates and times provided in the market data. Do NOT make up dates. If dates are provided in the market timing information, use those exact dates. If no specific dates are provided, you may reference recent developments but must clearly indicate when you are using general timeframes rather than specific dates.**
 - **[Date]**: Development description (use exact dates from market data if available)
@@ -186,7 +180,7 @@ async function awardReportPoints(userId: string) {
 export async function POST(request: NextRequest) {
   try {
     const userId = requireUserId(request);
-    const { marketTicker, marketTitle, marketData, reportKind } =
+    const { marketTicker, marketTitle, marketData, reportKind, stream } =
       await request.json();
 
     if (!marketTicker || !marketTitle) {
@@ -274,15 +268,95 @@ ${dateTimeContext}
 
 ### Requirements:
 - Follow the exact report structure outlined in the system prompt
-- Use the 10-section format as specified
+- Use the section format specified in the system prompt (excluding Title and Featured Image; those are shown in the app UI)
 - Include recent news and developments (use your knowledge cutoff for context)
 - Analyze the market probabilities and outcomes
 - Identify key influencers and power dynamics
+- **Do not** include a "## Title" section or "## Featured Image" section — the app shows the market title and symbol image in the header.
 - Format the Closing Line section title prominently with golden underline
 - Make sure to include a note about the chat dialogue box for follow-up questions
 - If specific real-time news data is not available, use contextual knowledge and clearly indicate when making informed assumptions
 - Focus on creating a professional, readable report structure
 ${dateTimeContext ? "- **CRITICAL: Use the exact dates and times provided in the Market Timing Information above. Do NOT make up dates in the Recent Developments section.**" : ""}`;
+
+    const reportCreateData = (content: string) => ({
+      userId,
+      contractAddress: marketTicker,
+      ticker: marketTicker,
+      chain: "market" as const,
+      reportType: "market" as const,
+      projectName: marketTitle,
+      content,
+      marketData: marketData || undefined,
+      conversation: { create: {} },
+    });
+
+    if (stream) {
+      const encoder = new TextEncoder();
+      const sse = new ReadableStream<Uint8Array>({
+        async start(controller) {
+          const send = (payload: Record<string, unknown>) => {
+            controller.enqueue(
+              encoder.encode(`data: ${JSON.stringify(payload)}\n\n`),
+            );
+          };
+          try {
+            let fullReport = "";
+            const aiStream = await client.chat.completions.create({
+              model: "deepseek-chat",
+              messages: [
+                { role: "system", content: systemPrompt },
+                { role: "user", content: aiPrompt },
+              ],
+              temperature: 0.7,
+              max_tokens: 4000,
+              stream: true,
+            });
+            for await (const part of aiStream) {
+              const delta = (part as { choices?: { delta?: { content?: string } }[] })
+                .choices?.[0]?.delta?.content;
+              if (delta) {
+                fullReport += delta;
+                send({ type: "token", text: delta });
+              }
+            }
+            const created = await prisma.report.create({
+              data: reportCreateData(fullReport),
+              include: {
+                conversation: {
+                  select: { id: true, createdAt: true, updatedAt: true },
+                },
+              },
+            });
+            await awardReportPoints(userId);
+            send({
+              type: "done",
+              report: fullReport,
+              marketData: marketData || null,
+              saved: {
+                reportId: created.id,
+                conversationId: created.conversation?.id ?? null,
+                createdAt: created.createdAt.toISOString(),
+                updatedAt: created.updatedAt.toISOString(),
+              },
+            });
+          } catch (e: unknown) {
+            const message = e instanceof Error ? e.message : "Unknown error";
+            send({ type: "error", message });
+          } finally {
+            controller.close();
+          }
+        },
+      });
+
+      return new Response(sse, {
+        headers: {
+          "Content-Type": "text/event-stream; charset=utf-8",
+          "Cache-Control": "no-cache, no-transform",
+          Connection: "keep-alive",
+        },
+      });
+    }
 
     const aiResponse = await client.chat.completions.create({
       model: "deepseek-chat",
@@ -296,19 +370,8 @@ ${dateTimeContext ? "- **CRITICAL: Use the exact dates and times provided in the
 
     const generatedReport = aiResponse.choices?.[0]?.message?.content || "";
 
-    // Save the report to database
     const created = await prisma.report.create({
-      data: {
-        userId,
-        contractAddress: marketTicker, // Using ticker as identifier for markets
-        ticker: marketTicker,
-        chain: "market", // Using "market" as chain identifier for market reports
-        reportType: "market",
-        projectName: marketTitle,
-        content: generatedReport,
-        marketData: marketData || undefined,
-        conversation: { create: {} },
-      },
+      data: reportCreateData(generatedReport),
       include: {
         conversation: {
           select: { id: true, createdAt: true, updatedAt: true },

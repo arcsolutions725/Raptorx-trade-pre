@@ -71,7 +71,7 @@ export default function RexMarketsSearch({
             }}
             onKeyDown={handleKeyDown}
             placeholder="Search markets..."
-            className="w-full pl-10 pr-12 py-2.5 bg-[#262626] border-[0.5px] border-[#3c3c3c] rounded-lg text-[14px] text-[#A0A0A0] placeholder-[#A0A0A0] outline-none transition-all"
+            className="w-full pl-10 pr-12 py-2.5 bg-[#262626] border-[0.5px] border-[#3c3c3c] rounded-lg text-base sm:text-sm text-[#A0A0A0] placeholder-[#A0A0A0] outline-none transition-all"
           />
           <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
             {hasActiveSearch && (

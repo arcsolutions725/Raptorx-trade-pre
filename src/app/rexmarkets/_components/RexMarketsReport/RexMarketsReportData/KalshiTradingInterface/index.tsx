@@ -14,7 +14,8 @@ import { useGenerateMarketReport } from "@/hooks/useGenerateMarketReport";
 import { useReportGenStatus } from "@/lib/storage/reportGenStore";
 import { usePrivy } from "@privy-io/react-auth";
 import { useKalshiComments } from "@/hooks/useKalshiComments";
-import { PaywallModal } from "@/components/subscription/PaywallModal";
+import { PaywallModal } from "@/components/ui/modal/PaywallModal";
+import { useRexMarketsGenerateReportOptional } from "@/app/rexmarkets/_components/RexMarketsGenerateReportContext";
 
 const INTERVALS = ["1H", "6H", "1D", "1W", "1M", "ALL"];
 
@@ -26,6 +27,7 @@ type KalshiTradingInterfaceProps = {
   onBack?: () => void;
   onReportGenerated?: (report: any) => void;
   userId?: string | null;
+  sessionSavedReportId?: string | null;
 };
 
 export default function KalshiTradingInterface({
@@ -36,6 +38,7 @@ export default function KalshiTradingInterface({
   onBack,
   onReportGenerated,
   userId,
+  sessionSavedReportId,
 }: KalshiTradingInterfaceProps) {
   const { marketDetails, isLoading: isLoadingDetails } = useMarketDetails(
     eventTicker || null,
@@ -70,6 +73,8 @@ export default function KalshiTradingInterface({
   const [selectedOrderBookOutcome, setSelectedOrderBookOutcome] = useState<
     "Yes" | "No"
   >("Yes");
+  const [mobileOrderBookDepthExpanded, setMobileOrderBookDepthExpanded] =
+    useState(true);
 
   // Reset selected market index if it becomes out of bounds
   useEffect(() => {
@@ -120,6 +125,10 @@ export default function KalshiTradingInterface({
   const [countdown, setCountdown] = useState<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+
+  useEffect(() => {
+    if (!sessionSavedReportId) setHasGenerated(false);
+  }, [sessionSavedReportId]);
 
   // Initialize countdown when generation starts
   useEffect(() => {
@@ -204,6 +213,13 @@ export default function KalshiTradingInterface({
       }
     }
   }, [authenticated, login, marketForGeneration, ready, generateFromMarket]);
+
+  const generateReportSidebar = useRexMarketsGenerateReportOptional();
+  useEffect(() => {
+    if (!generateReportSidebar) return;
+    generateReportSidebar.registerGenerateHandler(() => handleGenerateClick());
+    return () => generateReportSidebar.registerGenerateHandler(null);
+  }, [generateReportSidebar, handleGenerateClick]);
 
   // Get available markets for filter and trading — active only
   const availableMarkets = useMemo(() => {
@@ -316,16 +332,16 @@ export default function KalshiTradingInterface({
 
       {/* Main Content Area - Scrollable */}
       <div
-        className="flex-1 overflow-y-auto custom-sidebar-scrollbar min-h-0"
-        style={{ paddingBottom: "80px", WebkitOverflowScrolling: "touch" }}
+        className="flex-1 overflow-y-auto rexmarkets-scroll-pane-y min-h-0 pb-2"
+        style={{ WebkitOverflowScrolling: "touch" }}
       >
-        <div className="flex flex-col min-h-full">
+        <div className="flex flex-col">
           {/* Top Section - Chart placeholder and Order Book */}
           <div className="flex flex-col lg:flex-row border-b border-white/10 flex-shrink-0">
             {/* Chart - Full width on mobile with explicit min-height so it doesn't collapse, flex-1 on desktop */}
             <div className="flex-1 flex flex-col min-w-0 w-full min-h-[400px] lg:w-auto lg:min-h-[520px]">
               {/* Chart Controls */}
-              <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-white/10">
+              <div className="flex-shrink-0 flex items-center justify-start px-4 py-2 border-b border-white/10">
                 <div className="flex items-center gap-2 overflow-x-auto">
                   {INTERVALS.map((interval) => (
                     <button
@@ -340,9 +356,6 @@ export default function KalshiTradingInterface({
                       {interval}
                     </button>
                   ))}
-                </div>
-                <div className="text-sm text-white/60 hidden sm:block">
-                  {typeof marketTitle === "string" ? marketTitle : ""}
                 </div>
               </div>
 
@@ -364,7 +377,38 @@ export default function KalshiTradingInterface({
               </div>
             </div>
 
-            {/* Mobile: Order Book stacked under chart */}
+            {/* Mobile: Buy/Sell directly under chart; order book follows */}
+            <div className="lg:hidden w-full flex-shrink-0 border-t border-white/10">
+              <BuySellWidget
+                currentYesPrice={currentYesPrice}
+                currentNoPrice={currentNoPrice}
+                onBuyClick={handleBuyClick}
+                onSellClick={handleSellClick}
+                symbolImageUrl={
+                  typeof marketDetails.symbol_image_url === "string"
+                    ? marketDetails.symbol_image_url
+                    : undefined
+                }
+                marketTitle={
+                  typeof marketTitle === "string" ? marketTitle : undefined
+                }
+                availableMarkets={availableMarkets}
+                marketsForOrderBook={marketsForOrderBook.map((m) => ({
+                  clobTokenId: null,
+                  clobNoTokenId: null,
+                  marketTitle: m.marketTitle,
+                  ticker: m.ticker,
+                  conditionId: m.ticker,
+                  yesPrice: m.yesPrice,
+                  noPrice: m.noPrice,
+                  volume: m.volume,
+                }))}
+                selectedMarketIndex={selectedMarketIndex}
+                onMarketIndexChange={setSelectedMarketIndex}
+              />
+            </div>
+
+            {/* Mobile: Order book below buy/sell */}
             <div className="lg:hidden w-full flex-shrink-0 border-t border-white/10 flex flex-col">
               {marketsForOrderBook.length > 2 && (
                 <div className="flex-shrink-0 border-b border-white/10 px-4 py-2">
@@ -385,13 +429,18 @@ export default function KalshiTradingInterface({
                   </div>
                 </div>
               )}
-              <div className="min-h-[350px] overflow-hidden">
+              <div
+                className={`overflow-hidden ${
+                  mobileOrderBookDepthExpanded ? "min-h-[350px]" : ""
+                }`}
+              >
                 <KalshiOrderBook
                   marketTicker={selectedMarketTicker}
                   yesPrice={currentYesPrice}
                   noPrice={currentNoPrice}
                   onBuyClick={handleOrderBookBuyClick}
                   selectedOutcome={selectedOrderBookOutcome}
+                  onDepthExpandedChange={setMobileOrderBookDepthExpanded}
                 />
               </div>
             </div>
@@ -429,7 +478,7 @@ export default function KalshiTradingInterface({
           </div>
 
           {/* Bottom Section - Comments/Activity */}
-          <div className="flex min-h-[400px] flex-col flex-shrink-0 border-t border-white/10">
+          <div className="flex min-h-0 flex-col flex-shrink-0 border-t border-white/10">
             <div
               className="flex flex-col lg:flex-row items-stretch gap-4 p-4 flex-shrink-0"
               style={{ maxHeight: "750px" }}
@@ -466,7 +515,7 @@ export default function KalshiTradingInterface({
                 </div>
 
                 {/* Content Area with Scroll */}
-                <div className="flex-1 min-h-0 overflow-y-auto custom-select-scrollbar">
+                <div className="flex-1 min-h-0 overflow-y-auto rexmarkets-scroll-pane-y">
                   {activeTab === "activity" ? (
                     <KalshiActivityFeed
                       seriesTicker={marketDetails.series_ticker}
@@ -505,6 +554,7 @@ export default function KalshiTradingInterface({
                     noPrice={currentNoPrice}
                     onBuyClick={handleOrderBookBuyClick}
                     selectedOutcome={selectedOrderBookOutcome}
+                    showDepthToggle={false}
                   />
                 </div>
               </div>

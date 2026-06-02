@@ -74,7 +74,7 @@ export function DailyTasksPopup({
         <div className="flex items-center justify-between p-6 border-b border-gray-700">
           <div className="flex items-center gap-3">
             <Image
-              src="/images/mission.png"
+              src="/images/mission.webp"
               alt="Daily Missions"
               width={24}
               height={24}

@@ -6,6 +6,7 @@ import type { PolymarketMarket } from "./usePolymarketMarkets";
 import { ReportCache } from "@/lib/storage/reportCache";
 import { useQueryClient } from "@tanstack/react-query";
 import { reportGenStore } from "@/lib/storage/reportGenStore";
+import { marketReportStreamStore } from "@/lib/storage/marketReportStreamStore";
 
 export type MarketReport = {
   id: string;
@@ -30,14 +31,64 @@ type UseGenerateMarketReportOptions = {
   userId?: string | null;
 };
 
-async function postGenerateMarket(body: any, headers: Record<string, string>) {
+async function postGenerateMarketStream(
+  body: any,
+  headers: Record<string, string>,
+  onToken: (text: string) => void,
+): Promise<{ res: Response; json: any }> {
   const res = await fetch("/api/generate-market-report", {
     method: "POST",
     headers: { "Content-Type": "application/json", ...headers },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, stream: true }),
   });
-  const json = await res.json().catch(() => ({}));
-  return { res, json };
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    return { res, json };
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) {
+    throw new Error("No response body from report stream.");
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let donePayload: any = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+    for (const block of parts) {
+      const line = block.trim();
+      if (!line.startsWith("data: ")) continue;
+      let data: { type?: string; text?: string; message?: string };
+      try {
+        data = JSON.parse(line.slice(6));
+      } catch {
+        continue;
+      }
+      if (data.type === "token" && data.text) {
+        onToken(data.text);
+      }
+      if (data.type === "done") {
+        donePayload = data;
+      }
+      if (data.type === "error") {
+        const err: any = new Error(data.message || "Stream error");
+        throw err;
+      }
+    }
+  }
+
+  if (!donePayload) {
+    throw new Error("Report stream ended unexpectedly.");
+  }
+
+  return { res, json: donePayload };
 }
 
 export function useGenerateMarketReport(
@@ -124,11 +175,13 @@ export function useGenerateMarketReport(
       inFlightRef.current = true;
       setIsGenerating(true);
       reportGenStore.start(marketTicker);
+      marketReportStreamStore.start(marketTicker);
 
       try {
-        const { res, json } = await postGenerateMarket(
+        const { res, json } = await postGenerateMarketStream(
           { marketTicker, marketTitle, marketData, reportKind },
-          { "x-user-id": userId }
+          { "x-user-id": userId },
+          (t) => marketReportStreamStore.append(t),
         );
         if (!res.ok) {
           const err: any = new Error(json?.error || `HTTP ${res.status}`);
@@ -136,14 +189,25 @@ export function useGenerateMarketReport(
           err.code = json?.code;
           throw err;
         }
-        return await commonBuildReport(json, marketTicker, marketTitle);
+        const genJson = {
+          report: json?.report,
+          saved: {
+            reportId: json?.saved?.reportId,
+            conversationId: json?.saved?.conversationId ?? null,
+            createdAt: json?.saved?.createdAt,
+            updatedAt: json?.saved?.updatedAt ?? json?.saved?.createdAt,
+          },
+          marketData: json?.marketData ?? marketData ?? null,
+        };
+        return await commonBuildReport(genJson, marketTicker, marketTitle);
       } catch (err: any) {
         setError(err?.message || "Failed to generate market report.");
         throw err;
       } finally {
+        reportGenStore.finish(marketTicker);
+        marketReportStreamStore.clear();
         setIsGenerating(false);
         inFlightRef.current = false;
-        reportGenStore.finish(marketTicker);
       }
     },
     [userId, commonBuildReport]
@@ -151,11 +215,17 @@ export function useGenerateMarketReport(
 
   const generateFromMarket = useCallback(
     async (market: KalashiMarket | PolymarketMarket) => {
-      const marketTicker = market.ticker ?? "";
+      const pmOrAny = market as any;
+      const marketTicker =
+        (typeof market.ticker === "string" && market.ticker.trim()) ||
+        (typeof pmOrAny.event_ticker === "string" && pmOrAny.event_ticker.trim()) ||
+        (typeof pmOrAny.slug === "string" && pmOrAny.slug.trim()) ||
+        (pmOrAny.id != null ? String(pmOrAny.id).trim() : "") ||
+        "";
       const marketTitle = market.title ?? "";
-      
-      // Check if it's a Polymarket market
-      const isPolymarket = 'rawEventData' in market || 'slug' in market;
+
+      // Polymarket & Limitless listing rows include `slug`; Kalshi does not.
+      const isPolymarket = "rawEventData" in market || "slug" in market;
       
       let marketData: any;
       

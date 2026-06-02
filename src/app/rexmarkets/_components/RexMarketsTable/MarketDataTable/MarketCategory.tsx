@@ -11,6 +11,25 @@ import {
   type PolymarketTag,
 } from "@/hooks/usePolymarketTags";
 import { useDataSource } from "@/contexts/DataSourceContext";
+import { usePredictFunNavigation } from "@/hooks/usePredictFunNavigation";
+import {
+  PREDICT_FUN_DEFAULT_CATEGORY_VALUE,
+  predictFunLabelFromValue,
+  predictFunTagIdFromLabel,
+  predictFunTagIdFromValue,
+} from "@/lib/predictfun/navigation";
+import { usePredictFunCategorySubTags } from "@/hooks/usePredictFunCategorySubTags";
+
+/** Myriad listing topics (GET /markets?topics=) — match Myriad web filters. */
+const MYRIAD_CATEGORIES: Record<string, string[]> = {
+  All: ["all"],
+  Crypto: ["Crypto"],
+  Sports: ["Sports"],
+  Politics: ["Politics"],
+  Economy: ["Economy"],
+  Gaming: ["Gaming"],
+  Culture: ["Culture"],
+};
 
 type MarketCategoryProps = {
   onCategoryChange?: (category: string | null) => void;
@@ -23,6 +42,38 @@ type SliderStyle = {
   left: number;
   width: number;
 };
+
+const CATEGORY_SKELETON_PILL_WIDTHS = [
+  "w-10",
+  "w-14",
+  "w-16",
+  "w-14",
+  "w-[4.5rem]",
+  "w-12",
+  "w-16",
+] as const;
+
+function MarketCategorySkeleton() {
+  return (
+    <div className="w-full mb-2" aria-busy="true" aria-live="polite">
+      <div className="relative flex h-[44px] w-full max-w-full items-center overflow-hidden rounded-xl bg-white/[0.06] p-0.5">
+        <div className="flex min-w-max items-center gap-0.5 px-0.5">
+          {CATEGORY_SKELETON_PILL_WIDTHS.map((width, index) => (
+            <div
+              key={index}
+              className={clsx(
+                "h-10 shrink-0 animate-pulse rounded-[10px] bg-white/[0.04]",
+                width,
+              )}
+              aria-hidden
+            />
+          ))}
+        </div>
+      </div>
+      <span className="sr-only">Loading categories</span>
+    </div>
+  );
+}
 
 export default function MarketCategory({
   onCategoryChange,
@@ -58,6 +109,13 @@ export default function MarketCategory({
     error: limitlessErrorObj,
   } = useLimitlessNavigation(dataSource === "limitless" || dataSource === "all");
 
+  const {
+    categoriesData: predictFunCategories,
+    allNav: predictFunAllNav,
+    isLoading: predictFunLoading,
+    isError: predictFunError,
+    error: predictFunErrorObj,
+  } = usePredictFunNavigation(dataSource === "predictfun");
 
   // Store display names for categories in "all" mode
   const categoryDisplayNames = useMemo(() => {
@@ -99,6 +157,8 @@ export default function MarketCategory({
     if (!isAllMode) {
       if (dataSource === "polymarket") return polymarketCategories;
       if (dataSource === "limitless") return limitlessCategories;
+      if (dataSource === "myriad") return MYRIAD_CATEGORIES;
+      if (dataSource === "predictfun") return predictFunCategories;
       return kalshiCategories;
     }
     
@@ -165,21 +225,33 @@ export default function MarketCategory({
   const categoriesData = mergedCategoriesData;
   const isLoading = isAllMode
     ? (kalshiLoading || polymarketLoading || limitlessLoading)
-    : dataSource === "polymarket"
+    : dataSource === "myriad"
+      ? false
+      : dataSource === "predictfun"
+        ? predictFunLoading
+      : dataSource === "polymarket"
       ? polymarketLoading
       : dataSource === "limitless"
         ? limitlessLoading
         : kalshiLoading;
   const isError = isAllMode
     ? (kalshiError || polymarketError || limitlessError)
-    : dataSource === "polymarket"
+    : dataSource === "myriad"
+      ? false
+      : dataSource === "predictfun"
+        ? predictFunError
+      : dataSource === "polymarket"
       ? polymarketError
       : dataSource === "limitless"
         ? limitlessError
         : kalshiError;
   const error = isAllMode
     ? (kalshiErrorObj || polymarketErrorObj || limitlessErrorObj)
-    : dataSource === "polymarket"
+    : dataSource === "myriad"
+      ? null
+      : dataSource === "predictfun"
+        ? predictFunErrorObj
+      : dataSource === "polymarket"
       ? polymarketErrorObj
       : dataSource === "limitless"
         ? limitlessErrorObj
@@ -206,6 +278,28 @@ export default function MarketCategory({
       : internalCategory;
   const selectedTag =
     externalSelectedTag !== undefined ? externalSelectedTag : internalTag;
+
+  const predictFunParentTagId = useMemo(() => {
+    if (dataSource !== "predictfun" || !selectedCategory) return null;
+    return (
+      predictFunTagIdFromValue(selectedCategory) ??
+      predictFunTagIdFromLabel(selectedCategory)
+    );
+  }, [dataSource, selectedCategory]);
+
+  const {
+    tags: predictFunCategorySubTags,
+    hasSubTags: predictFunHasCategorySubTags,
+    isLoading: predictFunCategorySubTagsLoading,
+  } = usePredictFunCategorySubTags(
+    predictFunParentTagId,
+    dataSource === "predictfun"
+  );
+
+  const predictFunShowSubTagNav = useMemo(() => {
+    if (dataSource !== "predictfun" || !predictFunParentTagId) return false;
+    return predictFunHasCategorySubTags;
+  }, [dataSource, predictFunParentTagId, predictFunHasCategorySubTags]);
 
   // Limitless tag groups: only for categories with tags (Crypto, Sport, Finance); not for Other
   const limitlessCategoryId = useMemo(() => {
@@ -316,10 +410,19 @@ export default function MarketCategory({
       }
 
       // For Polymarket or Limitless, find which category contains this slug
-      if (dataSource === "polymarket" || dataSource === "limitless") {
+      if (
+        dataSource === "polymarket" ||
+        dataSource === "limitless" ||
+        dataSource === "myriad" ||
+        dataSource === "predictfun"
+      ) {
         for (const [categoryLabel, slugs] of Object.entries(categoriesData)) {
-          if (Array.isArray(slugs) && slugs.includes(slugOrLabel)) {
-            return categoryLabel;
+          if (!Array.isArray(slugs)) continue;
+          if (slugs.includes(slugOrLabel)) return categoryLabel;
+          if (dataSource === "predictfun") {
+            if (slugs.some((s) => s === slugOrLabel)) return categoryLabel;
+            const label = predictFunLabelFromValue(slugOrLabel);
+            if (label === categoryLabel) return categoryLabel;
           }
         }
       }
@@ -341,6 +444,16 @@ export default function MarketCategory({
   // For Polymarket, tags are objects with label and slug
   // For Kalshi, tags are strings. For Limitless, tags are { label, value } from tag groups.
   const selectedTags = useMemo(() => {
+    if (dataSource === "myriad") return [];
+
+    if (dataSource === "predictfun") {
+      if (!predictFunParentTagId) return [];
+      return predictFunCategorySubTags.map((t) => ({
+        label: t.label,
+        value: `predictfun:${t.tagId}`,
+      }));
+    }
+
     // Limitless: only show tags when category has tag groups (Crypto, Sport, Finance); not for Other
     if (dataSource === "limitless" || (isAllMode && selectedCategory && limitlessSlugToId?.[selectedCategory])) {
       if (limitlessTagGroups.length > 0) {
@@ -444,15 +557,29 @@ export default function MarketCategory({
     polymarketTags,
     limitlessTagGroups,
     limitlessSlugToId,
+    predictFunCategorySubTags,
+    predictFunParentTagId,
   ]);
 
   // Helper to check if selected tag matches (handles string, PolymarketTag, LimitlessTagItem)
   const isTagSelected = useCallback(
     (tag: string | PolymarketTag | LimitlessTagItem): boolean => {
       if (!selectedTag) return false;
+      if (dataSource === "predictfun") {
+        if (typeof tag === "object" && tag !== null && "value" in tag) {
+          return selectedTag === (tag as LimitlessTagItem).value;
+        }
+        return false;
+      }
       if (typeof tag === "object" && tag !== null && "value" in tag && !("slug" in tag)) {
         const limitTag = tag as LimitlessTagItem;
-        return selectedTag === limitTag.value || selectedTag === `limitless:${limitTag.value}`;
+        const v = limitTag.value;
+        return (
+          selectedTag === v ||
+          selectedTag === `limitless:${v}` ||
+          selectedTag === `predictfun:${v.replace(/^predictfun:/, "")}` ||
+          (v.startsWith("predictfun:") && selectedTag === v)
+        );
       }
       if (isAllMode) {
         if (typeof tag === "string") return tag === selectedTag || `kalshi:${tag}` === selectedTag || tag === `kalshi:${selectedTag}`;
@@ -470,6 +597,7 @@ export default function MarketCategory({
     (tag: string | PolymarketTag | LimitlessTagItem): string => {
       if (typeof tag === "object" && tag !== null && "value" in tag && !("slug" in tag)) {
         const limitTag = tag as LimitlessTagItem;
+        if (dataSource === "predictfun") return limitTag.value;
         return isAllMode ? `limitless:${limitTag.value}` : limitTag.value;
       }
       if (isAllMode) {
@@ -496,6 +624,34 @@ export default function MarketCategory({
 
   const handleCategoryClick = useCallback(
     (category: string) => {
+      // Predict.fun: always select a tab (never toggle off to unfiltered null)
+      if (dataSource === "predictfun") {
+        const selectedCategoryLabel = selectedCategory
+          ? getCategoryLabelFromSlug(selectedCategory)
+          : null;
+        const isCurrentlySelected =
+          !!selectedCategoryLabel &&
+          selectedCategoryLabel.toLowerCase() === category.toLowerCase();
+
+        let categoryToPass: string = PREDICT_FUN_DEFAULT_CATEGORY_VALUE;
+        if (!isCurrentlySelected && categoriesData?.[category]?.[0]) {
+          categoryToPass = categoriesData[category][0];
+        } else if (!isCurrentlySelected) {
+          const id = predictFunTagIdFromLabel(category);
+          categoryToPass = id
+            ? `predictfun:${id}`
+            : PREDICT_FUN_DEFAULT_CATEGORY_VALUE;
+        }
+
+        if (externalSelectedCategory === undefined) {
+          setInternalCategory(category);
+        }
+        onCategoryChange?.(categoryToPass);
+        if (externalSelectedTag === undefined) setInternalTag(null);
+        onTagChange?.(null);
+        return;
+      }
+
       // Get the category label from selectedCategory (which might be a slug for Polymarket)
       const selectedCategoryLabel = selectedCategory
         ? getCategoryLabelFromSlug(selectedCategory)
@@ -518,7 +674,9 @@ export default function MarketCategory({
         // In "all" mode, use the normalized category name
         categoryToPass = newCategory.toLowerCase().trim();
       } else if (
-        (dataSource === "polymarket" || dataSource === "limitless") &&
+        (dataSource === "polymarket" ||
+          dataSource === "limitless" ||
+          dataSource === "myriad") &&
         newCategory &&
         categoriesData &&
         typeof categoriesData === "object" &&
@@ -795,14 +953,7 @@ export default function MarketCategory({
 
   // Early returns after all hooks
   if (isLoading) {
-    return (
-      <div className="p-6 bg-black/30 border border-white/10 rounded-lg">
-        <div className="flex items-center gap-3 text-white/70">
-          <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white/70" />
-          <span>Loading categories and tags...</span>
-        </div>
-      </div>
-    );
+    return <MarketCategorySkeleton />;
   }
 
   // In "all" mode, only show error if both sources fail
@@ -851,14 +1002,7 @@ export default function MarketCategory({
   if (categories.length === 0) {
     // In "all" mode, if we're still loading one source, show loading
     if (isAllMode && (kalshiLoading || polymarketLoading)) {
-      return (
-        <div className="p-6 bg-black/30 border border-white/10 rounded-lg">
-          <div className="flex items-center gap-3 text-white/70">
-            <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-white/70" />
-            <span>Loading categories...</span>
-          </div>
-        </div>
-      );
+      return <MarketCategorySkeleton />;
     }
     return (
       <div className="p-4 bg-black/30 border border-white/10 rounded-lg">
@@ -999,7 +1143,10 @@ export default function MarketCategory({
 
       {/* Tags - Tab Style with Border Bottom */}
       {/* Only show tags section if category is selected AND tags are available (non-empty) */}
-      {selectedCategory && selectedTags.length > 0 && (
+      {selectedCategory &&
+        (dataSource === "predictfun"
+          ? predictFunShowSubTagNav
+          : selectedTags.length > 0) && (
         <div
           className="relative inline-flex items-center group"
           style={{ maxWidth: "100%" }}
@@ -1083,7 +1230,14 @@ export default function MarketCategory({
               >
                 All
               </button>
-              {selectedTags.length > 0 ? (
+              {dataSource === "predictfun" && predictFunCategorySubTagsLoading ? (
+                <span
+                  className="px-4 py-3 text-sm text-white/50 italic"
+                  role="status"
+                >
+                  Loading tags…
+                </span>
+              ) : selectedTags.length > 0 ? (
                 selectedTags.map((tag, tagIndex) => {
                   const tagLabel = getTagLabel(tag);
                   let tagKey: string;

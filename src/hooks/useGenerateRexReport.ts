@@ -6,6 +6,7 @@ import type { TrendingToken } from "@/hooks/useTrendingTokens";
 import { ReportCache } from "@/lib/storage/reportCache";
 import { useQueryClient } from "@tanstack/react-query";
 import { reportGenStore } from "@/lib/storage/reportGenStore";
+import { marketReportStreamStore } from "@/lib/storage/marketReportStreamStore";
 
 export type Report = {
   id: string;
@@ -52,6 +53,119 @@ async function postGenerate(body: any, headers: Record<string, string>) {
   return { res, json };
 }
 
+/** When SSE/client drops ids, recover from fresh list (matches API normAddr / list row). */
+async function resolveReportIdFromCryptoList(
+  userId: string,
+  contractAddress: string,
+): Promise<string | undefined> {
+  const n = contractAddress.trim().toLowerCase();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise((r) => setTimeout(r, 400));
+    try {
+      const res = await fetch(`/api/reports?reportType=crypto`, {
+        headers: { "x-user-id": userId },
+      });
+      if (!res.ok) continue;
+      const data = await res.json();
+      const list = (data.reports ?? []) as {
+        id?: string;
+        contractAddress?: string;
+      }[];
+      const hit = list.find(
+        (x) =>
+          x?.id &&
+          x?.contractAddress &&
+          x.contractAddress.trim().toLowerCase() === n,
+      );
+      if (hit?.id) return String(hit.id);
+    } catch {
+      /* retry */
+    }
+  }
+  return undefined;
+}
+
+async function postGenerateStream(
+  body: Record<string, unknown>,
+  headers: Record<string, string>,
+  onToken: (text: string) => void,
+): Promise<{ res: Response; json: any }> {
+  const res = await fetch("/api/generate-report", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...headers },
+    body: JSON.stringify({
+      ...body,
+      stream: true,
+      /** RexScreener "Generate" must run a new pass (and SSE), not return a plain JSON cache hit. */
+      forceRefresh: true,
+    }),
+  });
+
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    return { res, json };
+  }
+
+  const ct = (res.headers.get("content-type") || "").toLowerCase();
+  if (ct.includes("application/json")) {
+    const json = await res.json().catch(() => ({}));
+    const report = typeof json?.report === "string" ? json.report : "";
+    if (report) onToken(report);
+    if (json?.report != null) {
+      return {
+        res,
+        json: { type: "done", ...json },
+      };
+    }
+    return { res, json };
+  }
+
+  const reader = res.body?.getReader();
+  if (!reader) {
+    throw new Error("No response body from report stream.");
+  }
+
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let donePayload: any = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const parts = buffer.split("\n\n");
+    buffer = parts.pop() ?? "";
+    for (const block of parts) {
+      const line = block.trim();
+      if (!line.startsWith("data: ")) continue;
+      let data: { type?: string; text?: string; message?: string };
+      try {
+        data = JSON.parse(line.slice(6));
+      } catch {
+        continue;
+      }
+      if (data.type === "token" && data.text) {
+        onToken(data.text);
+      }
+      if (data.type === "done") {
+        donePayload = data;
+      }
+      if (data.type === "error") {
+        const err: any = new Error(
+          (data as { message?: string }).message || "Stream error",
+        );
+        throw err;
+      }
+    }
+  }
+
+  if (!donePayload) {
+    throw new Error("Report stream ended unexpectedly.");
+  }
+
+  return { res, json: donePayload };
+}
+
 export function useGenerateRexReport(opts: UseGenerateRexReportOptions = {}) {
   const { onReportGenerated, userId } = opts;
   const [isGenerating, setIsGenerating] = useState(false);
@@ -66,22 +180,45 @@ export function useGenerateRexReport(opts: UseGenerateRexReportOptions = {}) {
         error: "dex fetch failed",
       }));
 
+      const reportIdRaw =
+        genJson?.saved?.reportId ??
+        (genJson?.saved as { id?: string } | undefined)?.id;
       // Build report object matching the API response structure
       const report: any = {
-        id: genJson?.saved?.reportId,
+        id:
+          reportIdRaw !== undefined && reportIdRaw !== null
+            ? String(reportIdRaw)
+            : undefined,
         contractAddress,
         ticker: genJson?.metadata?.ticker || genJson?.ticker,
         projectName,
         reportType: "crypto",
         content: genJson?.report || "",
         dexData,
-        createdAt: genJson?.saved?.createdAt ?? new Date().toISOString(),
-        updatedAt: genJson?.saved?.updatedAt ?? new Date().toISOString(),
+        createdAt:
+          typeof genJson?.saved?.createdAt === "string"
+            ? genJson.saved.createdAt
+            : genJson?.saved?.createdAt?.toISOString?.() ??
+              new Date().toISOString(),
+        updatedAt:
+          typeof genJson?.saved?.updatedAt === "string"
+            ? genJson.saved.updatedAt
+            : genJson?.saved?.updatedAt?.toISOString?.() ??
+              genJson?.saved?.createdAt ??
+              new Date().toISOString(),
       };
+
+      if (userId && contractAddress && !report.id) {
+        const resolved = await resolveReportIdFromCryptoList(
+          userId,
+          contractAddress,
+        );
+        if (resolved) report.id = resolved;
+      }
 
       // Also create Report type for backward compatibility
       const reportTyped: Report = {
-        id: report.id,
+        id: report.id ?? "",
         contractAddress: report.contractAddress,
         ticker: report.ticker,
         projectName: report.projectName,
@@ -149,13 +286,19 @@ export function useGenerateRexReport(opts: UseGenerateRexReportOptions = {}) {
       inFlightRef.current = true;
       setIsGenerating(true);
       reportGenStore.start(contractAddress);
+      marketReportStreamStore.start(contractAddress);
 
       try {
-        const body: Record<string, unknown> = { contractAddress, ticker, projectName };
+        const body: Record<string, unknown> = {
+          contractAddress,
+          ticker,
+          projectName,
+        };
         if (chain) body.chain = chain;
-        const { res, json } = await postGenerate(
+        const { res, json } = await postGenerateStream(
           body,
-          { "x-user-id": userId }
+          { "x-user-id": userId },
+          (t) => marketReportStreamStore.append(t),
         );
         if (!res.ok) {
           const err: any = new Error(json?.error || `HTTP ${res.status}`);
@@ -163,14 +306,16 @@ export function useGenerateRexReport(opts: UseGenerateRexReportOptions = {}) {
           err.code = json?.code;
           throw err;
         }
-        return await commonBuildReport(json, contractAddress, projectName);
+        const { type: _t, ...rest } = json;
+        return await commonBuildReport(rest, contractAddress, projectName);
       } catch (err: any) {
         setError(err?.message || "Failed to generate report.");
         throw err;
       } finally {
+        reportGenStore.finish(contractAddress);
+        marketReportStreamStore.clear();
         setIsGenerating(false);
         inFlightRef.current = false;
-        reportGenStore.finish(contractAddress);
       }
     },
     [userId, commonBuildReport]

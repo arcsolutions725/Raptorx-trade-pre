@@ -4,6 +4,7 @@ import Script from "next/script";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PrivyProviderWrapper } from "@/components/providers/PrivyProvider";
+import { PostHogProviderWrapper } from "@/components/providers/PostHogProvider";
 import { PhantomConnectProvider } from "@/components/providers/PhantomConnectProvider";
 import Providers from "@/components/providers/QueryProvider";
 import { TopbarProvider } from "@/contexts/TopbarContext";
@@ -353,21 +354,23 @@ export default function RootLayout({
           })}
         </Script>
         <PrivyProviderWrapper>
-          <PhantomConnectProvider
-            appId={process.env.NEXT_PUBLIC_PHANTOM_APP_ID}
-          >
-            <TopbarProvider>
-              <DataSourceProvider>
-                <Providers>
-                  {children}
-                  <SpeedInsights />
-                  <Analytics />
-                </Providers>
-                <NotificationToaster />
-                {/* <Footer /> */}
-              </DataSourceProvider>
-            </TopbarProvider>
-          </PhantomConnectProvider>
+          <PostHogProviderWrapper>
+            <PhantomConnectProvider
+              appId={process.env.NEXT_PUBLIC_PHANTOM_APP_ID}
+            >
+              <TopbarProvider>
+                <DataSourceProvider>
+                  <Providers>
+                    {children}
+                    <SpeedInsights />
+                    <Analytics />
+                  </Providers>
+                  <NotificationToaster />
+                  {/* <Footer /> */}
+                </DataSourceProvider>
+              </TopbarProvider>
+            </PhantomConnectProvider>
+          </PostHogProviderWrapper>
         </PrivyProviderWrapper>
       </body>
     </html>

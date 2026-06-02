@@ -1,5 +1,6 @@
 import { ImageResponse } from "@vercel/og";
 import { NextRequest } from "next/server";
+import { normalizeKalshiEventTicker } from "@/lib/kalshi/normalizeEventTicker";
 
 // Node runtime required for WebP→PNG conversion (sharp) so Kalshi symbol images load
 export const runtime = "nodejs";
@@ -30,16 +31,17 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const eventSlug = searchParams.get("slug");
-    const eventTicker = searchParams.get("event_ticker");
+    const kalshiTickerRaw = searchParams.get("event_ticker");
+    const kalshiEventTicker = normalizeKalshiEventTicker(kalshiTickerRaw);
 
-    if (!eventSlug && !eventTicker) {
+    if (!eventSlug && !kalshiTickerRaw) {
       return new Response("Missing slug or event_ticker parameter", {
         status: 400,
       });
     }
 
     const baseUrl = getBaseUrl(request);
-    const isKalshi = !!eventTicker;
+    const isKalshi = !!kalshiTickerRaw;
     let marketData: any = null;
 
     if (isKalshi) {
@@ -47,11 +49,11 @@ export async function GET(request: NextRequest) {
       try {
         const [eventsRes, metadataRes] = await Promise.all([
           fetch(
-            `https://api.elections.kalshi.com/trade-api/v2/events/${encodeURIComponent(eventTicker!)}`,
+            `https://api.elections.kalshi.com/trade-api/v2/events/${encodeURIComponent(kalshiEventTicker)}`,
             { cache: "no-store" },
           ),
           fetch(
-            `https://api.elections.kalshi.com/trade-api/v2/events/${encodeURIComponent(eventTicker!)}/metadata`,
+            `https://api.elections.kalshi.com/trade-api/v2/events/${encodeURIComponent(kalshiEventTicker)}/metadata`,
             { cache: "no-store" },
           ).catch(() => null),
         ]);
@@ -107,7 +109,7 @@ export async function GET(request: NextRequest) {
           (sum: number, m: any) => sum + (m.volume || 0),
           0,
         );
-        const seriesTicker = event.series_ticker || eventTicker;
+        const seriesTicker = event.series_ticker || kalshiEventTicker;
         const symbolImageUrl =
           metadataImageUrl ||
           `https://d1lvyva3zy5u58.cloudfront.net/series-images-webp/${seriesTicker}.webp?size=sm`;

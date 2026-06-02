@@ -298,7 +298,7 @@ export default function KalshiComments({ eventTicker }: KalshiCommentsProps) {
   }
 
   return (
-    <div className="space-y-4 overflow-y-auto custom-select-scrollbar px-1">
+    <div className="space-y-4 px-1">
       {posts
         .filter((post) => post && post.id)
         .map((post) => (

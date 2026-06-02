@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
+import { sortLimitlessMarketsByVolumeDesc } from "@/lib/limitless/sortMarketsByVolume";
 
 /**
  * Transform a Limitless event (group with optional sub-markets) to table shape.
@@ -162,7 +163,9 @@ export async function GET(request: NextRequest) {
       marketsArray = data;
     }
 
-    const markets = marketsArray.map(transformLimitlessEvent).filter(Boolean);
+    const markets = sortLimitlessMarketsByVolumeDesc(
+      marketsArray.map(transformLimitlessEvent).filter(Boolean),
+    );
     const hasMore = markets.length === parseInt(limit, 10);
     const totalCount = data.total ?? data.count ?? data.totalCount ?? markets.length;
 

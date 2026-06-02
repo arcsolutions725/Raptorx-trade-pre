@@ -17,7 +17,8 @@ import { useReportGenStatus } from "@/lib/storage/reportGenStore";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePolymarketComments } from "@/hooks/usePolymarketComments";
 import { usePolymarketTradesSync } from "@/hooks/usePolymarketTradesSync";
-import { PaywallModal } from "@/components/subscription/PaywallModal";
+import { PaywallModal } from "@/components/ui/modal/PaywallModal";
+import { useRexMarketsGenerateReportOptional } from "@/app/rexmarkets/_components/RexMarketsGenerateReportContext";
 
 const INTERVALS = ["1H", "6H", "1D", "1W", "1M", "ALL"];
 
@@ -29,6 +30,7 @@ export default function PolymarketTradingInterface({
   onBack,
   onReportGenerated,
   userId,
+  sessionSavedReportId,
 }: PolymarketTradingInterfaceProps) {
   const { marketDetails, isLoading: isLoadingDetails } = useMarketDetails(
     eventTicker || null,
@@ -60,6 +62,8 @@ export default function PolymarketTradingInterface({
   const [selectedMarketIndex, setSelectedMarketIndex] = useState(0);
   // State for selected outcome in order book (Yes or No)
   const [selectedOrderBookOutcome, setSelectedOrderBookOutcome] = useState<"Yes" | "No">("Yes");
+  const [mobileOrderBookDepthExpanded, setMobileOrderBookDepthExpanded] =
+    useState(true);
 
   // Reset selected market index if it becomes out of bounds
   useEffect(() => {
@@ -165,6 +169,10 @@ export default function PolymarketTradingInterface({
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
 
+  useEffect(() => {
+    if (!sessionSavedReportId) setHasGenerated(false);
+  }, [sessionSavedReportId]);
+
   // Initialize countdown when generation starts
   useEffect(() => {
     if (isGenerating && countdown === null) {
@@ -249,6 +257,13 @@ export default function PolymarketTradingInterface({
       }
     }
   }, [authenticated, login, marketForGeneration, ready, generateFromMarket]);
+
+  const generateReportSidebar = useRexMarketsGenerateReportOptional();
+  useEffect(() => {
+    if (!generateReportSidebar) return;
+    generateReportSidebar.registerGenerateHandler(() => handleGenerateClick());
+    return () => generateReportSidebar.registerGenerateHandler(null);
+  }, [generateReportSidebar, handleGenerateClick]);
 
   // Get available markets for filter and trading
   const availableMarkets = useMemo(() => {
@@ -380,17 +395,17 @@ export default function PolymarketTradingInterface({
 
       {/* Main Content Area - Scrollable */}
       <div
-        className="flex-1 overflow-y-auto custom-sidebar-scrollbar min-h-0"
-        style={{ paddingBottom: "80px", WebkitOverflowScrolling: "touch" }}
+        className="flex-1 overflow-y-auto rexmarkets-scroll-pane-y min-h-0 pb-2"
+        style={{ WebkitOverflowScrolling: "touch" }}
       >
-        <div className="flex flex-col min-h-full">
+        <div className="flex flex-col">
           {/* Top Section - Chart and Order Book */}
           {/* Desktop: Side by side, Mobile: Stacked vertically */}
           <div className="flex flex-col lg:flex-row border-b border-white/10 flex-shrink-0">
             {/* Chart - Full width on mobile with explicit min-height so it doesn't collapse, flex-1 on desktop */}
             <div className="flex-1 flex flex-col min-w-0 w-full min-h-[400px] lg:w-auto lg:min-h-[520px]">
               {/* Chart Controls */}
-              <div className="flex-shrink-0 flex items-center justify-between px-4 py-2 border-b border-white/10">
+              <div className="flex-shrink-0 flex items-center justify-start px-4 py-2 border-b border-white/10">
                 <div className="flex items-center gap-2 overflow-x-auto">
                   {INTERVALS.map((interval) => (
                     <button
@@ -406,9 +421,6 @@ export default function PolymarketTradingInterface({
                     </button>
                   ))}
                 </div>
-                <div className="text-sm text-white/60 hidden sm:block">
-                  {marketTitle}
-                </div>
               </div>
 
               {/* Chart - explicit height on mobile so Recharts ResponsiveContainer can measure; flex on desktop */}
@@ -420,7 +432,23 @@ export default function PolymarketTradingInterface({
               </div>
             </div>
 
-            {/* Mobile: Order Book stacked under chart */}
+            {/* Mobile: Buy/Sell directly under chart; order book follows */}
+            <div className="lg:hidden w-full flex-shrink-0 border-t border-white/10">
+              <BuySellWidget
+                currentYesPrice={currentYesPrice}
+                currentNoPrice={currentNoPrice}
+                onBuyClick={handleBuyClick}
+                onSellClick={handleSellClick}
+                symbolImageUrl={marketDetails.symbol_image_url || undefined}
+                marketTitle={marketTitle || undefined}
+                availableMarkets={availableMarkets}
+                marketsForOrderBook={marketsForOrderBook}
+                selectedMarketIndex={selectedMarketIndex}
+                onMarketIndexChange={setSelectedMarketIndex}
+              />
+            </div>
+
+            {/* Mobile: Order book below buy/sell */}
             <div className="lg:hidden w-full flex-shrink-0 border-t border-white/10 flex flex-col">
               {/* Market Tabs - Show when there are more than 2 markets */}
               {marketsForOrderBook.length > 2 && (
@@ -442,13 +470,18 @@ export default function PolymarketTradingInterface({
                   </div>
                 </div>
               )}
-              <div className="min-h-[350px] overflow-hidden">
+              <div
+                className={`overflow-hidden ${
+                  mobileOrderBookDepthExpanded ? "min-h-[350px]" : ""
+                }`}
+              >
                 <OrderBook
                   clobTokenId={selectedMarketClobTokenId}
                   yesPrice={currentYesPrice}
                   noPrice={currentNoPrice}
                   onBuyClick={handleOrderBookBuyClick}
                   selectedOutcome={selectedOrderBookOutcome}
+                  onDepthExpandedChange={setMobileOrderBookDepthExpanded}
                 />
               </div>
             </div>
@@ -472,7 +505,7 @@ export default function PolymarketTradingInterface({
 
           {/* Bottom Section - Top Holders/Activity and Buy/Sell */}
           {/* Desktop: Side by side, Mobile: Stacked */}
-          <div className="flex min-h-[400px] flex-col flex-shrink-0 border-t border-white/10">
+          <div className="flex min-h-0 flex-col flex-shrink-0 border-t border-white/10">
             <div
               className="flex flex-col lg:flex-row items-stretch gap-4 p-4 flex-shrink-0"
               style={{ maxHeight: "750px" }}
@@ -536,7 +569,7 @@ export default function PolymarketTradingInterface({
                 </div>
 
                 {/* Content Area with Scroll */}
-                <div className="flex-1 min-h-0 overflow-y-auto custom-select-scrollbar">
+                <div className="flex-1 min-h-0 overflow-y-auto rexmarkets-scroll-pane-y">
                   {activeTab === "holders" ? (
                     <TopHolders conditionId={conditionId} />
                   ) : activeTab === "activity" ? (
@@ -584,6 +617,7 @@ export default function PolymarketTradingInterface({
                     noPrice={currentNoPrice}
                     onBuyClick={handleOrderBookBuyClick}
                     selectedOutcome={selectedOrderBookOutcome}
+                    showDepthToggle={false}
                   />
                 </div>
               </div>

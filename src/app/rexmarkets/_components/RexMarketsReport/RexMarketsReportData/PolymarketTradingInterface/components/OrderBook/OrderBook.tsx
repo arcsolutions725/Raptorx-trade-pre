@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { formatPrice } from "@/utils/polymarketTrading";
 import { calculateTotalCost } from "@/utils/order";
 import { useOrderBook } from "@/hooks/useOrderBook";
@@ -12,6 +12,10 @@ type OrderBookProps = {
   noPrice: number;
   onBuyClick?: (outcome: "Yes" | "No") => void;
   selectedOutcome?: "Yes" | "No";
+  /** When provided, called whenever the bid/ask depth table is expanded or collapsed (mobile layout uses this to drop min-height). */
+  onDepthExpandedChange?: (expanded: boolean) => void;
+  /** Mobile-only: show Minimize / Show order book. Desktop order books should pass false. */
+  showDepthToggle?: boolean;
 };
 
 export default function OrderBook({
@@ -20,7 +24,20 @@ export default function OrderBook({
   noPrice,
   onBuyClick,
   selectedOutcome = "Yes",
+  onDepthExpandedChange,
+  showDepthToggle = true,
 }: OrderBookProps) {
+  const [depthExpanded, setDepthExpanded] = useState(true);
+  const effectiveExpanded = showDepthToggle ? depthExpanded : true;
+
+  const toggleDepth = () => {
+    setDepthExpanded((prev) => {
+      const next = !prev;
+      onDepthExpandedChange?.(next);
+      return next;
+    });
+  };
+
   const {
     data: orderBookData,
     isLoading: isLoadingOrderBook,
@@ -119,11 +136,16 @@ export default function OrderBook({
   };
 
   return (
-    <div className="w-full flex-shrink-0 flex flex-col h-full min-h-0">
+    <div
+      className={`w-full flex-shrink-0 flex flex-col min-h-0 ${
+        effectiveExpanded ? "h-full" : "h-auto"
+      }`}
+    >
       <div className="flex-shrink-0 px-4 py-3 border-b border-white/10">
-        {/* Outcome Buttons Header */}
-        <div className="flex gap-2">
+        {/* Outcome Buttons Header — desktop only (mobile uses Buy/Sell widget) */}
+        <div className="hidden lg:flex gap-2">
           <button
+            type="button"
             onClick={() => onBuyClick?.("Yes")}
             className={`flex-1 py-1.5 px-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded transition-all text-xs ${
               selectedOutcome === "Yes" ? "opacity-100" : "opacity-50"
@@ -132,6 +154,7 @@ export default function OrderBook({
             Buy Yes {formatPriceCents(yesPrice)}
           </button>
           <button
+            type="button"
             onClick={() => onBuyClick?.("No")}
             className={`flex-1 py-1.5 px-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded transition-all text-xs ${
               selectedOutcome === "No" ? "opacity-100" : "opacity-50"
@@ -140,9 +163,22 @@ export default function OrderBook({
             Buy No {formatPriceCents(noPrice)}
           </button>
         </div>
+        {showDepthToggle ? (
+          <div className="flex justify-center mt-3">
+            <button
+              type="button"
+              onClick={toggleDepth}
+              aria-expanded={depthExpanded}
+              className="text-xs font-medium text-[#ffc000] hover:text-[#ffc000]/85 border border-white/20 rounded-md px-3 py-1.5 transition-colors"
+            >
+              {depthExpanded ? "Minimize" : "Show order book"}
+            </button>
+          </div>
+        ) : null}
       </div>
 
-      <div className="flex-1 overflow-y-auto min-h-0 custom-select-scrollbar">
+      {effectiveExpanded ? (
+      <div className="flex-1 overflow-y-auto min-h-0 rexmarkets-scroll-pane-y">
         <div className="px-2 py-2">
           <div className="text-xs text-white/60 mb-2 px-2 flex justify-between">
             <span>Price (¢)</span>
@@ -238,6 +274,7 @@ export default function OrderBook({
           </div>
         </div>
       </div>
+      ) : null}
     </div>
   );
 }

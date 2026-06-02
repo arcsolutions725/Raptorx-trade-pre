@@ -23,6 +23,8 @@ export type PolymarketTradingInterfaceProps = {
   onBack?: () => void;
   onReportGenerated?: (report: any) => void;
   userId?: string | null;
+  /** Latest report id held in the event page; when cleared (e.g. sidebar back), reset "Generated!" UI. */
+  sessionSavedReportId?: string | null;
 };
 
 export type TradeActivity = {

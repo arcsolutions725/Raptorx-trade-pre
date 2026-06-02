@@ -2,19 +2,44 @@
 
 import { useCallback, useEffect, useRef, useState, useMemo, memo } from "react";
 import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import rehypeRaw from "rehype-raw";
 import Image from "next/image";
+import clsx from "clsx";
+import { Square } from "lucide-react";
 import type { MarketReport } from "@/hooks/useGenerateMarketReport";
 import { useRexChat } from "@/hooks/useRexChat";
-import { useReportWithConversation, useReports } from "@/hooks/useReports";
-import { PaywallModal, type PaywallLimitCode } from "@/components/subscription/PaywallModal";
+import { useReportWithConversation } from "@/hooks/useReports";
+import { PaywallModal, type PaywallLimitCode } from "@/components/ui/modal/PaywallModal";
+import { formatRexPilotChatLines } from "@/lib/formatRexPilotChatLines";
+import { useReportGenStatus } from "@/lib/storage/reportGenStore";
+import { useMarketReportStream } from "@/lib/storage/marketReportStreamStore";
+import { stripFeaturedImageAndTitleSections } from "@/lib/rexmarkets/reportMarkdownDisplay";
+import { useRexMarketsGenerateReportOptional } from "@/app/rexmarkets/_components/RexMarketsGenerateReportContext";
 
 type AIGeneratedMarketsReportProps = {
   generatedReport?: MarketReport | null;
   userId?: string | null;
   selectedReportId?: string | null;
-  onViewHistory?: () => void;
+  /** Same key as `reportGenStore` / listing cards (ticker, slug, or id). */
+  reportGenLookupKey?: string | null;
+  selectedMarketTitle?: string | null;
+  selectedMarketImageUrl?: string | null;
 };
+
+function pickMarketImageFromData(
+  marketData: unknown,
+  fallback: string | null,
+): string | null {
+  if (!marketData || typeof marketData !== "object") return fallback;
+  const m = marketData as Record<string, unknown>;
+  const u =
+    (m.symbol_image_url as string) ||
+    (m.image as string) ||
+    (m.icon as string) ||
+    (m.logo as string);
+  return typeof u === "string" && u ? u : fallback;
+}
 
 const MAX_H = 200;
 
@@ -24,39 +49,60 @@ const rehypePlugins = [rehypeRaw];
 // Memoized markdown components to prevent recreation on every render
 const markdownComponents = {
   h1: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h1 className="text-2xl font-bold text-[#ffc000] mb-4" {...props} />
+    <h1 {...props} />
   ),
   h2: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h2 className="text-xl font-bold text-[#ffc000] mb-3 mt-6" {...props} />
+    <h2 {...props} />
   ),
   h3: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h3 className="text-lg font-bold text-white mb-2 mt-4" {...props} />
+    <h3 {...props} />
+  ),
+  h4: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h4 {...props} />
+  ),
+  h5: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h5 {...props} />
+  ),
+  h6: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+    <h6 {...props} />
   ),
   p: ({ ...props }: React.HTMLAttributes<HTMLParagraphElement>) => (
-    <p className="text-white/90 mb-4 leading-relaxed" {...props} />
+    <p {...props} />
   ),
   ul: ({ ...props }: React.HTMLAttributes<HTMLUListElement>) => (
-    <ul className="list-disc list-inside mb-4 space-y-2" {...props} />
+    <ul className="list-disc mb-4" {...props} />
   ),
   ol: ({ ...props }: React.HTMLAttributes<HTMLOListElement>) => (
-    <ol className="list-decimal list-inside mb-4 space-y-2" {...props} />
+    <ol className="list-decimal mb-4" {...props} />
   ),
   li: ({ ...props }: React.HTMLAttributes<HTMLLIElement>) => (
-    <li className="text-white/90" {...props} />
+    <li {...props} />
   ),
   strong: ({ ...props }: React.HTMLAttributes<HTMLElement>) => (
-    <strong className="text-[#ffc000] font-bold" {...props} />
+    <strong {...props} />
   ),
   em: ({ ...props }: React.HTMLAttributes<HTMLElement>) => (
-    <em className="text-[#ffc000]" {...props} />
+    <em {...props} />
   ),
   a: ({ ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
-    <a
-      className="text-[#ffc000] underline hover:text-[#ffda44]"
-      target="_blank"
-      rel="noopener noreferrer"
+    <a target="_blank" rel="noopener noreferrer" {...props} />
+  ),
+  u: ({ ...props }: React.HTMLAttributes<HTMLElement>) => (
+    <u {...props} />
+  ),
+  th: ({ ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) => (
+    <th
+      className="border border-white/10 px-2 py-2 text-left font-semibold"
       {...props}
     />
+  ),
+  td: ({ ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) => (
+    <td className="border border-white/10 px-2 py-2" {...props} />
+  ),
+  table: ({ ...props }: React.TableHTMLAttributes<HTMLTableElement>) => (
+    <div className="my-4 overflow-x-auto max-w-full">
+      <table className="w-full border-collapse text-sm" {...props} />
+    </div>
   ),
   img: ({
     src,
@@ -101,50 +147,64 @@ const markdownComponents = {
 
 // Memoized empty state component
 type EmptyStateProps = {
-  onViewHistory?: () => void;
-  reportsCount?: number;
+  onGenerateClick?: () => void | Promise<void>;
+  generateDisabled?: boolean;
 };
 
 const EmptyState = memo(
-  ({ onViewHistory, reportsCount = 0 }: EmptyStateProps) => (
-    <div className="flex flex-col items-center justify-center h-full gap-10 px-10">
-      <header className="flex flex-col items-center justify-center">
-        <div className="flex items-end">
-          <Image
-            src="/images/rexmarket.png"
-            alt="Rex Market"
-            width={140}
-            height={140}
-            priority
-          />
-        </div>
-        <div className="flex flex-col gap-8 items-center justify-center">
-          <div className="flex flex-col items-center justify-center gap-2">
-            <h1 className="max-w-[600px] w-full !font-normal !text-[14px] sm:!text-[18px] text-center text-white">
-              Conversational Intelligence for Event-Traders.
-            </h1>
-            <h4 className="max-w-[600px] w-full !text-[12px] sm:!text-[14px] !font-normal text-[#F2F2F2] text-center">
-              Click <span className="text-[#00B050]">Generate</span> to get
-              Intelligence Reports for any prediction event!
-            </h4>
+  ({
+    onGenerateClick,
+    generateDisabled = false,
+  }: EmptyStateProps) => (
+    <div className="relative w-full min-h-0">
+      <div className="flex w-full flex-col items-center justify-start px-4 py-2 sm:px-8 sm:py-3">
+        <header className="flex w-full max-w-[420px] flex-col items-center justify-center text-center">
+          <div className="flex items-end">
+            <Image
+              src="/images/rexmarket.png"
+              alt="Rex Market"
+              width={140}
+              height={140}
+              priority
+              className="max-h-[96px] w-auto sm:max-h-[120px] md:max-h-[140px]"
+            />
           </div>
-          {reportsCount > 0 && onViewHistory && (
-            <button
-              onClick={onViewHistory}
-              className="cursor-pointer transition hover:scale-[1.05]"
-              aria-label="View Report History"
-            >
-              <Image
-                src={"/images/history.png"}
-                alt="report history"
-                width={140}
-                height={80}
-                className="w-[100px] h-[40px] sm:w-[80px] sm:h-[34px] md:w-[100px] md:h-[40px]"
-              />
-            </button>
-          )}
-        </div>
-      </header>
+          <div className="mt-2 flex w-full flex-col items-center gap-2 sm:mt-3 sm:gap-3 md:mt-3 md:gap-4">
+            <div className="flex flex-col gap-2">
+              <h1 className="w-full !font-normal !text-[14px] text-white sm:!text-[18px]">
+                Conversational Intelligence for Event-Traders.
+              </h1>
+              <h4 className="w-full !text-[12px] !font-normal text-[#F2F2F2] sm:!text-[14px]">
+                Click <span className="text-[#00B050]">Generate</span> to get
+                Intelligence Reports for any prediction event!
+              </h4>
+            </div>
+            {onGenerateClick && (
+              <button
+                type="button"
+                onClick={() => void onGenerateClick()}
+                disabled={generateDisabled}
+                className={clsx(
+                  "relative flex w-full max-w-[148px] shrink-0 items-center justify-center border-0 bg-transparent p-0 transition sm:max-w-[160px]",
+                  generateDisabled
+                    ? "cursor-not-allowed opacity-50"
+                    : "cursor-pointer hover:opacity-80",
+                )}
+                aria-label="Generate News Intelligence Report"
+                style={{ flexShrink: 0, pointerEvents: "auto" }}
+              >
+                <Image
+                  src="/images/generate.webp"
+                  alt="Generate"
+                  width={160}
+                  height={64}
+                  className="pointer-events-none h-auto w-full max-h-8 object-contain transition hover:scale-[1.05] sm:max-h-9"
+                />
+              </button>
+            )}
+          </div>
+        </header>
+      </div>
     </div>
   )
 );
@@ -161,11 +221,102 @@ const AssistantAvatar = memo(() => (
 ));
 AssistantAvatar.displayName = "AssistantAvatar";
 
+const ReportMarketHeader = memo(function ReportMarketHeader({
+  title,
+  imageUrl,
+}: {
+  title: string;
+  imageUrl: string | null;
+}) {
+  const [imgErr, setImgErr] = useState(false);
+  useEffect(() => {
+    setImgErr(false);
+  }, [imageUrl]);
+  return (
+    <div className="mb-5 flex shrink-0 items-start gap-3 border-b border-white/[0.12] pb-4 pl-1.5 sm:pl-2">
+      <div
+        className={clsx(
+          "relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 overflow-hidden rounded-xl",
+          "bg-gradient-to-br from-white/12 to-white/[0.04]",
+          "ring-2 ring-amber-400/30 ring-inset",
+        )}
+      >
+        {imageUrl && !imgErr ? (
+          <Image
+            src={imageUrl}
+            alt=""
+            fill
+            className="object-cover object-center"
+            sizes="(max-width: 640px) 56px, 64px"
+            unoptimized={
+              imageUrl.startsWith("http://") || imageUrl.startsWith("https://")
+            }
+            onError={() => setImgErr(true)}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-[10px] text-white/35">
+            —
+          </div>
+        )}
+      </div>
+      <div className="min-w-0 flex-1 pt-0.5">
+        <h2 className="text-left text-base font-semibold leading-snug text-white/95 sm:text-lg [word-break:break-word]">
+          {title}
+        </h2>
+      </div>
+    </div>
+  );
+});
+ReportMarketHeader.displayName = "ReportMarketHeader";
+
+const ReportStreamSkeleton = memo(function ReportStreamSkeleton({
+  compact,
+}: {
+  compact?: boolean;
+}) {
+  return (
+    <div
+      className={clsx("space-y-4 pt-1", compact && "mt-5 opacity-50")}
+      aria-hidden
+    >
+      <div className="space-y-2.5">
+        <div className="h-3 w-[60%] max-w-[14rem] rounded-md bg-white/[0.08] animate-pulse" />
+        <div className="h-2.5 w-full rounded-md bg-white/[0.06] animate-pulse" />
+        <div className="h-2.5 w-[92%] rounded-md bg-white/[0.06] animate-pulse" />
+        <div className="h-2.5 w-[78%] rounded-md bg-white/[0.05] animate-pulse" />
+      </div>
+      <div className="space-y-2.5 pt-1">
+        <div className="h-3 w-[42%] max-w-[10rem] rounded-md bg-white/[0.08] animate-pulse" />
+        <div className="h-2.5 w-full rounded-md bg-white/[0.06] animate-pulse" />
+        <div className="h-2.5 w-[88%] rounded-md bg-white/[0.06] animate-pulse" />
+        <div className="h-2.5 w-[70%] rounded-md bg-white/[0.05] animate-pulse" />
+      </div>
+      {!compact ? (
+        <div className="space-y-2.5 pt-1">
+          <div className="h-3 w-[40%] max-w-[11rem] rounded-md bg-white/[0.08] animate-pulse" />
+          <div className="flex gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
+            <div className="h-16 w-20 shrink-0 rounded-lg bg-white/[0.06] animate-pulse" />
+            <div className="min-w-0 flex-1 space-y-2 pt-0.5">
+              <div className="h-2.5 w-full rounded-md bg-white/[0.06] animate-pulse" />
+              <div className="h-2.5 w-[80%] rounded-md bg-white/[0.05] animate-pulse" />
+            </div>
+          </div>
+          <div className="h-2.5 w-full rounded-md bg-white/[0.05] animate-pulse" />
+          <div className="h-2.5 w-[85%] rounded-md bg-white/[0.05] animate-pulse" />
+        </div>
+      ) : null}
+    </div>
+  );
+});
+ReportStreamSkeleton.displayName = "ReportStreamSkeleton";
+
 export default function AIGeneratedMarketsReport({
   generatedReport,
   userId,
   selectedReportId,
-  onViewHistory,
+  reportGenLookupKey,
+  selectedMarketTitle,
+  selectedMarketImageUrl,
 }: AIGeneratedMarketsReportProps) {
   const [inputMessage, setInputMessage] = useState("");
   const [showPaywall, setShowPaywall] = useState(false);
@@ -180,12 +331,10 @@ export default function AIGeneratedMarketsReport({
     selectedReportId
   );
 
-  const { data: serverReports = [] } = useReports(
-    userId || undefined,
-    "market"
-  );
-
   const activeReport = useMemo<MarketReport | null>(() => {
+    if (!selectedReportId) {
+      return null;
+    }
     if (selectedReportData) {
       return {
         id: selectedReportData.id,
@@ -199,13 +348,42 @@ export default function AIGeneratedMarketsReport({
       };
     }
     return generatedReport || null;
-  }, [selectedReportData, generatedReport]);
+  }, [selectedReportData, generatedReport, selectedReportId]);
 
-  const { messages, isSending, streamingContent, sendMessage } = useRexChat({
-    userId,
-    report: activeReport,
-    initialMessages: selectedReportData?.conversation?.messages || [],
-  });
+  const { messages, isSending, streamingContent, sendMessage, stopGeneration } =
+    useRexChat({
+      userId,
+      report: activeReport,
+      initialMessages: selectedReportData?.conversation?.messages || [],
+    });
+
+  const { isGenerating: isListingReportGenerating } = useReportGenStatus(
+    reportGenLookupKey || undefined,
+  );
+
+  const generateReportCtx = useRexMarketsGenerateReportOptional();
+
+  const { partialText } = useMarketReportStream(reportGenLookupKey);
+
+  const preparedStreamMarkdown = useMemo(
+    () => stripFeaturedImageAndTitleSections(partialText),
+    [partialText],
+  );
+
+  const preparedReportMarkdown = useMemo(
+    () => stripFeaturedImageAndTitleSections(activeReport?.content ?? ""),
+    [activeReport?.content],
+  );
+
+  const headerTitle =
+    activeReport?.marketTitle ||
+    selectedMarketTitle?.trim() ||
+    "Intelligence report";
+  const headerImageUrl =
+    pickMarketImageFromData(
+      activeReport?.marketData,
+      selectedMarketImageUrl ?? null,
+    ) ?? null;
 
   // Check if user is near bottom of scroll container
   const checkIfNearBottom = useCallback(() => {
@@ -273,50 +451,61 @@ export default function AIGeneratedMarketsReport({
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
       if (e.key === "Enter" && !e.shiftKey) {
         e.preventDefault();
-        handleSend();
+        if (!isSending) handleSend();
       }
     },
-    [handleSend]
+    [handleSend, isSending]
   );
 
-  // Memoized formatMessage to prevent recreation on every render
-  const formatMessage = useCallback((content: string) => {
-    return content.split("\n").map((line, i) => {
-      const html = line
-        .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
-        .replace(/\*(.*?)\*/g, "<strong>$1</strong>")
-        .replace(/^---+$/, "");
-      if (!html.trim()) return null;
+  if (!activeReport) {
+    if (isListingReportGenerating) {
+      const genTitle =
+        selectedMarketTitle?.trim() || "Preparing your report…";
       return (
-        <div key={i} className="mb-2">
-          {html.startsWith("## ") ? (
-            <h3 className="mt-4 mb-2">
-              <span dangerouslySetInnerHTML={{ __html: html.substring(3) }} />
-            </h3>
-          ) : html.startsWith("### ") ? (
-            <h4 className="text-md font-semibold mt-3 mb-1">
-              <span dangerouslySetInnerHTML={{ __html: html.substring(4) }} />
-            </h4>
-          ) : html.startsWith("- ") ? (
-            <div className="ml-4 text-[18px]">
-              • <span dangerouslySetInnerHTML={{ __html: html.substring(2) }} />
-            </div>
-          ) : (
-            <span
-              className="text-[18px]"
-              dangerouslySetInnerHTML={{ __html: html }}
+        <div
+          className="rex-pilot-panel text-white flex flex-col h-full relative overflow-hidden min-h-0"
+          style={{ maxHeight: "100dvh" }}
+        >
+          <div
+            className="flex-1 overflow-y-auto overflow-x-hidden custom-sidebar-scrollbar pb-6 pr-2 min-h-0 px-1 sm:px-0"
+            style={{
+              WebkitOverflowScrolling: "touch",
+              touchAction: "pan-y",
+              overscrollBehavior: "contain",
+            }}
+          >
+            <ReportMarketHeader
+              title={genTitle}
+              imageUrl={selectedMarketImageUrl ?? null}
             />
-          )}
+            {preparedStreamMarkdown.trim() ? (
+              <div className="rex-markets-report-md">
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm]}
+                  rehypePlugins={rehypePlugins}
+                  components={markdownComponents}
+                >
+                  {preparedStreamMarkdown}
+                </ReactMarkdown>
+                <span
+                  className="inline-block w-2 h-4 bg-[#ffc000]/85 animate-pulse ml-0.5 align-middle"
+                  aria-hidden
+                />
+              </div>
+            ) : null}
+            <ReportStreamSkeleton compact={partialText.trim().length > 0} />
+          </div>
         </div>
       );
-    });
-  }, []);
-
-  if (!activeReport) {
+    }
     return (
       <EmptyState
-        onViewHistory={onViewHistory}
-        reportsCount={serverReports.length}
+        onGenerateClick={
+          generateReportCtx
+            ? () => generateReportCtx.triggerGenerate()
+            : undefined
+        }
+        generateDisabled={isListingReportGenerating}
       />
     );
   }
@@ -324,7 +513,7 @@ export default function AIGeneratedMarketsReport({
   return (
     <>
     <div
-      className="text-white flex flex-col h-full relative overflow-hidden min-h-0"
+      className="rex-pilot-panel text-white flex flex-col h-full relative overflow-hidden min-h-0"
       style={{
         maxHeight: "100dvh", // Use dynamic viewport height for mobile
       }}
@@ -340,12 +529,14 @@ export default function AIGeneratedMarketsReport({
           paddingBottom: "0.5rem", // Reduced padding on mobile
         }}
       >
-        <div className="prose prose-invert max-w-none">
+        <ReportMarketHeader title={headerTitle} imageUrl={headerImageUrl} />
+        <div className="rex-markets-report-md pl-1 sm:pl-0">
           <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
             rehypePlugins={rehypePlugins}
             components={markdownComponents}
           >
-            {activeReport.content}
+            {preparedReportMarkdown}
           </ReactMarkdown>
         </div>
 
@@ -373,7 +564,7 @@ export default function AIGeneratedMarketsReport({
                     )}
                   </div>
                   <div className="text-white/90 break-words">
-                    {formatMessage(m.content)}
+                    {formatRexPilotChatLines(m.content)}
                   </div>
                 </div>
               </div>
@@ -388,7 +579,7 @@ export default function AIGeneratedMarketsReport({
                 <AssistantAvatar />
               </div>
               <div className="text-white/90 break-words">
-                {formatMessage(streamingContent)}
+                {formatRexPilotChatLines(streamingContent)}
                 <span className="inline-block w-2 h-4 bg-white/60 animate-pulse ml-1" />
               </div>
             </div>
@@ -416,26 +607,37 @@ export default function AIGeneratedMarketsReport({
             onKeyDown={onKeyDown}
             placeholder="Ask any follow-up questions!"
             disabled={isSending}
-            className="w-full max-w-full bg-[#262626] border-[0.5px] border-[#3C3C3C] text-[#BEBEBE] placeholder-[#BEBEBE] rounded-[8px] pl-4 pr-20 py-2.5 resize-none outline-none disabled:opacity-50 min-h-[50px] max-h-[200px] break-words text-[14px]"
+            className="w-full max-w-full bg-[#262626] border-[0.5px] border-[#3C3C3C] text-[#BEBEBE] placeholder-[#BEBEBE] rounded-[8px] pl-4 pr-20 py-2.5 resize-none outline-none disabled:opacity-50 min-h-[50px] max-h-[200px] break-words text-[15px] leading-[1.65]"
             rows={2}
             aria-label="Message input"
           />
-          <button
-            onClick={handleSend}
-            disabled={!inputMessage.trim() || isSending}
-            className="absolute right-2 bottom-0 transform -translate-y-1/3 text-white font-semibold rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-            aria-label="Send message"
-          >
-            <Image
-              src="/images/banner.png"
-              width={40}
-              height={40}
-              alt="Send"
-              className={`transition-transform duration-300 ${
-                isSending ? "scale-125 animate-pulse" : "scale-100"
-              }`}
-            />
-          </button>
+          {isSending ? (
+            <button
+              type="button"
+              onClick={stopGeneration}
+              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg bg-white/10 text-white/70 transition-colors hover:bg-white/15 hover:text-white"
+              aria-label="Stop generating"
+              title="Stop generating"
+            >
+              <Square className="h-4 w-4 fill-current text-white" />
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={!inputMessage.trim()}
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-white font-semibold rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
+              aria-label="Send message"
+            >
+              <Image
+                src="/images/banner.png"
+                width={40}
+                height={40}
+                alt="Send"
+                className="scale-100 transition-transform duration-300"
+              />
+            </button>
+          )}
         </div>
       </div>
     </div>

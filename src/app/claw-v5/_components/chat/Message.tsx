@@ -12,12 +12,16 @@ import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
 import { RexMarketsEmbed } from "./RexMarketsEmbed";
 import { CryptoTechnicalEmbed } from "./CryptoTechnicalEmbed";
 import { TopMarketsCards } from "./TopMarketsCards";
-
 export interface MessageData {
   id: string;
   role: "user" | "assistant";
   content: string;
   createdAt?: string;
+  /**
+   * Stable React list key for optimistic→server id handoff. When set, use as `key` so swapping
+   * `temp-*` ids for database ids does not remount the bubble (avoids a visible “restream”).
+   */
+  uiKey?: string;
 }
 
 interface MessageProps {
@@ -26,11 +30,16 @@ interface MessageProps {
   onCopy?: (content: string) => void;
   onQuote?: (content: string) => void;
   onCryptoReport?: (payload: any) => void;
-  onDeepAnalysisMarket?: (params: { provider: "polymarket" | "kalshi"; marketId: string; title: string }) => void;
-  disableDeepAnalysis?: boolean;
+  onDeepAnalysisMarket?: (params: {
+    provider: "polymarket" | "kalshi" | "limitless" | "myriad" | "predictfun";
+    marketId: string;
+    title: string;
+  }) => void | Promise<void>;
   isStreaming?: boolean;
-  streamingPhase?: "" | "markets" | "research" | "draft" | "synth";
+  streamingPhase?: "" | "markets" | "report" | "research" | "draft" | "synth";
   streamingStatusLabel?: string;
+  /** Streams web-research + draft tokens before the final synthesized answer. */
+  streamingThinking?: string;
 }
 
 const sanitizeSchema = {
@@ -104,7 +113,7 @@ const baseMarkdownComponents = {
     <p className="text-white/80 leading-relaxed my-2 break-words" {...props} />
   ),
   strong: ({ ...props }: React.HTMLAttributes<HTMLElement>) => (
-    <strong className="text-white font-semibold" {...props} />
+    <strong className="text-[#f0cf7a] font-semibold" {...props} />
   ),
   em: ({ ...props }: React.HTMLAttributes<HTMLElement>) => (
     <em className="text-white/80 italic" {...props} />
@@ -301,7 +310,7 @@ export function StreamingStatus({
   minimal = false,
 }: {
   label: string;
-  phase: "" | "markets" | "research" | "draft" | "synth";
+  phase: "" | "markets" | "report" | "research" | "draft" | "synth";
   countdownSeconds?: number;
   minimal?: boolean;
 }) {
@@ -310,7 +319,9 @@ export function StreamingStatus({
   const fallback =
     phase === "markets"
       ? "Searching in RaptorX…"
-      : phase === "research"
+      : phase === "report"
+        ? "Generating technical report…"
+        : phase === "research"
         ? "Web searching official sources…"
         : phase === "draft"
           ? "Drafting response…"
@@ -440,10 +451,10 @@ export default function Message({
   onQuote,
   onCryptoReport,
   onDeepAnalysisMarket,
-  disableDeepAnalysis = false,
   isStreaming = false,
   streamingPhase = "",
   streamingStatusLabel = "",
+  streamingThinking = "",
 }: MessageProps) {
   const [isCopied, setIsCopied] = useState(false);
   const [streamingCountdown, setStreamingCountdown] = useState(STREAMING_COUNTDOWN_START);
@@ -471,6 +482,12 @@ export default function Message({
   const { main: mainContent, citations } = !isUser
     ? parseSourcesSection(message.content || "")
     : { main: message.content || "", citations: [] as Citation[] };
+  /** Hide phase pills (Connecting / Drafting / etc.) once any streamed text is visible. */
+  const hasVisibleStreamingOutput =
+    !isUser &&
+    isStreaming &&
+    (Boolean((message.content || "").trim()) ||
+      Boolean((streamingThinking || "").trim()));
   const contentWidthClass = isUser
     ? "max-w-[85%] md:max-w-[80%]"
     : "w-full max-w-full";
@@ -515,7 +532,6 @@ export default function Message({
               <TopMarketsCards
                 payload={payload}
                 onDeepAnalysis={onDeepAnalysisMarket}
-                disableDeepAnalysis={disableDeepAnalysis}
               />
             );
           }
@@ -572,7 +588,43 @@ export default function Message({
         </pre>
       );
     };
-  }, [onCryptoReport, onDeepAnalysisMarket, disableDeepAnalysis]);
+  }, [onCryptoReport, onDeepAnalysisMarket]);
+
+  const mdComponents = useMemo(
+    () =>
+      ({
+        ...baseMarkdownComponents,
+        h1: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+          <h1
+            className="text-[#ffc000] font-semibold text-lg mt-3 mb-2 scroll-mt-6"
+            {...props}
+          />
+        ),
+        h2: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+          <h2
+            className="text-[#ffc000] font-semibold text-base mt-3 mb-2 scroll-mt-6"
+            {...props}
+          />
+        ),
+        h3: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
+          <h3
+            className="text-[#ffc000] font-semibold text-sm mt-3 mb-2 scroll-mt-6"
+            {...props}
+          />
+        ),
+        strong: ({ ...props }: React.HTMLAttributes<HTMLElement>) => (
+          <strong className="text-[#f0cf7a] font-semibold" {...props} />
+        ),
+        th: ({ ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) => (
+          <th
+            className="border border-white/10 px-2 py-1 text-left text-[#f0cf7a] font-semibold break-words align-top"
+            {...props}
+          />
+        ),
+        pre: markdownPre,
+      }) as any,
+    [markdownPre],
+  );
 
   useEffect(() => {
     if (isCopied) {
@@ -584,9 +636,15 @@ export default function Message({
   }, [isCopied]);
 
   return (
-    <div className={`flex gap-2 md:gap-4 px-2 md:px-4 py-4 md:py-6 bg-black group transition-colors ${isUser ? 'flex-row-reverse' : ''}`}>
-      {/* Avatar */}
-      <div className="flex-shrink-0">
+    <div
+      className={`flex gap-2 md:gap-4 py-4 md:py-6 bg-black group transition-colors ${
+        isUser
+          ? "flex-row-reverse px-2 md:px-4"
+          : "flex-col md:flex-row items-stretch px-1.5 sm:px-2 md:px-4"
+      }`}
+    >
+      {/* Avatar — assistant: stacked above content on mobile so report embeds use full width */}
+      <div className={`flex-shrink-0 ${isUser ? "" : "md:self-start"}`}>
         {isUser ? (
           <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-[#141414] flex items-center justify-center">
             <User className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
@@ -594,7 +652,7 @@ export default function Message({
         ) : (
           <div className="w-7 h-7 md:w-8 md:h-8 relative flex items-center justify-center">
             <Image
-              src="/images/calw-v5.png"
+              src="/images/claw-v5.webp"
               alt="Claw v5"
               fill
               className="object-contain rounded-full"
@@ -604,7 +662,9 @@ export default function Message({
       </div>
 
       {/* Content */}
-      <div className={`flex flex-col ${isUser ? 'items-end' : 'items-start'} ${contentWidthClass} min-w-0`}>
+      <div
+        className={`flex flex-col ${isUser ? "items-end" : "items-stretch"} ${contentWidthClass} min-w-0 ${isUser ? "" : "w-full md:flex-1"}`}
+      >
         {isUser ? (
           // User message with gray background box - aligned right
           <div className="bg-[#141414] rounded-lg p-2.5 md:p-3 mb-2 inline-block max-w-full break-words">
@@ -615,19 +675,20 @@ export default function Message({
         ) : (
           // AI message with plain text - aligned left
           <div
-            className="text-white/80 text-sm leading-relaxed mb-2 break-words max-w-full overflow-hidden"
+            className="text-white/80 text-sm leading-relaxed mb-2 break-words max-w-full min-w-0 w-full"
             style={{ fontSize: "14px" }}
           >
-            {isStreaming && streamingPhase && (
+            {isStreaming && streamingPhase && !hasVisibleStreamingOutput && (
               <StreamingStatus
                 label={streamingStatusLabel}
                 phase={streamingPhase}
                 countdownSeconds={streamingCountdown}
               />
             )}
-            {isStreaming && !streamingPhase && (
+            {isStreaming && !streamingPhase && !hasVisibleStreamingOutput && (
               <ConnectingStatus countdownSeconds={streamingCountdown} />
             )}
+            <div className="rex-markets-report-md rex-markets-report-md--fluid max-w-full">
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
               rehypePlugins={[
@@ -636,10 +697,28 @@ export default function Message({
                 // Cast keeps TS happy with the tuple signature.
                 [rehypeSanitize as any, sanitizeSchema as any],
               ]}
-              components={{ ...(baseMarkdownComponents as any), pre: markdownPre } as any}
+              components={mdComponents}
             >
               {mainContent}
             </ReactMarkdown>
+            </div>
+            {isStreaming && streamingThinking.trim() ? (
+              <div className="rex-markets-report-md rex-markets-report-md--fluid mt-4 max-w-full border-t border-white/10 pt-3">
+                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#ffc000]/85 mb-2">
+                  Live notes
+                </div>
+                <ReactMarkdown
+                  remarkPlugins={[remarkGfm, remarkBreaks]}
+                  rehypePlugins={[
+                    rehypeRaw,
+                    [rehypeSanitize as any, sanitizeSchema as any],
+                  ]}
+                  components={mdComponents}
+                >
+                  {streamingThinking}
+                </ReactMarkdown>
+              </div>
+            ) : null}
             {!isStreaming && <CitationCards citations={citations} />}
           </div>
         )}

@@ -1,6 +1,7 @@
 "use client";
 
 import React from "react";
+import { formatChartPercentValue } from "./chartPercentFormat";
 
 export type SeriesStats = {
   minValue: number;
@@ -115,7 +116,26 @@ type ChartStatsDotProps = {
 };
 
 /** Chart margin to reserve for dots + labels at edges (used by charts). */
-export const CHART_STATS_DOT_MARGIN = { top: 40, right: 30, left: 10, bottom: 40 };
+/** Extra right margin so clamped tooltips (allowEscapeViewBox.x false) fit beside the plot at the last x tick. */
+export const CHART_STATS_DOT_MARGIN = { top: 40, right: 56, left: 10, bottom: 40 };
+
+/**
+ * Recharts renders the legend in an absolutely positioned portal; without a high z-index and
+ * explicit pointer events, the SVG plot can sit above the legend on mobile (especially iOS) and
+ * steal touches. Keep legend text styling in sync with chart legend content.
+ */
+export const CHART_LEGEND_WRAPPER_STYLE: React.CSSProperties = {
+  color: "#fff",
+  fontSize: "12px",
+  zIndex: 30,
+  pointerEvents: "auto",
+};
+
+/** True if the event target is the chart legend checkbox button (avoids double-toggling the row). */
+export function isChartLegendCheckboxTarget(target: EventTarget | null): boolean {
+  if (typeof Element === "undefined" || !(target instanceof Element)) return false;
+  return Boolean(target.closest("button[role='checkbox']"));
+}
 
 /**
  * Pulsating circle with one or more labels. Use in Recharts Line dot prop for
@@ -262,10 +282,10 @@ export function getStatsLabelsForPoint(
 
   const labels: string[] = [];
   if (stats.minTime === t)
-    labels.push(`Lowest: ${stats.minValue.toFixed(1)}%`);
+    labels.push(`Lowest: ${formatChartPercentValue(stats.minValue, 2)}%`);
   if (stats.maxTime === t)
-    labels.push(`Highest: ${stats.maxValue.toFixed(1)}%`);
+    labels.push(`Highest: ${formatChartPercentValue(stats.maxValue, 2)}%`);
   if (stats.lastTime === t)
-    labels.push(`${stats.lastValue.toFixed(1)}%`);
+    labels.push(`${formatChartPercentValue(stats.lastValue, 2)}%`);
   return labels;
 }

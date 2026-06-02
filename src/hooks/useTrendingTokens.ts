@@ -25,6 +25,10 @@ export type TrendingToken = {
     "12h"?: number;
     "24h"?: number;
   };
+  /** 24h volume change % (e.g. Birdeye v24hChangePercent) — distinct from price change */
+  volumePercentChange?: {
+    "24h"?: number;
+  };
   totalVolume?: {
     "1h"?: number;
     "4h"?: number;
@@ -58,12 +62,14 @@ function getVolumeValue(t: any) {
   return v?.["24h"] ?? v?.["12h"] ?? v?.["4h"] ?? v?.["1h"] ?? 0;
 }
 function getAgeInSecondsStrict(t: any) {
-  const sec = typeof t?.createdAt === "number" ? t.createdAt : undefined;
-  if (!sec) return undefined;
+  const raw = typeof t?.createdAt === "number" ? t.createdAt : undefined;
+  if (!raw || raw <= 0) return undefined;
+  // Normalise ms → s if needed
+  const sec = raw > 1e12 ? Math.floor(raw / 1000) : raw;
   return Math.max(0, Math.floor(Date.now() / 1000) - sec);
 }
 
-function sortTokens(
+export function sortTokens(
   tokens: any[],
   field: SortField | null,
   dir: SortDirection
@@ -97,7 +103,7 @@ function sortTokens(
   });
 }
 
-export type Chain = "solana" | "bsc" | "base" | "monad" | "all";
+export type Chain = "solana" | "bsc" | "base" | "monad" | "ethereum" | "all";
 
 export function useTrendingTokens(
   customBody?: Partial<{
@@ -110,7 +116,8 @@ export function useTrendingTokens(
     force_full_scan: boolean;
     search_query?: string;
     search_type?: "ticker" | "address";
-  }>
+  }>,
+  options?: { enabled?: boolean },
 ) {
   const [pageSize, setPageSize] = useState(25);
   const [pageIndex, setPageIndex] = useState(1);
@@ -118,14 +125,13 @@ export function useTrendingTokens(
   const [sortDirection, setSortDirection] = useState<SortDirection>(null);
 
   const isVerified = useMemo(() => {
-    // If there's a search query, don't apply verified filtering
-    if (Boolean(customBody?.search_query)) {
-      return false;
+    if (typeof customBody?.verified_only === "boolean") {
+      return customBody.verified_only;
     }
-    // For chain selection: true only for solana, false for bsc/base/all
-    const chain = customBody?.chain || "solana";
-    return chain === "solana";
-  }, [customBody?.search_query, customBody?.chain]);
+    // DexScreener-style trending: rank by live market activity, not Jupiter's verified catalog.
+    // (Verified-only Solana used to surface old blue-chip / stale FDV leaders, not hype pairs.)
+    return false;
+  }, [customBody?.verified_only]);
 
   const forceFullScan = customBody?.force_full_scan ?? false;
 
@@ -142,6 +148,7 @@ export function useTrendingTokens(
       forceFullScan,
       isVerified,
     ],
+    enabled: options?.enabled !== false,
     queryFn: async () => {
       const res = await fetch("/api/trending", {
         method: "POST",
@@ -157,6 +164,9 @@ export function useTrendingTokens(
           ui_amount_mode: "scaled",
           verified_only: isVerified, // <-- driven by search presence
           force_full_scan: forceFullScan,
+          // Fill Age via Birdeye token_creation_info when list/overview omit createdAt (common for V3 list + Jupiter catalog).
+          include_creation: true,
+          creation_concurrency: 6,
           ...(customBody ?? {}),
         }),
       });

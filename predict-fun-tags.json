@@ -1,0 +1,380 @@
+{
+        "data": [
+                {
+                        "id": "1",
+                        "level": null,
+                        "name": "Politics"
+                },
+                {
+                        "id": "2",
+                        "level": 1,
+                        "name": "Crypto"
+                },
+                {
+                        "id": "3",
+                        "level": null,
+                        "name": "New"
+                },
+                {
+                        "id": "4",
+                        "level": 1,
+                        "name": "Sports"
+                },
+                {
+                        "id": "5",
+                        "level": null,
+                        "name": "Soft"
+                },
+                {
+                        "id": "6",
+                        "level": null,
+                        "name": "Economy"
+                },
+                {
+                        "id": "7",
+                        "level": null,
+                        "name": "ETH"
+                },
+                {
+                        "id": "8",
+                        "level": null,
+                        "name": "F1"
+                },
+                {
+                        "id": "9",
+                        "level": null,
+                        "name": "Science"
+                },
+                {
+                        "id": "10",
+                        "level": null,
+                        "name": "Tech"
+                },
+                {
+                        "id": "11",
+                        "level": null,
+                        "name": "Finance"
+                },
+                {
+                        "id": "14",
+                        "level": 2,
+                        "name": "Soccer"
+                },
+                {
+                        "id": "13",
+                        "level": 1,
+                        "name": "Culture"
+                },
+                {
+                        "id": "78",
+                        "level": null,
+                        "name": "NBA"
+                },
+                {
+                        "id": "79",
+                        "level": null,
+                        "name": "NHL"
+                },
+                {
+                        "id": "60",
+                        "level": null,
+                        "name": "NFL"
+                },
+                {
+                        "id": "57",
+                        "level": 2,
+                        "name": "LoL"
+                },
+                {
+                        "id": "97",
+                        "level": null,
+                        "name": "Cricket"
+                },
+                {
+                        "id": "23",
+                        "level": null,
+                        "name": "Olympics"
+                },
+                {
+                        "id": "24",
+                        "level": null,
+                        "name": "NCAAM"
+                },
+                {
+                        "id": "25",
+                        "level": null,
+                        "name": "Oscars"
+                },
+                {
+                        "id": "26",
+                        "level": null,
+                        "name": "CFB"
+                },
+                {
+                        "id": "27",
+                        "level": null,
+                        "name": "Boxing"
+                },
+                {
+                        "id": "28",
+                        "level": null,
+                        "name": "BTC"
+                },
+                {
+                        "id": "29",
+                        "level": null,
+                        "name": "CSGO"
+                },
+                {
+                        "id": "30",
+                        "level": null,
+                        "name": "DFL"
+                },
+                {
+                        "id": "31",
+                        "level": null,
+                        "name": "DOTA"
+                },
+                {
+                        "id": "32",
+                        "level": null,
+                        "name": "Games"
+                },
+                {
+                        "id": "33",
+                        "level": null,
+                        "name": "Golf"
+                },
+                {
+                        "id": "34",
+                        "level": null,
+                        "name": "MMA"
+                },
+                {
+                        "id": "36",
+                        "level": null,
+                        "name": "Tennis"
+                },
+                {
+                        "id": "44",
+                        "level": null,
+                        "name": "World Cup 2026"
+                },
+                {
+                        "id": "45",
+                        "level": null,
+                        "name": "Super Bowl"
+                },
+                {
+                        "id": "42",
+                        "level": null,
+                        "name": "Awards"
+                },
+                {
+                        "id": "35",
+                        "level": 2,
+                        "name": "Basketball"
+                },
+                {
+                        "id": "56",
+                        "level": null,
+                        "name": "Company Market Cap / IPO"
+                },
+                {
+                        "id": "48",
+                        "level": 1,
+                        "name": "Entertainment & Culture"
+                },
+                {
+                        "id": "39",
+                        "level": null,
+                        "name": "ETF"
+                },
+                {
+                        "id": "46",
+                        "level": null,
+                        "name": "ETF / Others"
+                },
+                {
+                        "id": "21",
+                        "level": null,
+                        "name": "FIBA"
+                },
+                {
+                        "id": "49",
+                        "level": 1,
+                        "name": "Finance & Economy"
+                },
+                {
+                        "id": "51",
+                        "level": 2,
+                        "name": "Football"
+                },
+                {
+                        "id": "38",
+                        "level": 2,
+                        "name": "Hit Price"
+                },
+                {
+                        "id": "53",
+                        "level": null,
+                        "name": "HoK"
+                },
+                {
+                        "id": "43",
+                        "level": null,
+                        "name": "Others"
+                },
+                {
+                        "id": "52",
+                        "level": 2,
+                        "name": "Pre-Market"
+                },
+                {
+                        "id": "37",
+                        "level": 2,
+                        "name": "Price Above"
+                },
+                {
+                        "id": "54",
+                        "level": null,
+                        "name": "Rates"
+                },
+                {
+                        "id": "156",
+                        "level": 2,
+                        "name": "UpDown_Binance"
+                },
+                {
+                        "id": "55",
+                        "level": null,
+                        "name": "Stocks"
+                },
+                {
+                        "id": "111",
+                        "level": 2,
+                        "name": "Up/Down"
+                },
+                {
+                        "id": "40",
+                        "level": null,
+                        "name": "Trump"
+                },
+                {
+                        "id": "124",
+                        "level": 2,
+                        "name": "Tweets"
+                },
+                {
+                        "id": "50",
+                        "level": null,
+                        "name": "World Cup"
+                },
+                {
+                        "id": "47",
+                        "level": 1,
+                        "name": "World & Politics"
+                },
+                {
+                        "id": "93",
+                        "level": 2,
+                        "name": "CS2"
+                },
+                {
+                        "id": "16",
+                        "level": 2,
+                        "name": "Dota 2"
+                },
+                {
+                        "id": "17",
+                        "level": 1,
+                        "name": "Esports"
+                },
+                {
+                        "id": "19",
+                        "level": null,
+                        "name": "Testing"
+                },
+                {
+                        "id": "20",
+                        "level": null,
+                        "name": "new tag"
+                },
+                {
+                        "id": "62",
+                        "level": null,
+                        "name": "Hegseth"
+                },
+                {
+                        "id": "63",
+                        "level": null,
+                        "name": "test add"
+                },
+                {
+                        "id": "65",
+                        "level": 2,
+                        "name": "Baseball"
+                },
+                {
+                        "id": "142",
+                        "level": null,
+                        "name": "MLB"
+                },
+                {
+                        "id": "144",
+                        "level": 2,
+                        "name": "Commodities"
+                },
+                {
+                        "id": "68",
+                        "level": 2,
+                        "name": "Bitcoin"
+                },
+                {
+                        "id": "73",
+                        "level": 2,
+                        "name": "Price On"
+                },
+                {
+                        "id": "74",
+                        "level": 2,
+                        "name": "15 Min"
+                },
+                {
+                        "id": "75",
+                        "level": 2,
+                        "name": "1 Hour"
+                },
+                {
+                        "id": "76",
+                        "level": 2,
+                        "name": "Daily"
+                },
+                {
+                        "id": "80",
+                        "level": null,
+                        "name": "5 Min"
+                },
+                {
+                        "id": "85",
+                        "level": 2,
+                        "name": "Tennis"
+                },
+                {
+                        "id": "177",
+                        "level": null,
+                        "name": "UFC"
+                },
+                {
+                        "id": "159",
+                        "level": null,
+                        "name": "BNB"
+                },
+                {
+                        "id": "243",
+                        "level": null,
+                        "name": "International Friendlies"
+                }
+        ],
+        "success": true
+}

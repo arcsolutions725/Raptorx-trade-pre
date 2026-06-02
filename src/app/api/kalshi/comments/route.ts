@@ -1,10 +1,11 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
+import { normalizeKalshiEventTicker } from "@/lib/kalshi/normalizeEventTicker";
 
 export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
-    const eventTicker = searchParams.get("event_ticker");
+    const eventTicker = normalizeKalshiEventTicker(searchParams.get("event_ticker"));
     const limit = searchParams.get("limit") || "20";
     const includeComments = searchParams.get("include_comments") || "true";
     const commentsMaxDepth = searchParams.get("comments_max_depth") || "3";

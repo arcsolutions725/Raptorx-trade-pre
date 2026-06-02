@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, Suspense } from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
 import { useParams, useRouter } from "next/navigation";
@@ -10,6 +10,12 @@ import LimitlessTradingInterface from "../../_components/RexMarketsReport/RexMar
 import { RexMarketsReport } from "../../_components";
 import type { MarketReport } from "@/hooks/useGenerateMarketReport";
 import { useMarketDetails } from "@/hooks/useMarketDetails";
+import {
+  peekPendingGeneratedReport,
+  clearPendingGeneratedReport,
+} from "@/lib/rexmarkets/pendingGeneratedReport";
+import { useOpenPilotSidebarOnMobileReportGen } from "@/hooks/useOpenPilotSidebarOnMobileReportGen";
+import { RexMarketsGenerateReportProvider } from "../../_components/RexMarketsGenerateReportContext";
 
 function LimitlessEventPageContent() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
@@ -94,6 +100,15 @@ function LimitlessEventPageContent() {
     }
   }, [authenticated, ready, privyUser?.id, phantomUser?.id]);
 
+  useLayoutEffect(() => {
+    const report = peekPendingGeneratedReport();
+    if (!report) return;
+    setGeneratedReport(report);
+    setShowReportSidebar(true);
+    const t = window.setTimeout(() => clearPendingGeneratedReport(), 400);
+    return () => clearTimeout(t);
+  }, []);
+
   const handleReportGenerated = useCallback((report: MarketReport) => {
     setGeneratedReport(report);
     setShowReportSidebar(true);
@@ -102,6 +117,8 @@ function LimitlessEventPageContent() {
   const handleBack = useCallback(() => {
     router.push("/rexmarkets");
   }, [router]);
+
+  useOpenPilotSidebarOnMobileReportGen(eventTicker, setShowReportSidebar);
 
   if (isLoadingDetails) {
     return (
@@ -130,6 +147,7 @@ function LimitlessEventPageContent() {
   }
 
   return (
+    <RexMarketsGenerateReportProvider>
     <div
       className="relative w-full h-screen flex flex-col overflow-hidden"
       aria-busy={loadingUser}
@@ -159,6 +177,7 @@ function LimitlessEventPageContent() {
               onBack={handleBack}
               onReportGenerated={handleReportGenerated}
               userId={currentUserId}
+              sessionSavedReportId={generatedReport?.id ?? null}
             />
           </div>
           <Footer />
@@ -168,8 +187,8 @@ function LimitlessEventPageContent() {
         <div
           className={`fixed top-0 right-0 h-screen lg:h-full w-full sm:w-[500px] lg:w-[700px] bg-black z-[60] lg:z-auto transform transition-transform duration-500 ease-in-out ${
             showReportSidebar
-              ? "translate-x-0 lg:relative lg:flex-shrink-0"
-              : "translate-x-full lg:absolute"
+              ? "translate-x-0 lg:relative lg:flex-shrink-0 pointer-events-auto"
+              : "translate-x-full lg:absolute pointer-events-none"
           }`}
           role="dialog"
           aria-modal="true"
@@ -181,7 +200,7 @@ function LimitlessEventPageContent() {
           }}
         >
           <div
-            className="h-full overflow-y-auto overflow-x-hidden bg-[#141414] custom-sidebar-scrollbar"
+            className="h-full min-h-0 overflow-y-auto overflow-x-hidden bg-[#141414] custom-sidebar-scrollbar"
             style={{
               WebkitOverflowScrolling: "touch",
               touchAction: "pan-y",
@@ -197,6 +216,7 @@ function LimitlessEventPageContent() {
               selectedMarketVolume={totalVolume}
               selectedMarketEventId={eventId}
               onClose={() => setShowReportSidebar(false)}
+              onClearSessionReport={() => setGeneratedReport(null)}
             />
           </div>
         </div>
@@ -212,6 +232,7 @@ function LimitlessEventPageContent() {
         )}
       </div>
     </div>
+    </RexMarketsGenerateReportProvider>
   );
 }
 
