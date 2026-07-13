@@ -3,7 +3,7 @@
 import { useRef, useEffect, useState, useCallback } from "react";
 import Image from "next/image";
 
-export type Chain = "solana" | "bsc" | "base" | "monad" | "all";
+export type Chain = "solana" | "bsc" | "base" | "monad" | "ethereum" | "all";
 
 interface ChainButtonsProps {
   selectedChain: Chain;

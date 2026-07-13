@@ -30,7 +30,7 @@ export function BnbMission({ userId }: BnbMissionProps) {
         try {
           const walletProvider = modal.getWalletProvider();
           if (walletProvider) {
-            const provider = new ethers.BrowserProvider(walletProvider);
+            const provider = new ethers.providers.Web3Provider(walletProvider);
             const signer = await provider.getSigner();
             const walletAddress = await signer.getAddress();
             const network = await provider.getNetwork();
@@ -72,7 +72,7 @@ export function BnbMission({ userId }: BnbMissionProps) {
       // Check if connected after modal interaction
       const walletProvider = modal.getWalletProvider();
       if (walletProvider) {
-        const provider = new ethers.BrowserProvider(walletProvider);
+        const provider = new ethers.providers.Web3Provider(walletProvider);
         const signer = await provider.getSigner();
         const walletAddress = await signer.getAddress();
         const network = await provider.getNetwork();
@@ -173,7 +173,7 @@ export function BnbMission({ userId }: BnbMissionProps) {
       const modal = getWalletModal();
       const walletProvider = modal?.getWalletProvider();
       if (walletProvider) {
-        const provider = new ethers.BrowserProvider(walletProvider);
+        const provider = new ethers.providers.Web3Provider(walletProvider);
         const signer = await provider.getSigner();
         const message = `RaptorX Daily Mission - ${new Date().toDateString()}`;
 

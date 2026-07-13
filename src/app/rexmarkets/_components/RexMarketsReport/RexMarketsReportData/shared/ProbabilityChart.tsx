@@ -742,7 +742,7 @@ export default function ProbabilityChart({
                     borderRadius: "8px",
                     color: "#fff",
                   }}
-                  formatter={(value: number | undefined) =>
+                  formatter={(value) =>
                     value !== undefined
                       ? `${formatChartPercentValue(Number(value), 2)}%`
                       : "—"
@@ -856,7 +856,7 @@ export default function ProbabilityChart({
                     borderRadius: "8px",
                     color: "#fff",
                   }}
-                  formatter={(value: number | undefined) =>
+                  formatter={(value) =>
                     value !== undefined
                       ? `${formatChartPercentValue(Number(value), 2)}%`
                       : "—"
@@ -1030,8 +1030,8 @@ export default function ProbabilityChart({
                   borderRadius: "6px",
                   color: "#fff",
                 }}
-                formatter={(value: number | undefined) =>
-                  value !== undefined && !isNaN(value)
+                formatter={(value) =>
+                  value !== undefined && !isNaN(Number(value))
                     ? `${formatChartPercentValue(Number(value), 2)}%`
                     : "—"
                 }
@@ -1205,8 +1205,8 @@ export default function ProbabilityChart({
                     borderRadius: "6px",
                     color: "#fff",
                   }}
-                  formatter={(value: number | undefined) =>
-                    value !== undefined && !isNaN(value)
+                  formatter={(value) =>
+                    value !== undefined && !isNaN(Number(value))
                       ? `${formatChartPercentValue(Number(value), 2)}%`
                       : "—"
                   }
@@ -1364,9 +1364,9 @@ export default function ProbabilityChart({
                 borderRadius: "8px",
                 color: "#fff",
               }}
-              formatter={(value: number | undefined, name: string | undefined) => [
+              formatter={(value, name) => [
                 value !== undefined
-                  ? `${formatChartPercentValue(value * 100, 2)}%`
+                  ? `${formatChartPercentValue(Number(value) * 100, 2)}%`
                   : "—",
                 name ?? "",
               ]}

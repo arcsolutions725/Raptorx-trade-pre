@@ -52,6 +52,12 @@ model User {
   rexMarketsFreeTechReportsToday     Int @default(0)
   rexMarketsFreeNewsReportsToday     Int @default(0)
 
+  // BNB daily mission (resets every day)
+  bnbWalletConnected    Boolean   @default(false)
+  bnbSignatureCompleted Boolean   @default(false)
+  bnbMissionCompleted   Boolean   @default(false)
+  lastBnbMissionDate    DateTime?
+
   reports   Report[]
   swaps     SwapTransaction[]
   clawV5Chats ClawV5Chat[]

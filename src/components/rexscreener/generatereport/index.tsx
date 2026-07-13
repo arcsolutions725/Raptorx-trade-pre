@@ -43,7 +43,7 @@ interface Props {
   tokenAddress?: string | null;
   isViewingChart?: boolean;
   onTokenSelect?: (token: TrendingToken | null) => void;
-  selectedChain?: "solana" | "bsc" | "base" | "monad" | "all";
+  selectedChain?: "solana" | "bsc" | "base" | "monad" | "ethereum" | "all";
   hideHeader?: boolean; // Hide header when used as sidebar
   onClose?: () => void; // Callback to close the sidebar
   forceShowExchange?: boolean; // Force show the exchange panel when true
