@@ -11,7 +11,8 @@ export function normGoldenDbChain(chain: string): string {
     t === "bsc" ||
     t === "base" ||
     t === "monad" ||
-    t === "ethereum"
+    t === "ethereum" ||
+    t === "robinhood"
   ) {
     return t;
   }

@@ -5,7 +5,7 @@ import Image from "next/image";
 import clsx from "clsx";
 import { useQuery } from "@tanstack/react-query";
 import type { TrendingToken } from "@/hooks/useTrendingTokens";
-import type { DexScreenerPair } from "@/lib/api/dexscreener";
+import { toDexChainSlug, type DexScreenerPair } from "@/lib/api/dexscreener";
 import {
   parseRexScreenerReportSections,
   stripBnbOnlyReportSectionsFromMarkdown,
@@ -154,15 +154,7 @@ export function RexScreenerStreamingReport({
     [token?.chainId, tokenAddress],
   );
 
-  const lowerChainId = token?.chainId?.toLowerCase();
-  const dexChain =
-    lowerChainId === "base" || token?.chainId === "8453"
-      ? "base"
-      : lowerChainId === "bsc" || token?.chainId === "56"
-        ? "bsc"
-        : lowerChainId === "monad" || token?.chainId === "10143"
-          ? "monad"
-          : "solana";
+  const dexChain = toDexChainSlug(token?.chainId) ?? "solana";
 
   const mdForDisplay = useMemo(
     () => stripBnbOnlyReportSectionsFromMarkdown(md, isBnbChain),
@@ -252,7 +244,7 @@ export function RexScreenerStreamingReport({
     queryKey: ["dexscreener-embed-pair", dexChain, tokenAddress ?? ""],
     queryFn: async (): Promise<DexScreenerPair | null> => {
       const r = await fetch(
-        `/api/dexscreener?contractAddress=${encodeURIComponent(tokenAddress!)}`,
+        `/api/dexscreener?contractAddress=${encodeURIComponent(tokenAddress!)}&chain=${encodeURIComponent(dexChain)}`,
       );
       const j = (await r.json()) as { error?: string } & Partial<DexScreenerPair>;
       if (!r.ok || (typeof j.error === "string" && j.error)) return null;

@@ -206,6 +206,24 @@ model GoldenReportProject {
   @@map("golden_report_projects")
 }
 
+/// Immutable per-token creation time ("Age"), fetched once and cached in our DB so
+/// the trending list serves Age from the database instead of making a per-token
+/// external API call in the render path. `createdAtUnix` null = looked up but not
+/// found yet (kept so we don't re-hammer the upstream every request).
+model TokenCreation {
+  id            String   @id @default(cuid())
+  chain         String
+  address       String
+  createdAtUnix Int?
+  source        String?
+  checkedAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt @default(now())
+
+  @@unique([chain, address])
+  @@index([chain])
+  @@map("token_creation")
+}
+
 model SwapTransaction {
   id              String   @id @default(cuid())
   userId          String

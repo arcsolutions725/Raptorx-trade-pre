@@ -25,6 +25,8 @@ export default function ExplorerModal({
   const isBSC = lowerChainId === "bsc" || chainId === "56";
   const isBase = lowerChainId === "base" || chainId === "8453";
   const isMonad = lowerChainId === "monad" || chainId === "10143";
+  const isEthereum = lowerChainId === "ethereum" || chainId === "1";
+  const isRobinhood = lowerChainId === "robinhood" || chainId === "4663";
 
   const explorerUrl = isBase
     ? `https://basescan.org/token/${tokenAddress}`
@@ -32,7 +34,11 @@ export default function ExplorerModal({
       ? `https://bscscan.com/token/${tokenAddress}`
       : isMonad
         ? `https://monadscan.com/address/${tokenAddress}`
-        : `https://solscan.io/token/${tokenAddress}`;
+        : isEthereum
+          ? `https://etherscan.io/token/${tokenAddress}`
+          : isRobinhood
+            ? `https://robinhoodchain.blockscout.com/token/${tokenAddress}`
+            : `https://solscan.io/token/${tokenAddress}`;
 
   const explorerName = isBase
     ? "BaseScan"
@@ -40,7 +46,11 @@ export default function ExplorerModal({
       ? "BSCScan"
       : isMonad
         ? "MonadScan"
-        : "SolScan";
+        : isEthereum
+          ? "Etherscan"
+          : isRobinhood
+            ? "Robinhood Explorer"
+            : "SolScan";
 
   // Handle escape key
   useEffect(() => {

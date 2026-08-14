@@ -403,6 +403,7 @@ function buildChartTitle(t: TrendingToken): string {
   const isBaseChain = lowerChainId === "base" || t?.chainId === "8453";
   const isBnbChain = lowerChainId === "bsc" || t?.chainId === "56";
   const isMonadChain = lowerChainId === "monad" || t?.chainId === "10143";
+  const isRobinhoodChain = lowerChainId === "robinhood";
   const isEthereumChain =
     lowerChainId === "ethereum" || lowerChainId === "eth" || t?.chainId === "1";
   const baseCurrency = isBaseChain
@@ -413,7 +414,9 @@ function buildChartTitle(t: TrendingToken): string {
       ? "WBNB"
       : isMonadChain
         ? "MON"
-        : "SOL";
+        : isRobinhoodChain
+          ? ((t as { quoteSymbol?: string })?.quoteSymbol || "ETH")
+          : "SOL";
   return `${t?.name ?? t?.symbol ?? "Token"} / ${baseCurrency}`;
 }
 

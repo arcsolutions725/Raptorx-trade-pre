@@ -7,6 +7,7 @@ import { ReportCache } from "@/lib/storage/reportCache";
 import { useQueryClient } from "@tanstack/react-query";
 import { reportGenStore } from "@/lib/storage/reportGenStore";
 import { marketReportStreamStore } from "@/lib/storage/marketReportStreamStore";
+import { normalizeSwapChain, type SwapChain } from "@/lib/swapChain";
 
 export type Report = {
   id: string;
@@ -23,20 +24,17 @@ type GenerateArgs = {
   contractAddress: string;
   ticker: string;
   projectName?: string;
-  /** Optional chain from token so the report is stored with correct chain for SwapWidget */
-  chain?: "base" | "bsc" | "solana" | "monad";
+  /**
+   * Chain from the token row, so the report is stored with the right chain and the
+   * Exchange widget can later be pinned to it. When this is omitted the API falls
+   * back to `Report.chain`'s "solana" default — which is how Ethereum tokens ended
+   * up with Solana-pinned swap widgets.
+   */
+  chain?: SwapChain;
 };
 
-/** Normalize token chainId to API chain value so the report is saved with correct chain */
-function normalizeTokenChain(chainId?: string): "base" | "bsc" | "solana" | "monad" | undefined {
-  if (!chainId) return undefined;
-  const c = chainId.toLowerCase().trim();
-  if (c === "base" || c === "8453") return "base";
-  if (c === "bsc" || c === "bnb" || c === "56") return "bsc";
-  if (c === "solana" || c === "sol") return "solana";
-  if (c === "monad" || c === "10143") return "monad";
-  return undefined;
-}
+/** Token `chainId` → API chain value. Shared with the Exchange widget's resolver. */
+const normalizeTokenChain = normalizeSwapChain;
 
 type UseGenerateRexReportOptions = {
   onReportGenerated?: (report: Report) => void;

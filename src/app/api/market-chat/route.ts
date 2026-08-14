@@ -72,7 +72,9 @@ export async function POST(request: NextRequest) {
 
     const responseStream = await openRouter.chat.send({
       // Search-enabled model for real-time follow-up answers (RexMarkets chat).
-      model: "openai/gpt-4o-mini-search-preview",
+      // `:online` = OpenRouter web plugin; the old openai/*-search-preview ids
+      // were removed from OpenRouter and returned 404 on every request.
+      model: "google/gemini-3.6-flash:online",
       messages,
       temperature: 0.2,
       stream: true,

@@ -1,0 +1,58 @@
+{
+  "packageId": "trade.raptorx.twa",
+  "host": "raptorx.trade",
+  "name": "RaptorXchange - AI Crypto Trading Platform",
+  "launcherName": "RaptorX",
+  "display": "standalone",
+  "themeColor": "#000000",
+  "themeColorDark": "#000000",
+  "navigationColor": "#000000",
+  "navigationColorDark": "#000000",
+  "navigationDividerColor": "#000000",
+  "navigationDividerColorDark": "#000000",
+  "backgroundColor": "#000000",
+  "enableNotifications": true,
+  "startUrl": "/",
+  "iconUrl": "https://raptorx.trade/android-chrome-512x512.png",
+  "maskableIconUrl": "https://raptorx.trade/android-chrome-512x512.png",
+  "splashScreenFadeOutDuration": 300,
+  "signingKey": {
+    "path": "/home/alex-relearn/Work/RaptorXchange/android/com.Raptorx.trade.keystore",
+    "alias": "com.Raptorx.trade"
+  },
+  "appVersionName": "1",
+  "appVersionCode": 1,
+  "shortcuts": [],
+  "generatorApp": "bubblewrap-cli",
+  "webManifestUrl": "https://raptorx.trade/manifest.json",
+  "fallbackType": "customtabs",
+  "features": {
+    "playBilling": {
+      "enabled": true
+    },
+    "locationDelegation": {
+      "enabled": true
+    }
+  },
+  "alphaDependencies": {
+    "enabled": false
+  },
+  "enableSiteSettingsShortcut": true,
+  "isChromeOSOnly": false,
+  "isMetaQuest": false,
+  "fullScopeUrl": "https://raptorx.trade/",
+  "minSdkVersion": 21,
+  "orientation": "portrait-primary",
+  "fingerprints": [
+    {
+      "value": "A3:2F:93:16:B5:07:E8:CD:E7:B4:A5:55:3F:0B:8F:92:F2:40:99:F2:5D:1B:AF:29:2A:E6:04:B5:07:EA:8F:95"
+    }
+  ],
+  "additionalTrustedOrigins": [],
+  "retainedBundles": [],
+  "protocolHandlers": [],
+  "fileHandlers": [],
+  "launchHandlerClientMode": "",
+  "displayOverride": [],
+  "appVersion": "1"
+}

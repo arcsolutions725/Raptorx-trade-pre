@@ -22,6 +22,7 @@ import {
   PREDICT_FUN_LOGO_SRC,
   PREDICT_FUN_TAB_ICON_SRC,
 } from "@/lib/predictfun/assets";
+import { markClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
 import clsx from "clsx";
 
 type User = {
@@ -510,7 +511,7 @@ export default function RexHeader({
               }
             >
               {/* <Info className="w-4 h-4 text-white" /> */}
-              <span className="text-center text-sm font-normal text-white [overflow-wrap:anywhere]">
+              <span className="text-center text-[13px] sm:text-sm font-normal text-white [overflow-wrap:anywhere]">
                 The Intelligent Terminal for Prediction Markets & Crypto.
               </span>
             </div>
@@ -554,7 +555,10 @@ export default function RexHeader({
                 </button>
                 <button
                   onClick={() => {
-                    if (!isClawV5Page) router.push("/claw-v5");
+                    if (!isClawV5Page) {
+                      markClawV5ScrollToInput();
+                      router.push("/claw-v5");
+                    }
                   }}
                   className={`flex-1 min-w-0 h-9 rounded-[10px] text-[11px] font-semibold transition-colors truncate ${
                     isClawV5Page
@@ -637,6 +641,7 @@ export default function RexHeader({
                     <button
                       onClick={() => {
                         if (!isClawV5Page) {
+                          markClawV5ScrollToInput();
                           router.push("/claw-v5");
                         }
                       }}

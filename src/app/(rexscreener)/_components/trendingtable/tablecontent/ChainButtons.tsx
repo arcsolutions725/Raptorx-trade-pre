@@ -1,9 +1,22 @@
 "use client";
 
-import { useRef, useEffect, useState, useCallback } from "react";
+import {
+  useRef,
+  useEffect,
+  useState,
+  useCallback,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import Image from "next/image";
 
-export type Chain = "solana" | "bsc" | "base" | "monad" | "ethereum" | "all";
+export type Chain =
+  | "solana"
+  | "robinhood"
+  | "bsc"
+  | "base"
+  | "monad"
+  | "ethereum"
+  | "all";
 
 interface ChainButtonsProps {
   selectedChain: Chain;
@@ -23,10 +36,32 @@ export function ChainButtons({
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [sliderStyle, setSliderStyle] = useState<SliderStyle | null>(null);
+  // Custom always-visible golden scrollbar (native one hides when there's no
+  // overflow; we want the bar shown as an affordance even when the tabs fit).
+  const [thumb, setThumb] = useState<{ width: number; left: number }>({
+    width: 100,
+    left: 0,
+  });
+  const dragRef = useRef<{ startX: number; startScroll: number } | null>(null);
+
+  const updateThumb = useCallback(() => {
+    const el = containerRef.current;
+    if (!el) return;
+    const { scrollWidth, clientWidth, scrollLeft } = el;
+    if (!scrollWidth || scrollWidth <= clientWidth) {
+      setThumb({ width: 100, left: 0 });
+      return;
+    }
+    setThumb({
+      width: Math.max(10, (clientWidth / scrollWidth) * 100),
+      left: (scrollLeft / scrollWidth) * 100,
+    });
+  }, []);
 
   // Solana, Ethereum, Base, BNB, Monad only — "all" remains a valid route but has no tab
   const chains: Exclude<Chain, "all">[] = [
     "solana",
+    "robinhood",
     "ethereum",
     "base",
     "bsc",
@@ -80,10 +115,11 @@ export function ChainButtons({
   useEffect(() => {
     const rafId = requestAnimationFrame(() => {
       updateSliderPosition();
+      updateThumb();
     });
 
     return () => cancelAnimationFrame(rafId);
-  }, [activeIndex, updateSliderPosition]);
+  }, [activeIndex, updateSliderPosition, updateThumb]);
 
   useEffect(() => {
     let rafId: number | null = null;
@@ -94,6 +130,7 @@ export function ChainButtons({
       }
       rafId = requestAnimationFrame(() => {
         updateSliderPosition();
+        updateThumb();
       });
     };
 
@@ -125,18 +162,37 @@ export function ChainButtons({
         cancelAnimationFrame(rafId);
       }
     };
-  }, [updateSliderPosition]);
+  }, [updateSliderPosition, updateThumb]);
+
+  const onThumbPointerDown = (e: ReactPointerEvent) => {
+    const el = containerRef.current;
+    if (!el) return;
+    dragRef.current = { startX: e.clientX, startScroll: el.scrollLeft };
+    (e.target as HTMLElement).setPointerCapture(e.pointerId);
+  };
+  const onThumbPointerMove = (e: ReactPointerEvent) => {
+    const el = containerRef.current;
+    const d = dragRef.current;
+    if (!el || !d) return;
+    const ratio = el.scrollWidth / el.clientWidth;
+    el.scrollLeft = d.startScroll + (e.clientX - d.startX) * ratio;
+  };
+  const onThumbPointerUp = () => {
+    dragRef.current = null;
+  };
 
   return (
-    <div
-      ref={containerRef}
-      className="relative flex items-center bg-white/12 p-0.5 overflow-x-auto scrollbar-none"
-      style={{
-        borderRadius: "12px",
-        maxWidth: "100%",
-        WebkitOverflowScrolling: "touch",
-      }}
-    >
+    <div className="flex flex-col gap-1.5" style={{ maxWidth: "100%" }}>
+      <div
+        ref={containerRef}
+        onScroll={updateThumb}
+        className="relative flex items-center bg-white/12 p-0.5 overflow-x-auto scrollbar-none"
+        style={{
+          borderRadius: "12px",
+          maxWidth: "100%",
+          WebkitOverflowScrolling: "touch",
+        }}
+      >
       {sliderStyle && (
         <div
           className="absolute top-0.5 bottom-0.5 bg-[#3C3C3C] shadow-md pointer-events-none"
@@ -183,6 +239,32 @@ export function ChainButtons({
           ref={(el) => {
             buttonRefs.current[1] = el;
           }}
+          onClick={() => onChainChange("robinhood")}
+          className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
+            isActive("robinhood")
+              ? "text-white font-semibold"
+              : "text-white hover:text-white/90"
+          }`}
+          style={{
+            padding: "10px 14px",
+            height: "40px",
+            borderRadius: "12px",
+          }}
+          title="Robinhood"
+        >
+          <Image
+            src="/images/robinhood.png"
+            alt="Robinhood"
+            width={20}
+            height={20}
+            className="w-5 h-5 shrink-0 object-contain"
+          />
+          <span className="font-normal text-[14px]">Robinhood</span>
+        </button>
+        <button
+          ref={(el) => {
+            buttonRefs.current[2] = el;
+          }}
           onClick={() => onChainChange("ethereum")}
           className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
             isActive("ethereum")
@@ -207,7 +289,7 @@ export function ChainButtons({
         </button>
         <button
           ref={(el) => {
-            buttonRefs.current[2] = el;
+            buttonRefs.current[3] = el;
           }}
           onClick={() => onChainChange("base")}
           className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
@@ -233,7 +315,7 @@ export function ChainButtons({
         </button>
         <button
           ref={(el) => {
-            buttonRefs.current[3] = el;
+            buttonRefs.current[4] = el;
           }}
           onClick={() => onChainChange("bsc")}
           className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
@@ -259,7 +341,7 @@ export function ChainButtons({
         </button>
         <button
           ref={(el) => {
-            buttonRefs.current[4] = el;
+            buttonRefs.current[5] = el;
           }}
           onClick={() => onChainChange("monad")}
           className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
@@ -283,6 +365,22 @@ export function ChainButtons({
           />
           <span className="font-normal text-[14px]">Monad</span>
         </button>
+      </div>
+      </div>
+
+      {/* Always-visible golden scrollbar (custom — native one hides when the tabs fit) */}
+      <div className="h-1.5 w-full rounded-full bg-white/10 relative select-none touch-none">
+        <div
+          onPointerDown={onThumbPointerDown}
+          onPointerMove={onThumbPointerMove}
+          onPointerUp={onThumbPointerUp}
+          onPointerCancel={onThumbPointerUp}
+          className="absolute inset-y-0 rounded-full bg-[#f9b80c] hover:bg-[#ffd700] cursor-grab active:cursor-grabbing transition-colors"
+          style={{
+            width: `${thumb.width}%`,
+            left: `${thumb.left}%`,
+          }}
+        />
       </div>
     </div>
   );

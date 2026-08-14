@@ -12,8 +12,10 @@
  * - Remove: `DELETE /api/internal/pump-reports/projects?contractAddress=…&chain=solana`
  */
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { isInternalGoldenReportsAdmin } from "@/lib/auth/internalGoldenReportsAdmin";
+import { REPORT_SCREENER_ROWS_TAG } from "@/lib/reportScreenerRows";
 
 const DEFAULT_CHAIN = "solana";
 
@@ -91,6 +93,7 @@ export async function POST(req: NextRequest) {
           isGolden: false,
         },
       });
+      revalidateTag(REPORT_SCREENER_ROWS_TAG, "max");
       return NextResponse.json({ ok: true, project: updated });
     }
 
@@ -102,6 +105,8 @@ export async function POST(req: NextRequest) {
         authorizedEditorEmails: [],
       },
     });
+    // The screener rows are cached for 60s — drop them so the edit shows at once.
+    revalidateTag(REPORT_SCREENER_ROWS_TAG, "max");
     return NextResponse.json({ ok: true, project: created });
   } catch (e: any) {
     if (e?.code === "P2002") {
@@ -151,6 +156,7 @@ export async function DELETE(req: NextRequest) {
       );
     }
     await prisma.goldenReportProject.delete({ where: { id: existing.id } });
+    revalidateTag(REPORT_SCREENER_ROWS_TAG, "max");
     return NextResponse.json({ ok: true });
   } catch (e: any) {
     console.error("internal pump-reports DELETE:", e);

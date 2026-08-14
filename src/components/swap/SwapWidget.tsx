@@ -14,11 +14,12 @@ import type { Route } from "@lifi/sdk";
 import type { RouteExecutionUpdate } from "@lifi/widget";
 import { ClientOnly } from "./ClientOnly";
 import { getHeliusRpcUrl } from "@/lib/rpc";
+import { PhantomStandardWalletRegistrar } from "./solana-phantom-bridge/PhantomStandardWalletRegistrar";
 
 interface SwapWidgetProps {
   currentUserId: string;
   toTokenAddress?: string | null;
-  forceChain?: "solana" | "bsc" | "ethereum" | "base" | "monad";
+  forceChain?: "solana" | "robinhood" | "bsc" | "ethereum" | "base" | "monad";
   walletAddress?: string | null;
 }
 
@@ -27,6 +28,7 @@ type HandlerRefs = {
   toTokenAddress: string | null | undefined;
   resolvedChain:
     | "solana"
+    | "robinhood"
     | "bsc"
     | "ethereum"
     | "base"
@@ -36,9 +38,9 @@ type HandlerRefs = {
 };
 
 function resolveChain(
-  forceChain: "solana" | "bsc" | "ethereum" | "base" | "monad" | undefined,
+  forceChain: "solana" | "robinhood" | "bsc" | "ethereum" | "base" | "monad" | undefined,
   _toTokenAddress: string | null | undefined,
-): "solana" | "bsc" | "ethereum" | "base" | "monad" | undefined {
+): "solana" | "robinhood" | "bsc" | "ethereum" | "base" | "monad" | undefined {
   // If a chain is explicitly forced (Solana, BSC, Base, Monad), respect it.
   // Otherwise, let the LiFi widget pick the appropriate chain based on the token.
   if (forceChain) return forceChain;
@@ -85,6 +87,19 @@ export function SwapWidget({
     variant: "compact",
     integrator: "huntonraptor",
     fee: 0.01,
+    /**
+     * 3%. Li.Fi ships no slippage of its own (`defaultSlippage = undefined`), so the
+     * API falls back to ~0.5% — far too tight for the memecoins this terminal is
+     * built around. The price moves more than that between the quote being built and
+     * the transaction landing, the swap's minimum-output check trips, and the whole
+     * transaction aborts. Phantom surfaces that as "Transaction simulation failed",
+     * which reads like a wallet problem but is really the swap refusing to execute.
+     *
+     * This is the DEFAULT, not a cap: users can still change it in the widget's
+     * settings. Higher slippage means more tolerance for adverse price movement, so
+     * don't raise it further without cause.
+     */
+    slippage: 0.03,
     // buildUrl: true,
     hiddenUI: ["bridgesSettings", "appearance", "language", "poweredBy"],
     theme: {
@@ -289,14 +304,10 @@ export function SwapWidget({
         toToken,
         fromAddress,
         toAddress,
-        chain:
-          chain === "bsc"
-            ? "bnb"
-            : chain === "ethereum"
-              ? "ethereum"
-            : chain === "base"
-              ? "base"
-              : "solana",
+        // Record the chain the swap actually happened on. This used to collapse
+        // anything that wasn't bsc/ethereum/base to "solana", so Monad and Robinhood
+        // swaps were logged against the wrong chain.
+        chain: chain === "bsc" ? "bnb" : (chain ?? "solana"),
         isBuy,
         walletAddress: effectiveWalletAddress,
         fromAmountRaw: fromAmountRaw ?? undefined,
@@ -408,6 +419,9 @@ export function SwapWidget({
 
   return (
     <div ref={containerRef} className="w-full h-full bg-black">
+      {/* Registers Wallet Standard "Phantom" when the extension isn't injected
+          (mobile / no extension) so Li.Fi lists it like MetaMask on EVM. */}
+      <PhantomStandardWalletRegistrar />
       <div className="h-full overflow-y-auto overflow-x-hidden">
         {/* Explicit BSC configuration */}
         {resolvedChain === "bsc" && (
@@ -502,7 +516,8 @@ export function SwapWidget({
           </div>
         )}
 
-        {/* Explicit Solana configuration */}
+        {/* Explicit Solana configuration — same pattern as EVM chains:
+            Li.Fi owns wallet connect/sign (Phantom via Wallet Standard / MWA). */}
         {resolvedChain === "solana" && (
           <div className="h-full w-full p-0">
             <ClientOnly
@@ -527,6 +542,24 @@ export function SwapWidget({
                   fromToken: "11111111111111111111111111111111",
                   toChain: 1151111081099710,
                   toToken: toTokenAddress || undefined,
+                  /**
+                   * Pin the DESTINATION to Solana.
+                   *
+                   * `toChain` above is only an initial default, and the widget persists
+                   * the user's last pick in localStorage — so one stray tap leaves the
+                   * destination stuck on Taiko/Lisk/Bitcoin, on a Solana token page,
+                   * across every later visit. The result is a dead widget: Li.Fi can't
+                   * route $1 of SOL to an obscure L2, so it reports "No routes
+                   * available" and the Exchange button has nothing to submit. Worse, a
+                   * connected Phantom (Solana) wallet can't sign for an EVM source
+                   * chain, so the button reverts to "Connect wallet" while the wallet
+                   * is plainly connected.
+                   *
+                   * Source is deliberately left open: paying for a Solana token with
+                   * ETH/USDC from another chain is a legitimate flow. It's swapping OUT
+                   * to a random chain that never makes sense here.
+                   */
+                  chains: { to: { allow: [ChainId.SOL] } },
                 }}
               />
             </ClientOnly>
@@ -557,6 +590,37 @@ export function SwapWidget({
                   fromChain: ChainId.MON, // Monad chain id (testnet/mainnet as configured by LiFi)
                   fromToken: "0x0000000000000000000000000000000000000000", // MON native
                   toChain: ChainId.MON,
+                  toToken: toTokenAddress ? toTokenAddress : undefined,
+                }}
+              />
+            </ClientOnly>
+          </div>
+        )}
+
+        {/* Explicit Robinhood Chain configuration (LiFi chain id 4663, native ETH) */}
+        {resolvedChain === "robinhood" && (
+          <div className="w-full p-0">
+            <ClientOnly
+              fallback={
+                <div className="flex items-center justify-center h-full">
+                  <WidgetSkeleton
+                    config={{
+                      ...baseWidgetConfig,
+                      toToken: toTokenAddress ? toTokenAddress : undefined,
+                    }}
+                  />
+                </div>
+              }
+            >
+              <LiFiWidget
+                key={`lifi-robinhood-${toTokenAddress || "none"}`}
+                integrator="huntonraptor"
+                fee={0.01}
+                config={{
+                  ...baseWidgetConfig,
+                  fromChain: 4663,
+                  fromToken: "0x0000000000000000000000000000000000000000",
+                  toChain: 4663,
                   toToken: toTokenAddress ? toTokenAddress : undefined,
                 }}
               />

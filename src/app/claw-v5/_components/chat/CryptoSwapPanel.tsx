@@ -5,13 +5,14 @@ import { SwapWidget } from "@/components/swap/SwapWidget";
 import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
 import { useEthereumWalletAddress } from "@/hooks/useEthereumWalletAddress";
 import { detectChain } from "@/utils/detectChain";
+import type { SwapChain } from "@/lib/swapChain";
 
 /**
  * Map a Claw cryptotech payload to the chain flag SwapWidget expects so LiFi gets
- * fromChain/fromToken (native) + toToken pre-filled for Base, Monad, BNB, and Solana.
+ * fromChain/fromToken (native) + toToken pre-filled for every chain we list.
  */
 function resolveSwapChainFromPayload(payload: any | null): {
-  forceChain: "solana" | "bsc" | "ethereum" | "base" | "monad" | undefined;
+  forceChain: SwapChain | undefined;
 } {
   if (!payload) return { forceChain: undefined };
   const token = payload?.token ?? null;

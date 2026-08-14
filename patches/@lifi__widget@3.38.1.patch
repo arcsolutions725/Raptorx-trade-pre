@@ -1,0 +1,34 @@
+diff --git a/dist/esm/pages/TransactionPage/utils.js b/dist/esm/pages/TransactionPage/utils.js
+index a4ce4ce..d74ca0b 100644
+--- a/dist/esm/pages/TransactionPage/utils.js
++++ b/dist/esm/pages/TransactionPage/utils.js
+@@ -2,10 +2,24 @@ export const calculateValueLossPercentage = (fromAmountUSD, toAmountUSD, gasCost
+     return Number.parseFloat(((toAmountUSD / (fromAmountUSD + gasCostUSD + feeCostUSD) - 1) *
+         100).toFixed(2));
+ };
++// RaptorX patch: suppress the "High value loss" confirmation sheet.
++//
++// TransactionPage gates execution on this:
++//     if (tokenValueLossThresholdExceeded && subvariant !== 'custom')
++//         tokenValueBottomSheetRef.current?.open()   // blocks the swap
++//     else
++//         handleExecuteRoute()                       // actually swaps
++// so returning false here makes the swap run straight through. It is the ONLY
++// consumer of this function, and CSS-hiding the sheet would instead have made the
++// swap button do nothing at all.
++//
++// Upstream fires this above a 10% value loss, which small swaps trip routinely
++// because fixed provider/network fees dominate a tiny notional. The fee breakdown
++// is still shown in the route details, so nothing is concealed — it just no longer
++// interrupts. Trade-off: a genuinely bad route (e.g. -40%) now proceeds unchallenged.
++// To restore a warning for only the egregious cases, return the original expression
++// with a lower bound, e.g. `< 0.5`.
+ export const getTokenValueLossThreshold = (fromAmountUSD, toAmountUSD, gasCostUSD, feeCostUSD) => {
+-    if (!fromAmountUSD || !toAmountUSD) {
+-        return false;
+-    }
+-    return toAmountUSD / (fromAmountUSD + gasCostUSD + feeCostUSD) < 0.9;
++    return false;
+ };
+ //# sourceMappingURL=utils.js.map
+\ No newline at end of file

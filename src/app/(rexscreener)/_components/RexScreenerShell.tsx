@@ -13,6 +13,7 @@ import {
 import { usePathname, useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
+import { peekPhantomResumeSwap } from "@/lib/phantomReturnUrl";
 import { GenerateRexscreenerReport } from "@/app/(rexscreener)/_components/generatereport";
 import { TrendingTable } from "@/app/(rexscreener)/_components/trendingtable";
 import { DailyTasksPopup } from "@/components/leaderboard/DailyTaskPopup";
@@ -111,6 +112,32 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
   const [showDailyTasksPopup, setShowDailyTasksPopup] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [forceShowExchange, setForceShowExchange] = useState(false);
+
+  /**
+   * Coming back from the Phantom app, land the user on the Exchange.
+   *
+   * The report sidebar (which hosts the swap widget) is always mounted and merely
+   * translated off-screen, so the report component happily consumed the resume flag
+   * and set itself up correctly — inside a panel the user could not see. Opening
+   * that panel is this component's job.
+   *
+   * PEEK during render, don't consume: React runs child effects BEFORE parent
+   * effects, so by the time any effect here could run, the report below has already
+   * eaten the flag. Reading it in the render pass gets us in first, and leaves the
+   * child's own consume intact.
+   *
+   * Applied from an effect rather than as the initial state so the first client
+   * render still matches the server's (closed) markup and hydration stays clean.
+   */
+  const phantomResumeRef = useRef<boolean | null>(null);
+  if (phantomResumeRef.current === null) {
+    phantomResumeRef.current = peekPhantomResumeSwap();
+  }
+  useEffect(() => {
+    if (!phantomResumeRef.current) return;
+    setShowReportSidebar(true);
+    setForceShowExchange(true);
+  }, []);
   const [selectedToken, setSelectedToken] = useState<TrendingToken | null>(
     null
   );
@@ -408,8 +435,12 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
     hasShownDailyTasksRef.current = false;
   }, []);
 
+  /** "Claw AI" — opens the intelligence report, so it must also clear the Exchange
+   *  force-flag. Without this the flag stays true from an earlier "Enter the Exchange"
+   *  click and the user gets the swap panel back instead of the report they asked for. */
   const toggleReportSidebar = useCallback(() => {
     setShowReportSidebar((v) => !v);
+    setForceShowExchange(false);
   }, []);
 
   const openExchangePanel = useCallback(() => {

@@ -7,7 +7,7 @@
   },
   "scripts": {
     "dev": "next dev",
-    "build": "prisma generate && next build --webpack",
+    "build": "npm run db:push && prisma generate && next build --webpack",
     "start": "next start",
     "lint": "eslint",
     "db:push": "prisma db push",
@@ -45,6 +45,7 @@
     "@solana-program/token": "^0.6.0",
     "@solana/kit": "^3.0.3",
     "@solana/spl-token": "^0.4.14",
+    "@solana/wallet-adapter-base": "^0.9.27",
     "@solana/wallet-adapter-react": "^0.15.39",
     "@solana/wallet-adapter-wallets": "^0.19.37",
     "@solana/web3.js": "^1.98.4",
@@ -57,6 +58,7 @@
     "@vercel/blob": "^2.0.0",
     "@vercel/og": "^0.8.6",
     "@vercel/speed-insights": "^1.2.0",
+    "@wallet-standard/wallet": "^1.1.0",
     "ai": "^5.0.28",
     "axios": "^1.11.0",
     "bs58": "^6.0.0",
@@ -84,6 +86,7 @@
     "sharp": "^0.33.5",
     "sonner": "^2.0.7",
     "turndown": "^7.2.4",
+    "tweetnacl": "^1.0.3",
     "viem": "^2.43.3",
     "wagmi": "^2.19.1",
     "zod": "^4.3.5"
@@ -104,5 +107,10 @@
   "overrides": {
     "@types/react": "19.2.7",
     "@types/react-dom": "19.2.3"
+  },
+  "pnpm": {
+    "patchedDependencies": {
+      "@lifi/widget@3.38.1": "patches/@lifi__widget@3.38.1.patch"
+    }
   }
 }

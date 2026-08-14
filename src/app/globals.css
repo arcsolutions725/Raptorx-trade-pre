@@ -60,11 +60,36 @@
   -ms-overflow-style: none;
 }
 
+/* Always-visible golden-yellow scrollbar for the chain/category tabs.
+   Uses overflow-x: scroll on the container so the bar stays visible as an
+   affordance that the tabs are scrollable. */
+.chain-scrollbar::-webkit-scrollbar {
+  height: 7px;
+}
+.chain-scrollbar::-webkit-scrollbar-track {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 9999px;
+}
+.chain-scrollbar::-webkit-scrollbar-thumb {
+  background: #f9b80c;
+  border-radius: 9999px;
+}
+.chain-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #ffd700;
+}
+.chain-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #f9b80c rgba(255, 255, 255, 0.1);
+}
+
 html {
   height: 100%;
   scroll-behavior: smooth; /* Enables smooth scrolling for page-level navigation */
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  /* `none`, not `contain`: contain blocks scroll *chaining* but still lets iOS
+     Safari rubber-band the document itself, which makes the whole app bounce
+     elastically while dragging inside the DexScreener chart iframe. */
+  overscroll-behavior: none;
   /* manipulation: pan + pinch-zoom; avoids pan-x/pan-y which omits pinch on many mobile browsers */
   touch-action: manipulation;
 }
@@ -81,7 +106,7 @@ body {
   font-family: aptos, sans-serif;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
   touch-action: manipulation;
 }
 

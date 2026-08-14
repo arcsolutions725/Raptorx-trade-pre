@@ -3,7 +3,7 @@ import { SwapWidget } from "./SwapWidget";
 interface DexSwapperProps {
   currentUserId: string;
   toTokenAddress?: string | null;
-  forceChain?: "solana" | "bsc" | "ethereum" | "base" | "monad";
+  forceChain?: "solana" | "robinhood" | "bsc" | "ethereum" | "base" | "monad";
   /** Wallet address that performed the swap (for LiFi tracking) */
   walletAddress?: string | null;
 }

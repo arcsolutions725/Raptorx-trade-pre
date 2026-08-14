@@ -1,7 +1,14 @@
 // app/api/trending/route.ts
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 import { enrichWithCreation } from "@/lib/birdeyeTokenCreationInfo";
+import { applyDexMarketOverlay } from "@/lib/dexscreenerMarketData";
+import {
+  getRobinhoodTokens,
+  getRobinhoodTokenByAddress,
+  searchRobinhoodTokens,
+} from "@/lib/robinhoodTokens";
 
 export const dynamic = "force-dynamic";
 
@@ -535,6 +542,29 @@ function sortTrendingRowsForV3(
   });
 }
 
+/**
+ * Replace the rendered market numbers with DexScreener's, so the Mcap column
+ * agrees with the DexScreener chart the user opens from that row. See
+ * `dexscreenerMarketData.ts` — Birdeye still decides *which* tokens appear and in
+ * what order; it just no longer decides what the market cap is.
+ *
+ * Sorting is re-applied for market-cap sorts, otherwise the page would be ordered
+ * by Birdeye's `mc` while displaying DexScreener's — visibly out of order.
+ */
+async function applyLiveMarketData(
+  items: any[],
+  chain: string,
+  sort_by: string,
+  sort_type: "asc" | "desc"
+): Promise<any[]> {
+  const overlaid = await applyDexMarketOverlay(items, chain);
+  const sortV3 = birdeyeV3SortBy(sort_by);
+  if (sortV3 === "market_cap" || sortV3 === "fdv") {
+    sortTrendingRowsForV3(overlaid, sortV3, sort_type);
+  }
+  return overlaid;
+}
+
 async function getJupiterVerifiedCatalogNormalized(): Promise<any[] | null> {
   const now = Date.now();
   if (
@@ -642,15 +672,22 @@ async function loadSolanaVerifiedPageFromJupiter(opts: {
       )
     : withPricePct;
 
+  const live = await applyLiveMarketData(
+    dedupeByAddress(enriched),
+    "solana",
+    sort_by,
+    sort_type
+  );
+
   return {
-    finalItems: dedupeByAddress(enriched),
+    finalItems: live,
     catalogTotal: catalog.length,
     filteredTotal: sorted.length,
   };
 }
 
 // ------- Upstream fetchers -------
-async function fetchBirdeyeTokenlist(opts: {
+async function fetchBirdeyeTokenlistUncached(opts: {
   chain: string;
   limit: number;
   offset: number;
@@ -767,6 +804,75 @@ async function fetchBirdeyeTokenlist(opts: {
       error: String(err?.message || err || "Network error"),
       status: 500,
     };
+  }
+}
+
+/**
+ * Short-TTL cache for the Birdeye token list (Next.js Data Cache, shared across
+ * requests/instances). The list is identical for all users hitting the same
+ * chain/sort/page within the window, so this turns repeat loads into instant
+ * cache reads. Only successful results are cached (we throw on error so a
+ * transient 429 isn't pinned for the whole TTL). apiKey is read from env inside
+ * the cached fn so it never becomes part of the cache key.
+ *
+ * Safe to serve stale-while-revalidate because this list no longer decides what
+ * the table *renders*: market cap and price are overlaid from DexScreener per
+ * request (`applyLiveMarketData`). What's cached here is discovery — which tokens
+ * exist, their ordering, volume and liquidity — where a few seconds of drift is
+ * invisible. Do not move Mcap or price back onto this path; SWR staleness here is
+ * what previously made the Mcap column disagree with the DexScreener chart.
+ */
+const fetchBirdeyeTokenlistCached = unstable_cache(
+  async (
+    chain: string,
+    limit: number,
+    offset: number,
+    sort_by: string,
+    sort_type: "asc" | "desc",
+    min_liquidity: number,
+    ui_amount_mode: "raw" | "scaled"
+  ): Promise<ListResult> => {
+    const apiKey = process.env.UNIBLOCK_API_KEY || "";
+    const r = await fetchBirdeyeTokenlistUncached({
+      chain,
+      limit,
+      offset,
+      sort_by,
+      sort_type,
+      min_liquidity,
+      ui_amount_mode,
+      apiKey,
+    });
+    if (!r.ok) throw new Error(`birdeye-list-uncacheable:${r.status}`);
+    return r;
+  },
+  ["birdeye-token-list-v1"],
+  { revalidate: 20, tags: ["birdeye-token-list"] } // 20s; active table poll keeps prices near live
+);
+
+async function fetchBirdeyeTokenlist(opts: {
+  chain: string;
+  limit: number;
+  offset: number;
+  sort_by: string;
+  sort_type: "asc" | "desc";
+  min_liquidity: number;
+  ui_amount_mode: "raw" | "scaled";
+  apiKey: string;
+}): Promise<ListResult> {
+  try {
+    return await fetchBirdeyeTokenlistCached(
+      opts.chain,
+      opts.limit,
+      opts.offset,
+      opts.sort_by,
+      opts.sort_type,
+      opts.min_liquidity,
+      opts.ui_amount_mode
+    );
+  } catch {
+    // Error path: not cached — fetch directly so the caller sees the real error.
+    return fetchBirdeyeTokenlistUncached(opts);
   }
 }
 
@@ -1180,12 +1286,16 @@ async function enrichTokenlistPricePercent24h(
 ): Promise<any[]> {
   if (!items.length) return items;
 
+  // Only fetch per-token overview when the 24h price change is genuinely missing.
+  // The Birdeye v3 list already returns `price_change_24h_percent` for ~every
+  // token, and creation time is filled separately by the (cached) enrichWithCreation
+  // path — so gating on missing creation here caused a redundant, uncached per-token
+  // token_overview storm (the 429s) on every request.
   const need = items.filter(
     (n) =>
       n?.tokenAddress &&
       (n?.pricePercentChange?.["24h"] == null ||
-        !Number.isFinite(n.pricePercentChange["24h"]) ||
-        !hasUsableCreationTimestamp(n?.createdAt))
+        !Number.isFinite(n.pricePercentChange["24h"]))
   );
   if (!need.length) return items;
 
@@ -1306,6 +1416,43 @@ async function fetchBirdeyeTokenOverview(
 }
 
 // ------- Search Handler -------
+/**
+ * Search response for Robinhood Chain rows (already in trending-row shape —
+ * no Birdeye enrichment applies, so this skips handleTokenSearch's tail).
+ */
+function robinhoodSearchResponse(opts: {
+  items: any[];
+  search_query: string;
+  search_type: "ticker" | "address";
+  limit: number;
+  offset: number;
+}): NextResponse {
+  const { items, search_query, search_type, limit, offset } = opts;
+  const page = items.slice(offset, offset + limit);
+  const res = NextResponse.json({
+    items: page,
+    uniqueCount: page.length,
+    offset,
+    limit,
+    chain: "robinhood",
+    upstreamTotal: items.length,
+    exhausted: offset + limit >= items.length,
+    searchQuery: search_query,
+    searchType: search_type,
+    searchResults: true,
+    ...(page.length
+      ? {}
+      : {
+          message:
+            search_type === "address"
+              ? `No token found for address: ${search_query}`
+              : `No tokens found for: ${search_query}`,
+        }),
+  });
+  res.headers.set("Cache-Control", "no-store");
+  return res;
+}
+
 async function handleTokenSearch(opts: {
   search_query: string;
   search_type: "ticker" | "address";
@@ -1328,6 +1475,22 @@ async function handleTokenSearch(opts: {
   } = opts;
 
   try {
+    // Robinhood Chain: Birdeye/Uniblock doesn't support it — search the
+    // DexScreener-built list instead (see robinhoodTokens.ts).
+    if (chain === "robinhood") {
+      const items =
+        search_type === "address"
+          ? [await getRobinhoodTokenByAddress(search_query)].filter(Boolean)
+          : await searchRobinhoodTokens(search_query);
+      return robinhoodSearchResponse({
+        items,
+        search_query,
+        search_type,
+        limit,
+        offset,
+      });
+    }
+
     let searchResults: any[] = [];
     /** Ticker search: false when Birdeye returned a full page+1 probe (more rows exist). */
     let searchExhausted = true;
@@ -1352,6 +1515,19 @@ async function handleTokenSearch(opts: {
             tokenData = data;
             targetChain = c;
             break;
+          }
+        }
+        // Robinhood Chain is not on Birdeye — try DexScreener before giving up.
+        if (!tokenData) {
+          const rh = await getRobinhoodTokenByAddress(q);
+          if (rh) {
+            return robinhoodSearchResponse({
+              items: [rh],
+              search_query,
+              search_type,
+              limit,
+              offset,
+            });
           }
         }
       } else {
@@ -1721,7 +1897,12 @@ async function fetchChainTokens(opts: {
       ? await enrichWithCreation(withPricePct, chain, apiKey, creation_concurrency)
       : withPricePct;
 
-    return dedupeByAddress(enriched);
+    return await applyLiveMarketData(
+      dedupeByAddress(enriched),
+      chain,
+      sort_by,
+      sort_type
+    );
   } catch (error) {
     console.error(`Error fetching ${chain} tokens:`, error);
     return [];
@@ -1743,6 +1924,27 @@ const DEFAULTS = {
 };
 
 // ------- POST -------
+async function handleRobinhoodTokens(opts: { limit: number; offset: number }) {
+  const { limit, offset } = opts;
+  const all = await getRobinhoodTokens();
+  const page = all.slice(offset, offset + limit);
+  const res = NextResponse.json({
+    items: page,
+    uniqueCount: page.length,
+    offset,
+    limit,
+    chain: "robinhood",
+    updateUnixTime: undefined,
+    updateTime: undefined,
+    upstreamTotal: all.length,
+    filteredTotal: all.length,
+    verifiedTotal: all.length,
+    exhausted: offset + limit >= all.length,
+  });
+  res.headers.set("Cache-Control", "no-store");
+  return res;
+}
+
 export async function POST(request: NextRequest) {
   let body: any = {};
   try {
@@ -1819,6 +2021,11 @@ export async function POST(request: NextRequest) {
       verified_only,
       apiKey,
     });
+  }
+
+  // Robinhood Chain: Birdeye/Uniblock doesn't support it — serve from DexScreener.
+  if (chain === "robinhood") {
+    return await handleRobinhoodTokens({ limit, offset });
   }
 
   // Solana + verified: serve from Jupiter catalog (cached) — avoids hammering Birdeye /token/list (429).
@@ -2004,7 +2211,12 @@ export async function POST(request: NextRequest) {
       )
     : pageWithPricePct;
 
-  const finalItems = dedupeByAddress(enriched);
+  const finalItems = await applyLiveMarketData(
+    dedupeByAddress(enriched),
+    chain,
+    sort_by,
+    sort_type
+  );
 
   // Totals semantics:
   // - verifiedTotalFiltered: exact count of Birdeye + verified intersection if we exhausted upstream (or forced full scan).

@@ -1,6 +1,25 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 const DEXSCREENER_BASE = "https://api.dexscreener.com";
 
+/** Our chain ids → DexScreener chain slugs. Unmapped chains fall back to search. */
+export const DEX_CHAIN_SLUG: Record<string, string> = {
+  solana: "solana",
+  bsc: "bsc",
+  "56": "bsc",
+  base: "base",
+  "8453": "base",
+  ethereum: "ethereum",
+  eth: "ethereum",
+  "1": "ethereum",
+  monad: "monad",
+  "10143": "monad",
+  robinhood: "robinhood",
+  "4663": "robinhood",
+};
+
+export const toDexChainSlug = (chain?: string | null): string | undefined =>
+  chain ? DEX_CHAIN_SLUG[chain.trim().toLowerCase()] : undefined;
+
 export interface DexScreenerPair {
   chainId: string;
   dexId: string;
@@ -42,17 +61,26 @@ export interface DexScreenerTokenProfile {
 }
 
 export async function getDexscreenerData(
-  contractAddress: string
+  contractAddress: string,
+  chain?: string,
 ): Promise<DexScreenerPair | { error: string }> {
   try {
     if (!contractAddress) {
       return { error: "Contract address is required" };
     }
 
-    // Fetch data from DexScreener
-    const response = await fetch(
-      `${DEXSCREENER_BASE}/latest/dex/tokens/${contractAddress}`
-    );
+    // Chain-scope the lookup whenever the caller knows the chain. `latest/dex/tokens`
+    // searches *every* chain, so an address that also exists elsewhere can come back
+    // with a pool on the wrong chain — and since DexScreener's `marketCap` is computed
+    // per pool, the row's Mcap and the embedded chart would then be reading different
+    // pools. `tokens/v1/{slug}` is the same endpoint the table's overlay uses.
+    const slug = toDexChainSlug(chain);
+    const addr = encodeURIComponent(contractAddress);
+    const url = slug
+      ? `${DEXSCREENER_BASE}/tokens/v1/${slug}/${addr}`
+      : `${DEXSCREENER_BASE}/latest/dex/tokens/${addr}`;
+
+    const response = await fetch(url);
 
     if (!response.ok) {
       console.error(
@@ -63,15 +91,26 @@ export async function getDexscreenerData(
       return { error: `Failed to fetch DexScreener data: ${response.status}` };
     }
 
-    const data: DexScreenerTokenProfile = await response.json();
+    // `tokens/v1` returns a bare array of pairs; `latest/dex/tokens` wraps them.
+    const data: DexScreenerTokenProfile | DexScreenerPair[] =
+      await response.json();
+    const pairs: DexScreenerPair[] = Array.isArray(data)
+      ? data
+      : (data?.pairs ?? []);
 
-    // Check if any pairs exist
-    if (!data || !data.pairs || data.pairs.length === 0) {
+    if (!pairs.length) {
       return { error: "No DexScreener data found" };
     }
 
-    const sortedPairs = [...data.pairs].sort(
-      (a, b) => (b.volume?.h24 || 0) - (a.volume?.h24 || 0)
+    const want = contractAddress.toLowerCase();
+    const matching = pairs.filter(
+      (p) => String(p?.baseToken?.address ?? "").toLowerCase() === want,
+    );
+    const pool = matching.length ? matching : pairs;
+
+    // Deepest liquidity = DexScreener's usual main pair (matches table enricher).
+    const sortedPairs = [...pool].sort(
+      (a, b) => (b.liquidity?.usd || 0) - (a.liquidity?.usd || 0)
     );
 
     const bestPair = sortedPairs[0];

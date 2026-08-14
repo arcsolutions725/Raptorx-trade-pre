@@ -6,6 +6,7 @@ export async function GET(request: NextRequest) {
   try {
     const { searchParams } = new URL(request.url);
     const contractAddress = searchParams.get("contractAddress");
+    const chain = searchParams.get("chain") ?? undefined;
 
     if (!contractAddress) {
       return NextResponse.json(
@@ -16,7 +17,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`🔍 Fetching latest DexScreener data for: ${contractAddress}`);
 
-    const dexData = await getDexscreenerData(contractAddress);
+    const dexData = await getDexscreenerData(contractAddress, chain);
 
     if ("error" in dexData) {
       console.error(`❌ DexScreener API error: ${dexData.error}`);

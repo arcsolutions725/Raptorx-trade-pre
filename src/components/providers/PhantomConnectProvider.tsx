@@ -10,15 +10,16 @@ import {
   useDisconnect,
   useAccounts,
 } from "@phantom/react-sdk";
-import { AddressType } from "@phantom/browser-sdk";
+import {
+  AddressType,
+  type AuthOptions,
+  type AuthProviderType,
+} from "@phantom/browser-sdk";
+import { savePhantomReturnContext } from "@/lib/phantomReturnUrl";
 
 interface PhantomConnectProviderProps {
   children: ReactNode;
   appId?: string;
-}
-
-function PhantomConnectInner({ children }: { children: ReactNode }) {
-  return <>{children}</>;
 }
 
 export function PhantomConnectProvider({
@@ -85,7 +86,7 @@ export function PhantomConnectProvider({
 // Custom hook that wraps Phantom SDK hooks for easier use
 // This hook MUST be called within a component that is a child of PhantomProvider
 export function usePhantomConnect() {
-  const { isConnected, isLoading, user } = usePhantom();
+  const { isConnected, isLoading, user, clearError } = usePhantom();
   const accounts = useAccounts();
   const { open: openModal, close: closeModal, isOpened } = useModal();
   const { connect, isConnecting, error: connectError } = useConnect();
@@ -124,22 +125,45 @@ export function usePhantomConnect() {
         : null,
 
     // Modal controls
-    openModal,
+    openModal: () => {
+      clearError("connect");
+      savePhantomReturnContext();
+      openModal();
+    },
     closeModal,
     isModalOpen: isOpened,
 
-    // Connection methods
-    connect: async (provider?: "google" | "apple" | "injected") => {
-      if (provider) {
-        await connect({ provider });
-      } else {
-        // Open modal if no provider specified
+    /**
+     * Connect via Phantom Connect.
+     * - Pass a provider string ("google" | "apple" | "deeplink" | "injected")
+     * - Or full AuthOptions (required for injected: include walletId from discovery)
+     * - Or omit to open the Phantom picker modal
+     */
+    connect: async (
+      providerOrOptions?: AuthProviderType | AuthOptions,
+    ) => {
+      savePhantomReturnContext();
+      clearError("connect");
+      if (!providerOrOptions) {
         openModal();
+        return;
       }
+      if (typeof providerOrOptions === "string") {
+        // Bare "injected" without walletId defaults to id "phantom" and throws
+        // "Unknown injected wallet id: phantom" when discovery hasn't registered it.
+        if (providerOrOptions === "injected") {
+          openModal();
+          return;
+        }
+        await connect({ provider: providerOrOptions });
+        return;
+      }
+      await connect(providerOrOptions);
     },
     disconnect: async () => {
       await disconnect();
     },
+    clearError,
 
     // Error state
     error: connectError,

@@ -139,16 +139,30 @@ export default function DexscreenerView({
       ? "base"
       : lowerChainId === "bsc" || token?.chainId === "56"
         ? "bsc"
+        : lowerChainId === "ethereum" ||
+            lowerChainId === "eth" ||
+            token?.chainId === "1"
+          ? "ethereum"
         : lowerChainId === "monad" || token?.chainId === "10143"
           ? "monad"
+        : lowerChainId === "robinhood" || token?.chainId === "4663"
+          ? "robinhood"
           : "solana";
-  const src = `https://dexscreener.com/${chain}/${tokenAddress}?${params.toString()}`;
+  // Prefer the same pair the table used for Mcap (from DexScreener enricher).
+  const embedTarget =
+    (typeof token?.pairAddress === "string" && token.pairAddress) ||
+    tokenAddress;
+  const src = `https://dexscreener.com/${chain}/${embedTarget}?${params.toString()}`;
 
   const explorerUrl =
     chain === "base"
       ? `https://basescan.org/token/${token?.tokenAddress}`
       : chain === "bsc"
         ? `https://bscscan.com/token/${token?.tokenAddress}`
+        : chain === "ethereum"
+          ? `https://etherscan.io/token/${token?.tokenAddress}`
+        : chain === "robinhood"
+          ? `https://robinhoodchain.blockscout.com/token/${token?.tokenAddress}`
         : chain === "monad"
           ? `https://monadscan.com/address/${token?.tokenAddress}`
           : `https://solscan.io/token/${token?.tokenAddress}`;

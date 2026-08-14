@@ -3,9 +3,15 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import Image from "next/image";
 import copy from "copy-to-clipboard";
-import { Copy, Check, ExternalLink, ArrowLeft } from "lucide-react";
+import {
+  Copy,
+  Check,
+  ExternalLink,
+  ArrowLeft,
+  Maximize2,
+  Minimize2,
+} from "lucide-react";
 import { usePrivy } from "@privy-io/react-auth";
 import type { TrendingToken } from "@/hooks/useTrendingTokens";
 import {
@@ -14,7 +20,12 @@ import {
 } from "@/lib/storage/reportGenStore";
 import ExplorerModal from "./ExplorerModal";
 import { PaywallModal } from "@/components/ui/modal/PaywallModal";
-import type { DexScreenerPair } from "@/lib/api/dexscreener";
+import {
+  WhatsNewModal,
+  type WhatsNewResult,
+} from "@/components/ui/modal/WhatsNewModal";
+import { GlossyReportButton } from "./GlossyReportButton";
+import { toDexChainSlug, type DexScreenerPair } from "@/lib/api/dexscreener";
 
 type DexscreenerViewProps = {
   token: TrendingToken;
@@ -29,9 +40,9 @@ type DexscreenerViewProps = {
 /** DexScreener embed default interval (15m), matching previous default selection. */
 const EMBED_CHART_INTERVAL = "15";
 
-/** Same box for countdown / generate / generated so the control does not jump. */
+/** Same box as the table Generate control so the header does not jump. */
 const REPORT_BTN_SLOT_CLASS =
-  "flex h-7 w-[112px] shrink-0 items-center justify-center overflow-hidden sm:w-[124px]";
+  "flex h-7.5 w-17.5 shrink-0 items-center justify-center overflow-hidden";
 
 export default function DexscreenerView({
   token,
@@ -75,19 +86,17 @@ export default function DexscreenerView({
     return p;
   }, []);
 
-  const lowerChainId = token?.chainId?.toLowerCase();
-  const chain =
-    lowerChainId === "base" || token?.chainId === "8453"
-      ? "base"
-      : lowerChainId === "bsc" || token?.chainId === "56"
-        ? "bsc"
-        : lowerChainId === "ethereum" ||
-            lowerChainId === "eth" ||
-            token?.chainId === "1"
-          ? "ethereum"
-        : lowerChainId === "monad" || token?.chainId === "10143"
-          ? "monad"
-          : "solana";
+  const chain = toDexChainSlug(token?.chainId) ?? "solana";
+
+  /**
+   * The pair the table's Mcap was read from (/api/trending overlays it from
+   * DexScreener). Embedding this exact pair is what keeps the chart's market cap
+   * identical to the row's — and it saves a round-trip before the chart appears.
+   */
+  const rowPairAddress =
+    typeof token?.pairAddress === "string" && token.pairAddress
+      ? token.pairAddress
+      : undefined;
 
   const {
     data: dexPair,
@@ -96,23 +105,28 @@ export default function DexscreenerView({
   } = useQuery({
     queryKey: ["dexscreener-embed-pair", chain, tokenAddress],
     queryFn: async (): Promise<DexScreenerPair | null> => {
+      // Chain-scoped: without it DexScreener searches every chain and can hand back
+      // a pool the row's Mcap was never read from.
       const r = await fetch(
-        `/api/dexscreener?contractAddress=${encodeURIComponent(tokenAddress)}`
+        `/api/dexscreener?contractAddress=${encodeURIComponent(tokenAddress)}&chain=${encodeURIComponent(chain)}`
       );
       const j = (await r.json()) as { error?: string } & Partial<DexScreenerPair>;
       if (!r.ok || (typeof j.error === "string" && j.error)) return null;
       if (!j.pairAddress) return null;
       return j as DexScreenerPair;
     },
-    enabled: Boolean(tokenAddress),
+    // Only needed as a fallback for rows that arrived without a pair (e.g. a token
+    // DexScreener doesn't index, or a stale cached page from before the overlay).
+    enabled: Boolean(tokenAddress) && !rowPairAddress,
     staleTime: 120_000,
   });
 
   const embedChain = (
     dexPair?.chainId ? String(dexPair.chainId).toLowerCase() : chain
   ) as string;
-  const embedTarget = dexPair?.pairAddress || tokenAddress;
-  const awaitingDexPair = dexPairFetching && !dexPairError && !dexPair;
+  const embedTarget = rowPairAddress || dexPair?.pairAddress || tokenAddress;
+  const awaitingDexPair =
+    !rowPairAddress && dexPairFetching && !dexPairError && !dexPair;
   const src = `https://dexscreener.com/${embedChain}/${embedTarget}?${params.toString()}`;
 
   const explorerUrl =
@@ -124,17 +138,39 @@ export default function DexscreenerView({
         ? `https://bscscan.com/token/${token?.tokenAddress}`
         : chain === "monad"
           ? `https://monadscan.com/address/${token?.tokenAddress}`
+        : chain === "robinhood"
+          ? // Robinhood Chain's official explorer is Blockscout (per Li.Fi chain 4663).
+            `https://robinhoodchain.blockscout.com/token/${token?.tokenAddress}`
           : `https://solscan.io/token/${token?.tokenAddress}`;
+
+  const explorerName =
+    chain === "base"
+      ? "BaseScan"
+      : chain === "ethereum"
+        ? "Etherscan"
+        : chain === "bsc"
+          ? "BSCScan"
+          : chain === "monad"
+            ? "MonadScan"
+            : chain === "robinhood"
+              ? "RobinhoodScan"
+              : "SolScan";
 
   // Auth + generate (generation hook lives in TrendingTableContent)
   const { authenticated, ready, login } = usePrivy();
 
   // 🔁 Shared generation status (persists if we came from Table mid-flight)
   const { isGenerating, startedAt } = useReportGenStatus(tokenAddress);
-  const [hasGenerated, setHasGenerated] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const countdownRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [whatsNewLoading, setWhatsNewLoading] = useState(false);
+  const [whatsNewError, setWhatsNewError] = useState<string | null>(null);
+  const [whatsNewResult, setWhatsNewResult] = useState<WhatsNewResult | null>(
+    null,
+  );
+  const whatsNewInFlightRef = useRef(false);
 
   useEffect(() => {
     if (isGenerating && countdown === null) {
@@ -151,7 +187,6 @@ export default function DexscreenerView({
         clearInterval(countdownRef.current);
         countdownRef.current = null;
       }
-      setHasGenerated(true);
     }
   }, [isGenerating, startedAt, countdown]);
 
@@ -182,6 +217,30 @@ export default function DexscreenerView({
     }
   }, [countdown, isGenerating, tokenAddress]);
 
+  /**
+   * Full-viewport chart. DexScreener's own chart/table splitter lives inside
+   * their cross-origin iframe and its drag is swallowed by iOS Safari (the page
+   * claims the vertical pan), so iPhone users cannot enlarge the chart at all.
+   * This resizes the iframe's container from our side instead, which works the
+   * same on every platform.
+   */
+  const [isChartExpanded, setIsChartExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!isChartExpanded) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setIsChartExpanded(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    // Lock the page while expanded — also removes anything for iOS to bounce.
+    const prevOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    return () => {
+      window.removeEventListener("keydown", onKeyDown);
+      document.body.style.overflow = prevOverflow;
+    };
+  }, [isChartExpanded]);
+
   const handleSignIn = async () => {
     if (!ready) return;
     await login();
@@ -189,14 +248,12 @@ export default function DexscreenerView({
 
   const onGenerateClick = async () => {
     try {
-      const result = await generateFromToken(token);
-      if (result !== undefined) setHasGenerated(true);
+      await generateFromToken(token);
     } catch (err: any) {
       if (err?.status === 402) {
         setShowPaywall(true);
       }
       setCountdown(null);
-      setHasGenerated(false);
       if (countdownRef.current) {
         clearInterval(countdownRef.current);
         countdownRef.current = null;
@@ -204,8 +261,64 @@ export default function DexscreenerView({
     }
   };
 
+  const onWhatsNewClick = async () => {
+    if (!token?.symbol) return;
+    if (whatsNewInFlightRef.current) return;
+    if (!currentUserId) {
+      setWhatsNewOpen(true);
+      setWhatsNewError("Sign in to view What's New.");
+      return;
+    }
+
+    whatsNewInFlightRef.current = true;
+    setWhatsNewOpen(true);
+    setWhatsNewLoading(true);
+    setWhatsNewError(null);
+    setWhatsNewResult(null);
+
+    try {
+      const res = await fetch("/api/whats-new", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": currentUserId,
+        },
+        body: JSON.stringify({
+          contractAddress: tokenAddress,
+          ticker: token.symbol,
+          projectName: token.name,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      setWhatsNewResult({
+        summary: String(json.summary || ""),
+        tweets: Array.isArray(json.tweets) ? json.tweets : [],
+        metadata: json.metadata,
+      });
+    } catch (err: unknown) {
+      setWhatsNewError(
+        err instanceof Error ? err.message : "Failed to load What's New.",
+      );
+    } finally {
+      setWhatsNewLoading(false);
+      whatsNewInFlightRef.current = false;
+    }
+  };
+
   return (
-    <div className="flex flex-col w-full h-[calc(100vh-195px)] overflow-hidden">
+    <div
+      className={
+        isChartExpanded
+          ? // `fixed inset-0` rather than a 100vh height: iOS Safari's 100vh
+            // overshoots the visible viewport under the browser chrome.
+            // z-[70] clears the report sidebar (z-[60]) and its overlay (z-50).
+            "fixed inset-0 z-[70] flex flex-col w-full overflow-hidden bg-black"
+          : "flex flex-col w-full h-[calc(100vh-195px)] overflow-hidden"
+      }
+    >
       {/* Header */}
       <div className="flex flex-col md:flex-row items-center gap-5 min-[1340px]:gap-0 justify-between p-3 bg-black/50 border-b border-white/10">
         <div className="flex items-center gap-2 flex-wrap justify-between sm:justify-center w-full sm:w-auto">
@@ -244,72 +357,78 @@ export default function DexscreenerView({
                   {countdown}s
                 </div>
               </div>
-            ) : hasGenerated ? (
-              <div
-                className={REPORT_BTN_SLOT_CLASS}
-                role="status"
-                aria-label="Report generated"
-              >
-                <Image
-                  src="/images/btn_generated.webp"
-                  alt="Report generated"
-                  width={112}
-                  height={39}
-                  className="h-full w-full max-h-full object-contain object-center"
+            ) : (
+              <div className="flex items-center gap-1">
+                <GlossyReportButton
+                  label="Full Report"
+                  variant="full-report"
+                  onClick={!authenticated ? handleSignIn : onGenerateClick}
+                  disabled={isGenerating || !ready || whatsNewLoading}
+                  ariaLabel="Full Report"
+                />
+                <GlossyReportButton
+                  label="What's New"
+                  variant="whats-new"
+                  onClick={!authenticated ? handleSignIn : onWhatsNewClick}
+                  disabled={isGenerating || !ready || whatsNewLoading}
+                  ariaLabel={`What's New for ${token?.symbol || title || "token"}`}
                 />
               </div>
-            ) : (
-              <button
-                type="button"
-                onClick={!authenticated ? handleSignIn : onGenerateClick}
-                disabled={isGenerating || !ready}
-                className={`${REPORT_BTN_SLOT_CLASS} p-0 transition bg-transparent border-0 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#F9B80C]/50 rounded-lg ${
-                  isGenerating || !ready
-                    ? "opacity-60 cursor-wait"
-                    : "cursor-pointer hover:opacity-90"
-                }`}
-                aria-label="Generate AI Report"
-                title="Generate AI Report"
-              >
-                <Image
-                  src="/images/btn_generate.webp"
-                  alt="Generate AI Report"
-                  width={112}
-                  height={39}
-                  className="h-full w-full max-h-full object-contain object-center"
-                />
-              </button>
             )}
             <a
               href={explorerUrl}
               target="_blank"
               rel="noopener noreferrer"
               className="h-6 w-6 shrink-0 border-[0.5px] flex items-center justify-center gap-1.5 font-medium! text-[14px]! rounded-lg text-[#F9B80C] transition-colors cursor-pointer hover:text-[#6D4F03]"
-              aria-label={`View on ${
-                chain === "base"
-                  ? "BaseScan"
-                  : chain === "ethereum"
-                    ? "Etherscan"
-                  : chain === "bsc"
-                    ? "BSCScan"
-                    : chain === "monad"
-                      ? "MonadScan"
-                      : "SolScan"
-              }`}
-              title={`View token on ${
-                chain === "base"
-                  ? "BaseScan"
-                  : chain === "ethereum"
-                    ? "Etherscan"
-                  : chain === "bsc"
-                    ? "BSCScan"
-                    : chain === "monad"
-                      ? "MonadScan"
-                      : "SolScan"
-              }`}
+              aria-label={`View on ${explorerName}`}
+              title={`View token on ${explorerName}`}
             >
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
+            {/* `group` + `relative` anchor the tooltip; no native `title` here or
+                the browser would draw its own tooltip on top of ours. */}
+            <div className="relative group shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsChartExpanded((v) => !v)}
+                className="h-6 w-6 shrink-0 border-[0.5px] flex items-center justify-center gap-1.5 font-medium! text-[14px]! rounded-lg text-[#F9B80C] transition-colors cursor-pointer hover:text-[#6D4F03]"
+                aria-label={
+                  isChartExpanded ? "Exit full screen chart" : "Expand chart"
+                }
+                aria-pressed={isChartExpanded}
+              >
+                {isChartExpanded ? (
+                  <Minimize2 className="w-3.5 h-3.5" />
+                ) : (
+                  <Maximize2 className="w-3.5 h-3.5" />
+                )}
+              </button>
+
+              {/* Opens downward: the button sits at the top of the panel, so an
+                  upward tooltip would clip against the header's edge. */}
+              <div
+                role="tooltip"
+                className="pointer-events-none absolute right-0 top-full z-[80] mt-2 translate-y-1 scale-95 opacity-0 transition-all duration-150 ease-out group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:scale-100 group-focus-within:opacity-100"
+              >
+                <div className="relative whitespace-nowrap rounded-lg border border-[#F9B80C]/40 bg-[#141414] px-2.5 py-1.5 text-[11px] font-medium text-[#F9B80C] shadow-lg shadow-black/60">
+                  {isChartExpanded ? (
+                    <>
+                      Exit full screen
+                      <span className="ml-1.5 rounded border border-white/15 bg-white/10 px-1 py-px text-[10px] text-white/70">
+                        Esc
+                      </span>
+                    </>
+                  ) : (
+                    "Expand chart"
+                  )}
+                  {/* Arrow: a rotated square, masked to look like a notch. */}
+                  <span
+                    aria-hidden="true"
+                    className="absolute -top-1 right-2.5 h-2 w-2 rotate-45 border-l border-t border-[#F9B80C]/40 bg-[#141414]"
+                  />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -346,6 +465,16 @@ export default function DexscreenerView({
         onClose={() => setShowPaywall(false)}
         context="rexscreener"
         paymentMetadata={currentUserId ? { userId: currentUserId } : undefined}
+      />
+      <WhatsNewModal
+        open={whatsNewOpen}
+        onClose={() => {
+          setWhatsNewOpen(false);
+          setWhatsNewError(null);
+        }}
+        loading={whatsNewLoading}
+        error={whatsNewError}
+        result={whatsNewResult}
       />
     </div>
   );

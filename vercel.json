@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/trending/prewarm",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/systemreports/generate-daily?chain=solana&batch=1&of=10&count=10",
       "schedule": "00 11 * * *"
     },

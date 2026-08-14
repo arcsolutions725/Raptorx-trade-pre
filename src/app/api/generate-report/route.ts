@@ -587,7 +587,7 @@ export async function POST(request: NextRequest) {
 - Contract Address: ${addr}
 - Ticker: ${tkr}
 - Project Name: ${projectName || "Not provided"}
-- Blockchain: ${detectedChain === "bsc" ? "BNB Smart Chain (BSC)" : detectedChain === "ethereum" ? "Ethereum" : detectedChain === "base" ? "Base" : detectedChain === "monad" ? "Monad" : "Solana"}
+- Blockchain: ${detectedChain === "bsc" ? "BNB Smart Chain (BSC)" : detectedChain === "ethereum" ? "Ethereum" : detectedChain === "base" ? "Base" : detectedChain === "monad" ? "Monad" : detectedChain === "robinhood" ? "Robinhood Chain" : "Solana"}
 
 ### DexScreener Data:
 ${JSON.stringify((tokenData as any).dexData, null, 2)}

@@ -17,6 +17,9 @@ export type TrendingToken = {
   lastTradeUnixTime?: number;
   marketCap?: number;
   liquidityUsd?: number;
+  /** DexScreener pair used for mcap/price (aligned with chart embed). */
+  pairAddress?: string;
+  quoteSymbol?: string;
   holders?: number;
   verified?: boolean;
   pricePercentChange?: {
@@ -103,7 +106,14 @@ export function sortTokens(
   });
 }
 
-export type Chain = "solana" | "bsc" | "base" | "monad" | "ethereum" | "all";
+export type Chain =
+  | "solana"
+  | "robinhood"
+  | "bsc"
+  | "base"
+  | "monad"
+  | "ethereum"
+  | "all";
 
 export function useTrendingTokens(
   customBody?: Partial<{
@@ -173,7 +183,15 @@ export function useTrendingTokens(
       if (!res.ok) throw new Error(`Trending fetch failed: ${res.statusText}`);
       return res.json();
     },
-    staleTime: 30_000,
+    // Keep the Market Overview table near live DexScreener prices — but NOT at 5s.
+    // This hook is also used by the report sidebar (generatereport), so every poll
+    // re-rendered that panel; at 5s it aborted an in-flight follow-up chat (the chat
+    // component would unmount/remount mid-stream). 20s keeps the table's Mcap
+    // visibly matching the DexScreener chart while leaving the chat undisturbed.
+    staleTime: 15_000,
+    refetchInterval: 20_000,
+    // Don't burn requests on a hidden tab.
+    refetchIntervalInBackground: false,
     placeholderData: keepPreviousData,
   });
 

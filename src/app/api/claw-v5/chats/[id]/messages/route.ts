@@ -790,7 +790,10 @@ export async function POST(
             sendStatus("research");
             try {
               const researchStream = await openRouter.chat.send({
-                model: "openai/gpt-4o-search-preview", //openai/gpt-4o-mini-search-preview
+                // `:online` = OpenRouter web plugin; the old openai/*-search-preview
+                // ids were removed from OpenRouter, so this pass 404'd and returned
+                // no research notes at all.
+                model: "google/gemini-3.6-flash:online",
                 messages: [
                   {
                     role: "system" as const,

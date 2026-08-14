@@ -11,6 +11,11 @@ import copy from "copy-to-clipboard";
 import { Copy, Check, ExternalLink } from "lucide-react";
 import { useReportGenStatus, reportGenStore } from "@/lib/storage/reportGenStore";
 import { PaywallModal } from "@/components/ui/modal/PaywallModal";
+import {
+  WhatsNewModal,
+  type WhatsNewResult,
+} from "@/components/ui/modal/WhatsNewModal";
+import { GlossyReportButton } from "./GlossyReportButton";
 import { Token24hSparkline } from "./Token24hSparkline";
 
 function fromEpochSeconds(sec?: number): Date | null {
@@ -147,15 +152,21 @@ export function TableRow({
   showChainBadge = false,
   sparklineY,
   sparklinesFetching = false,
-  useGoldenGenerateArt = false,
-  usePumpGenerateArt = false,
+  useGoldenGenerateArt: _useGoldenGenerateArt = false,
+  usePumpGenerateArt: _usePumpGenerateArt = false,
   ageLoading = false,
 }: Props) {
   const { isGenerating, startedAt } = useReportGenStatus(token?.tokenAddress);
-  const [hasGenerated, setHasGenerated] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const [showPaywall, setShowPaywall] = useState(false);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const [whatsNewLoading, setWhatsNewLoading] = useState(false);
+  const [whatsNewError, setWhatsNewError] = useState<string | null>(null);
+  const [whatsNewResult, setWhatsNewResult] = useState<WhatsNewResult | null>(
+    null,
+  );
+  const whatsNewInFlightRef = useRef(false);
 
   const { authenticated, ready, login } = usePrivy();
 
@@ -175,7 +186,6 @@ export function TableRow({
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
-      setHasGenerated(true);
     }
   }, [isGenerating, startedAt, countdown]);
 
@@ -234,16 +244,11 @@ export function TableRow({
   const priceChange24h = pct24h(token?.pricePercentChange);
   const volumeChange24h = pct24h(token?.volumePercentChange);
 
-  const generateButtonImageSrc = useGoldenGenerateArt
-    ? "/images/golden_generate.webp"
-    : usePumpGenerateArt
-      ? "/images/pump_generate.webp"
-      : "/images/generate.webp";
-
   const lowerChainId = token?.chainId?.toLowerCase();
   const isBnbChain = lowerChainId === "bsc" || token?.chainId === "56";
   const isBaseChain = lowerChainId === "base" || token?.chainId === "8453";
   const isMonadChain = lowerChainId === "monad" || token?.chainId === "10143";
+  const isRobinhoodChain = lowerChainId === "robinhood";
   const isEthereumChain =
     lowerChainId === "ethereum" || lowerChainId === "eth" || token?.chainId === "1";
 
@@ -255,7 +260,9 @@ export function TableRow({
       ? "WBNB"
       : isMonadChain
         ? "MON"
-        : "SOL";
+        : isRobinhoodChain
+          ? ((token as { quoteSymbol?: string })?.quoteSymbol || "ETH")
+          : "SOL";
 
   const explorerUrl = isBaseChain
     ? `https://basescan.org/token/${token?.tokenAddress}`
@@ -265,7 +272,9 @@ export function TableRow({
       ? `https://bscscan.com/token/${token?.tokenAddress}`
       : isMonadChain
         ? `https://monadscan.com/address/${token?.tokenAddress}`
-        : `https://solscan.io/token/${token?.tokenAddress}`;
+        : isRobinhoodChain
+          ? `https://robinhoodchain.blockscout.com/token/${token?.tokenAddress}`
+          : `https://solscan.io/token/${token?.tokenAddress}`;
 
   const chainBadge = isBaseChain
     ? { src: "/images/base.png", label: "Base" as const }
@@ -275,7 +284,9 @@ export function TableRow({
       ? { src: "/images/bnbchain.png", label: "BNB Chain" as const }
       : isMonadChain
         ? { src: "/images/monad.png", label: "Monad" as const }
-        : { src: "/images/solana.png", label: "Solana" as const };
+        : isRobinhoodChain
+          ? { src: "/images/robinhood.png", label: "Robinhood" as const }
+          : { src: "/images/solana.png", label: "Solana" as const };
 
   const openChart = () => {
     if (token?.tokenAddress && onOpenChart && token) onOpenChart(token);
@@ -291,18 +302,63 @@ export function TableRow({
     if (!token) return;
     openChart();
     try {
-      const result = await generateFromToken(token);
-      if (result !== undefined) setHasGenerated(true);
+      await generateFromToken(token);
     } catch (err: any) {
       if (err?.status === 402) {
         setShowPaywall(true);
       }
       setCountdown(null);
-      setHasGenerated(false);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
       }
+    }
+  };
+
+  const onWhatsNewClick = async () => {
+    if (!token?.symbol) return;
+    if (whatsNewInFlightRef.current) return;
+    if (!currentUserId) {
+      setWhatsNewOpen(true);
+      setWhatsNewError("Sign in to view What's New.");
+      return;
+    }
+
+    whatsNewInFlightRef.current = true;
+    setWhatsNewOpen(true);
+    setWhatsNewLoading(true);
+    setWhatsNewError(null);
+    setWhatsNewResult(null);
+
+    try {
+      const res = await fetch("/api/whats-new", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-user-id": currentUserId,
+        },
+        body: JSON.stringify({
+          contractAddress: token.tokenAddress,
+          ticker: token.symbol,
+          projectName: token.name,
+        }),
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok || !json?.ok) {
+        throw new Error(json?.error || `HTTP ${res.status}`);
+      }
+      setWhatsNewResult({
+        summary: String(json.summary || ""),
+        tweets: Array.isArray(json.tweets) ? json.tweets : [],
+        metadata: json.metadata,
+      });
+    } catch (err: unknown) {
+      setWhatsNewError(
+        err instanceof Error ? err.message : "Failed to load What's New.",
+      );
+    } finally {
+      setWhatsNewLoading(false);
+      whatsNewInFlightRef.current = false;
     }
   };
 
@@ -313,10 +369,8 @@ export function TableRow({
       await adminGenerateAndStoreFromToken(token, {
         confirmOverwrite: async (msg) => window.confirm(msg),
       });
-      setHasGenerated(true);
     } catch {
       setCountdown(null);
-      setHasGenerated(false);
       if (intervalRef.current) {
         clearInterval(intervalRef.current);
         intervalRef.current = null;
@@ -431,48 +485,39 @@ export function TableRow({
       </div>
 
       {/* AI Report */}
-      <div className={`sm:sticky sm:left-100 h-12.75 sm:z-10 flex items-center justify-center px-3 py-2 whitespace-nowrap ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
+      <div
+        className={`sm:sticky sm:left-100 relative h-auto min-h-12.75 w-full sm:z-10 flex items-center justify-center px-3 py-1 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
+      >
         {isGenerating && countdown !== null ? (
           <div className="flex flex-col items-center">
             <div className="text-[#FFD700] font-bold text-lg animate-pulse">
               {countdown}s
             </div>
           </div>
-        ) : hasGenerated ? (
-          <div className="flex items-center justify-center w-19.5 h-8 rounded-sm bg-[#FFD700]">
-            <span className="text-black font-bold! text-sm">
-              {isAdmin ? "Stored!" : "Generated!"}
-            </span>
-          </div>
         ) : (
-          <div className="flex items-center justify-center gap-2">
-            <button
-              type="button"
-              onClick={!authenticated ? handleSignIn : onGenerateClick}
-              disabled={isGenerating || !ready}
-              className={`w-17.5 h-7.5 flex items-center justify-center transition ${
-                isGenerating || !ready
-                  ? "opacity-60 cursor-wait"
-                  : "cursor-pointer"
-              }`}
-              aria-label={`Generate report for ${displayName}`}
-              style={{ flexShrink: 0 }}
-            >
-              <Image
-                src={generateButtonImageSrc}
-                alt="generate report"
-                width={100}
-                height={40}
-                className="object-contain hover:scale-[1.05] transition"
+          <>
+            <div className="flex flex-col items-center justify-center gap-0.5">
+              <GlossyReportButton
+                label="Full Report"
+                variant="full-report"
+                onClick={!authenticated ? handleSignIn : onGenerateClick}
+                disabled={isGenerating || !ready || whatsNewLoading}
+                ariaLabel={`Full Report for ${displayName}`}
               />
-            </button>
+              <GlossyReportButton
+                label="What's New"
+                variant="whats-new"
+                onClick={!authenticated ? handleSignIn : onWhatsNewClick}
+                disabled={isGenerating || !ready || whatsNewLoading}
+                ariaLabel={`What's New for ${displayName}`}
+              />
+            </div>
 
-            {/* ✅ External Explorer Link (replaces modal) */}
             <a
               href={explorerUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="flex items-center justify-center gap-1.5 font-medium! text-[14px]! rounded-lg text-[#ffc000] transition-colors cursor-pointer hover:text-[#ffda44]"
+              className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-lg text-[#ffc000] transition-colors cursor-pointer hover:text-[#ffda44]"
               aria-label={`View on ${
                 isBaseChain
                   ? "BaseScan"
@@ -482,7 +527,9 @@ export function TableRow({
                     ? "BSCScan"
                     : isMonadChain
                       ? "MonadScan"
-                      : "SolScan"
+                      : isRobinhoodChain
+                        ? "Robinhood"
+                        : "SolScan"
               }`}
               title={`View token on ${
                 isBaseChain
@@ -493,18 +540,20 @@ export function TableRow({
                     ? "BSCScan"
                     : isMonadChain
                       ? "MonadScan"
-                      : "SolScan"
+                      : isRobinhoodChain
+                        ? "Robinhood"
+                        : "SolScan"
               }`}
             >
               <ExternalLink className="w-3.5 h-3.5" />
             </a>
-          </div>
+          </>
         )}
       </div>
 
       {/* Market Cap — 24h price %-based multiplier */}
       <div
-        className={`sm:sticky sm:left-135 h-12.75 sm:z-10 flex w-full min-w-0 items-center px-3 py-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
+        className={`sm:sticky sm:left-135 min-h-[4.75rem] sm:z-10 flex w-full min-w-0 items-center px-3 py-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
       >
         <div className="min-w-0 w-full overflow-hidden">
           <ValueWithDayChange
@@ -516,7 +565,7 @@ export function TableRow({
 
       {/* 24h chart — after Mcap */}
       <div
-        className={`flex min-h-[48px] w-full min-w-0 self-stretch items-center justify-end overflow-hidden px-1.5 py-1 sm:min-h-[52px] sm:px-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
+        className={`flex min-h-[4.75rem] w-full min-w-0 self-stretch items-center justify-end overflow-hidden px-1.5 py-1 sm:px-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
       >
         <Token24hSparkline
           changePct24h={priceChange24h}
@@ -527,7 +576,7 @@ export function TableRow({
 
       {/* Volume — 24h volume change % as multiplier */}
       <div
-        className={`flex h-12.75 w-full min-w-0 items-center px-3 py-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
+        className={`flex min-h-[4.75rem] w-full min-w-0 items-center px-3 py-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
       >
         <div className="min-w-0 w-full overflow-hidden">
           <ValueWithDayChange
@@ -539,7 +588,7 @@ export function TableRow({
 
       {/* Price — 24h price change % as multiplier */}
       <div
-        className={`flex h-12.75 w-full min-w-0 items-center px-3 py-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
+        className={`flex min-h-[4.75rem] w-full min-w-0 items-center px-3 py-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
       >
         <div className="min-w-0 w-full overflow-hidden">
           <ValueWithDayChange
@@ -550,12 +599,12 @@ export function TableRow({
       </div>
 
       {/* Liquidity */}
-      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-12.75 items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
+      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate min-h-[4.75rem] items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
         <span className="font-bold!">{formatUsd(liq)}</span>
       </div>
 
       {/* Age */}
-      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-12.75 items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
+      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate min-h-[4.75rem] items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
         {ageLoading ? (
           <span
             className="inline-block h-3.5 w-9 animate-pulse rounded bg-white/15"
@@ -572,6 +621,16 @@ export function TableRow({
         onClose={() => setShowPaywall(false)}
         context="rexscreener"
         paymentMetadata={currentUserId ? { userId: currentUserId } : undefined}
+      />
+      <WhatsNewModal
+        open={whatsNewOpen}
+        onClose={() => {
+          setWhatsNewOpen(false);
+          setWhatsNewError(null);
+        }}
+        loading={whatsNewLoading}
+        error={whatsNewError}
+        result={whatsNewResult}
       />
     </>
   );

@@ -1,0 +1,8 @@
+[{
+      "relation": ["delegate_permission/common.handle_all_urls"],
+      "target": {
+        "namespace": "android_app",
+        "package_name": "trade.raptorx.twa",
+        "sha256_cert_fingerprints": ["A3:2F:93:16:B5:07:E8:CD:E7:B4:A5:55:3F:0B:8F:92:F2:40:99:F2:5D:1B:AF:29:2A:E6:04:B5:07:EA:8F:95"]
+      }
+    }]

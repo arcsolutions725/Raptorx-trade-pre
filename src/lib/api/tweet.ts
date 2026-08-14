@@ -72,6 +72,199 @@ export interface TweetData {
   };
 }
 
+function sanitizeTicker(ticker: string): string {
+  return ticker.replace(/^\$+/, "").replace(/[^\w]/g, "").slice(0, 32);
+}
+
+function buildTweetSearchQueries(
+  ticker: string,
+  projectName?: string,
+  contractAddress?: string,
+): string[] {
+  const symbol = sanitizeTicker(ticker);
+  const name = (projectName || "").trim();
+  const queries: string[] = [];
+
+  if (symbol) {
+    queries.push(`$${symbol} lang:en`);
+    queries.push(`(#${symbol} OR $${symbol}) lang:en`);
+  }
+
+  const nameLooksUseful =
+    name.length >= 3 &&
+    name.toLowerCase() !== symbol.toLowerCase() &&
+    !/^0x[a-f0-9]{8,}$/i.test(name);
+  if (nameLooksUseful) {
+    queries.push(`"${name.replace(/"/g, "")}" lang:en`);
+  }
+
+  const ca = (contractAddress || "").trim();
+  if (ca.length >= 32 && ca.length <= 64) {
+    queries.push(`${ca} lang:en`);
+  }
+
+  return Array.from(new Set(queries));
+}
+
+function mapTweet(tweet: any): TweetData {
+  const author = tweet.author || {};
+  const userName = author.userName || author.username || "";
+
+  return {
+    id: tweet.id || "",
+    text: tweet.text || "",
+    url: tweet.url || "",
+    source: tweet.source || "",
+    retweetCount: tweet.retweetCount || 0,
+    replyCount: tweet.replyCount || 0,
+    likeCount: tweet.likeCount || 0,
+    quoteCount: tweet.quoteCount || 0,
+    viewCount: tweet.viewCount || 0,
+    bookmarkCount: tweet.bookmarkCount || 0,
+    createdAt: tweet.createdAt || tweet.created_at || "",
+    lang: tweet.lang || "en",
+    isReply: tweet.isReply || false,
+    inReplyToId: tweet.inReplyToId,
+    inReplyToUserId: tweet.inReplyToUserId,
+    inReplyToUsername: tweet.inReplyToUsername,
+    conversationId: tweet.conversationId,
+    isLimitedReply: tweet.isLimitedReply || false,
+    media: {
+      mediaUrl: "",
+      mediaPreview: "",
+    },
+    tweeter: {
+      userName,
+      id: author.id || "",
+      name: author.name || userName,
+      isBlueVerified: author.isBlueVerified || false,
+      verifiedType: author.verifiedType,
+      publicImageUrl: author.profilePicture || author.publicImageUrl || "",
+      coverPicture: author.coverPicture,
+      description: author.description || "",
+      location: author.location,
+      followers: author.followers || 0,
+      following: author.following || 0,
+      canDm: author.canDm || false,
+      createdAt: author.createdAt || "",
+      favouritesCount: author.favouritesCount || 0,
+      hasCustomTimelines: author.hasCustomTimelines || false,
+      isTranslator: author.isTranslator || false,
+      mediaCount: author.mediaCount || 0,
+      statusesCount: author.statusesCount || 0,
+      withheldInCountries: author.withheldInCountries || [],
+      possiblySensitive: author.possiblySensitive || false,
+      pinnedTweetIds: author.pinnedTweetIds || [],
+      isAutomated: author.isAutomated || false,
+      automatedBy: author.automatedBy,
+      unavailable: author.unavailable || false,
+      message: author.message,
+      unavailableReason: author.unavailableReason,
+      username: userName,
+    },
+    entities: {
+      hashtags: tweet.entities?.hashtags || [],
+      urls: tweet.entities?.urls || [],
+      user_mentions: tweet.entities?.user_mentions || [],
+    },
+  };
+}
+
+const TWEET_FETCH_TIMEOUT_MS = 8_000;
+const TWEET_FETCH_ATTEMPTS = 2;
+
+function tweetFetchErrorMessage(err: unknown): string {
+  const raw =
+    err instanceof Error
+      ? err.message
+      : typeof err === "string"
+        ? err
+        : (err as { message?: string })?.message || "Tweet search unavailable";
+  if (/fetch failed|ETIMEDOUT|ENOTFOUND|UND_ERR|AbortError|timeout/i.test(raw)) {
+    return "Tweet search timed out. Please try again.";
+  }
+  return raw;
+}
+
+async function searchTweetsOnce(
+  query: string,
+  queryType: "Latest" | "Top",
+): Promise<{
+  success: boolean;
+  tweets: TweetData[];
+  error?: any;
+  status?: number;
+}> {
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= TWEET_FETCH_ATTEMPTS; attempt++) {
+    try {
+      const url = new URL(
+        "https://api.twitterapi.io/twitter/tweet/advanced_search",
+      );
+      url.searchParams.set("query", query);
+      url.searchParams.set("queryType", queryType);
+
+      const response = await fetch(url.toString(), {
+        method: "GET",
+        headers: { "X-API-Key": TWITTER_API_KEY },
+        cache: "no-store",
+        signal: AbortSignal.timeout(TWEET_FETCH_TIMEOUT_MS),
+      });
+
+      if (!response.ok) {
+        const errorData = await response
+          .json()
+          .catch(() => ({ message: `HTTP ${response.status}` }));
+        lastError = errorData?.message || errorData;
+        if (response.status >= 500 && attempt < TWEET_FETCH_ATTEMPTS) {
+          await new Promise((r) => setTimeout(r, 300 * attempt));
+          continue;
+        }
+        return {
+          success: false,
+          tweets: [],
+          status: response.status,
+          error: tweetFetchErrorMessage(lastError),
+        };
+      }
+
+      const json: any = await response.json();
+      const tweetsArray: any[] = Array.isArray(json.tweets)
+        ? json.tweets
+        : Array.isArray(json.data)
+          ? json.data
+          : [];
+
+      return { success: true, tweets: tweetsArray.map(mapTweet) };
+    } catch (err) {
+      lastError = err;
+      if (attempt < TWEET_FETCH_ATTEMPTS) {
+        await new Promise((r) => setTimeout(r, 300 * attempt));
+      }
+    }
+  }
+
+  return {
+    success: false,
+    tweets: [],
+    error: tweetFetchErrorMessage(lastError),
+  };
+}
+
+function mergeTweets(groups: TweetData[][]): TweetData[] {
+  const seen = new Set<string>();
+  const out: TweetData[] = [];
+  for (const group of groups) {
+    for (const tweet of group) {
+      const key = tweet.id || `${tweet.tweeter?.userName}:${tweet.text?.slice(0, 48)}`;
+      if (!key || seen.has(key)) continue;
+      seen.add(key);
+      out.push(tweet);
+    }
+  }
+  return out;
+}
+
 export async function getTweetsSearch(
   contractAddress: string,
   ticker: string,
@@ -87,104 +280,52 @@ export async function getTweetsSearch(
     throw new Error("TWITTER_API_KEY is not set in environment variables");
   }
 
+  const queries = buildTweetSearchQueries(ticker, projectName, contractAddress);
+  if (!queries.length) {
+    return { success: false, data: [], error: "Missing ticker for tweet search" };
+  }
+
   try {
-    // Use only ticker with $ prefix for search query
-    const tickerWithPrefix = ticker.startsWith("$")
-      ? `${ticker} lang:en`
-      : `$${ticker} lang:en`;
+    const collected: TweetData[][] = [];
+    let lastError: any;
+    let lastStatus: number | undefined;
 
-    const url = `https://api.twitterapi.io/twitter/tweet/advanced_search?query=${tickerWithPrefix}&queryType=Top`;
-
-    const response = await fetch(url, {
-      method: "GET",
-      headers: {
-        "X-API-Key": TWITTER_API_KEY,
-      },
-    });
-
-    if (!response.ok) {
-      const errorData = await response
-        .json()
-        .catch(() => ({ message: "Failed to parse error response" }));
-      return { success: false, status: response.status, error: errorData };
+    for (const query of queries) {
+      const result = await searchTweetsOnce(query, "Latest");
+      if (!result.success) {
+        lastError = result.error;
+        lastStatus = result.status;
+        if (/timed out/i.test(String(result.error || ""))) break;
+        continue;
+      }
+      if (result.tweets.length) collected.push(result.tweets);
+      if (mergeTweets(collected).length >= 5) break;
     }
 
-    const json: any = await response.json();
-    const tweetsArray: any[] = Array.isArray(json.tweets) ? json.tweets : [];
-
-    if (tweetsArray.length === 0) {
-      return {
-        success: true,
-        data: [],
-        error: "No tweets found for the given criteria",
-      };
+    if (mergeTweets(collected).length < 5 && !/timed out/i.test(String(lastError || ""))) {
+      const topResult = await searchTweetsOnce(queries[0], "Top");
+      if (topResult.success && topResult.tweets.length) {
+        collected.push(topResult.tweets);
+      } else if (!topResult.success) {
+        lastError = lastError || topResult.error;
+        lastStatus = lastStatus ?? topResult.status;
+      }
     }
 
-    // Transform twitterapi.io response to our TweetData format
-    const topTweets: TweetData[] = tweetsArray.map((tweet: any) => {
-      const author = tweet.author || {};
+    const data = mergeTweets(collected).slice(0, topN);
+    if (data.length > 0) {
+      return { success: true, data };
+    }
 
-      return {
-        id: tweet.id || "",
-        text: tweet.text || "",
-        url: tweet.url || "",
-        source: tweet.source || "",
-        retweetCount: tweet.retweetCount || 0,
-        replyCount: tweet.replyCount || 0,
-        likeCount: tweet.likeCount || 0,
-        quoteCount: tweet.quoteCount || 0,
-        viewCount: tweet.viewCount || 0,
-        bookmarkCount: tweet.bookmarkCount || 0,
-        createdAt: tweet.createdAt || "",
-        lang: tweet.lang || "en",
-        isReply: tweet.isReply || false,
-        inReplyToId: tweet.inReplyToId,
-        inReplyToUserId: tweet.inReplyToUserId,
-        inReplyToUsername: tweet.inReplyToUsername,
-        conversationId: tweet.conversationId,
-        isLimitedReply: tweet.isLimitedReply || false,
-        media: {
-          mediaUrl: "", // Will be populated from entities if available
-          mediaPreview: "",
-        },
-        tweeter: {
-          userName: author.userName || "",
-          id: author.id || "",
-          name: author.name || "",
-          isBlueVerified: author.isBlueVerified || false,
-          verifiedType: author.verifiedType,
-          publicImageUrl: author.profilePicture || "",
-          coverPicture: author.coverPicture,
-          description: author.description || "",
-          location: author.location,
-          followers: author.followers || 0,
-          following: author.following || 0,
-          canDm: author.canDm || false,
-          createdAt: author.createdAt || "",
-          favouritesCount: author.favouritesCount || 0,
-          hasCustomTimelines: author.hasCustomTimelines || false,
-          isTranslator: author.isTranslator || false,
-          mediaCount: author.mediaCount || 0,
-          statusesCount: author.statusesCount || 0,
-          withheldInCountries: author.withheldInCountries || [],
-          possiblySensitive: author.possiblySensitive || false,
-          pinnedTweetIds: author.pinnedTweetIds || [],
-          isAutomated: author.isAutomated || false,
-          automatedBy: author.automatedBy,
-          unavailable: author.unavailable || false,
-          message: author.message,
-          unavailableReason: author.unavailableReason,
-          username: author.userName || "", // Backward compatibility
-        },
-        entities: {
-          hashtags: tweet.entities?.hashtags || [],
-          urls: tweet.entities?.urls || [],
-          user_mentions: tweet.entities?.user_mentions || [],
-        },
-      };
-    });
+    if (lastError) {
+      return { success: false, data: [], error: lastError, status: lastStatus };
+    }
 
-    return { success: true, data: topTweets };
+    return {
+      success: true,
+      data: [],
+      error: "No tweets found for the given criteria",
+    };
   } catch (err: any) {
     return { success: false, error: err.message || "Unknown error" };
   }

@@ -187,13 +187,16 @@ function buildChartTitle(t: TrendingToken): string {
   const isBaseChain = lowerChainId === "base" || t?.chainId === "8453";
   const isBnbChain = lowerChainId === "bsc" || t?.chainId === "56";
   const isMonadChain = lowerChainId === "monad" || t?.chainId === "10143";
+  const isRobinhoodChain = lowerChainId === "robinhood";
   const baseCurrency = isBaseChain
     ? "WETH"
     : isBnbChain
       ? "WBNB"
       : isMonadChain
         ? "MON"
-        : "SOL";
+        : isRobinhoodChain
+          ? "ETH"
+          : "SOL";
   return `${t?.name ?? t?.symbol ?? "Token"} / ${baseCurrency}`;
 }
 
@@ -318,6 +321,7 @@ export function TrendingTableContent({
     const isBaseChain = lowerChainId === "base" || t?.chainId === "8453";
     const isBnbChain = lowerChainId === "bsc" || t?.chainId === "56";
     const isMonadChain = lowerChainId === "monad" || t?.chainId === "10143";
+    const isRobinhoodChain = lowerChainId === "robinhood";
 
     const baseCurrency = isBaseChain
       ? "WETH"
@@ -325,7 +329,9 @@ export function TrendingTableContent({
         ? "WBNB"
         : isMonadChain
           ? "MON"
-          : "SOL";
+          : isRobinhoodChain
+            ? "ETH"
+            : "SOL";
     const title = `${t?.name ?? t?.symbol ?? "Token"} / ${baseCurrency}`;
     setSelectedForChart({ token: t, address: addr, title });
 

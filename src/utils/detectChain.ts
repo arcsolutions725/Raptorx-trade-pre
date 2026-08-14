@@ -1,96 +1,81 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 /**
- * Detect blockchain chain from DexScreener data or other sources
- * Returns normalized chain identifier: "bsc", "ethereum", "base", "solana", or "monad"
+ * Detect blockchain chain from DexScreener data or other sources.
+ * Returns a normalized chain identifier, which is what gets persisted as `Report.chain`
+ * and later pins the Exchange (Li.Fi) widget — so a wrong answer here means a report
+ * whose swap widget is stuck on the wrong chain.
  */
-export function detectChainFromDexData(
-  dexData: any
-): "bsc" | "ethereum" | "base" | "solana" | "monad" {
+import { normalizeSwapChain, type SwapChain } from "@/lib/swapChain";
+
+export type DetectedChain = SwapChain;
+
+/**
+ * DexScreener responses come in two shapes: a bare pair (has `chainId`) and a token
+ * profile (`{ pairs: [...] }`, no top-level `chainId`). `getTokenData` returns the
+ * latter, so reading only `dexData.chainId` found nothing and every token fell through
+ * to the Solana default. Check the pairs too.
+ */
+function chainIdFromDexData(dexData: any): string {
+  const direct = dexData?.chainId;
+  if (direct != null && String(direct).trim() !== "") return String(direct);
+
+  const pairs = Array.isArray(dexData?.pairs) ? dexData.pairs : [];
+  for (const p of pairs) {
+    const c = p?.chainId;
+    if (c != null && String(c).trim() !== "") return String(c);
+  }
+  return "";
+}
+
+export function detectChainFromDexData(dexData: any): DetectedChain {
   if (!dexData) return "solana";
-
-  const chainId = dexData.chainId?.toLowerCase?.() ?? String(dexData.chainId ?? "");
-
-  // Base chain detection (before BSC so "base" isn't missed)
-  if (chainId === "base" || chainId === "8453") {
-    return "base";
-  }
-
-  // BNB/BSC chain detection
-  if (
-    chainId === "bsc" ||
-    chainId === "binance" ||
-    chainId === "bnb" ||
-    chainId === "56"
-  ) {
-    return "bsc";
-  }
-
-  // Ethereum mainnet detection
-  if (chainId === "ethereum" || chainId === "eth" || chainId === "1") {
-    return "ethereum";
-  }
-
-  // Monad chain detection
-  if (chainId === "monad" || chainId === "10143") {
-    return "monad";
-  }
-
-  // Default to Solana for any other chain or solana-specific chainIds
-  return "solana";
+  return normalizeSwapChain(chainIdFromDexData(dexData)) ?? "solana";
 }
 
 /**
- * Detect chain from contract address pattern (fallback method)
- * BNB addresses are 42 characters starting with 0x
- * Solana addresses are 32-44 characters (base58)
+ * Detect chain from contract address pattern (fallback method).
+ * EVM addresses are 42 characters starting with 0x; Solana addresses are base58.
+ * An 0x address cannot tell us WHICH EVM chain it is on — the bsc guess is a legacy
+ * default, and callers with any better signal should not be relying on this.
  */
 export function detectChainFromAddress(address: string): "bsc" | "solana" {
   if (!address) return "solana";
 
-  // BNB/BSC addresses start with 0x and are 42 characters long
   if (address.startsWith("0x") && address.length === 42) {
     return "bsc";
   }
 
-  // Solana addresses are base58 encoded and typically 32-44 characters
-  // They don't start with 0x
   return "solana";
 }
 
 /**
- * Comprehensive chain detection combining multiple methods
+ * Comprehensive chain detection combining multiple methods.
  * Priority: Explicit > DexData > Address Pattern > Default
  */
 export function detectChain(params: {
   dexData?: any;
   address?: string;
   explicitChain?: string;
-}): "bsc" | "ethereum" | "base" | "solana" | "monad" {
+}): DetectedChain {
   const { dexData, address, explicitChain } = params;
 
-  // If explicitly provided (e.g. from frontend token.chainId), use it
+  // If explicitly provided (e.g. from frontend token.chainId), use it. An unrecognized
+  // value used to fall through to "solana" here, which is how Robinhood tokens — whose
+  // chain WAS passed correctly — still ended up stored as Solana.
   if (explicitChain) {
-    const normalized = explicitChain.toLowerCase().trim();
-    if (normalized === "base" || normalized === "8453") return "base";
-    if (normalized === "bsc" || normalized === "bnb" || normalized === "56") return "bsc";
-    if (normalized === "ethereum" || normalized === "eth" || normalized === "1")
-      return "ethereum";
-    if (normalized === "monad" || normalized === "10143") return "monad";
-    return "solana";
+    const normalized = normalizeSwapChain(explicitChain);
+    if (normalized) return normalized;
   }
 
-  // Try to detect from DexScreener data first
   if (dexData) {
-    const chainFromDex = detectChainFromDexData(dexData);
+    const chainFromDex = normalizeSwapChain(chainIdFromDexData(dexData));
     if (chainFromDex) return chainFromDex;
   }
 
-  // Fallback to address pattern detection (0x => bsc; cannot distinguish Base from BSC by address alone)
   if (address) {
     return detectChainFromAddress(address);
   }
 
-  // Default to Solana
   return "solana";
 }
 

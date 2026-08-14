@@ -1,5 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
+import { unstable_cache } from "next/cache";
 
 export const dynamic = "force-dynamic";
 
@@ -150,7 +151,7 @@ async function fetchHistorySeriesForType(
   return normalizePrices(capped);
 }
 
-async function fetchHistorySeries(
+async function fetchHistorySeriesUncached(
   apiKey: string,
   chain: string,
   address: string
@@ -163,6 +164,29 @@ async function fetchHistorySeries(
   } catch {
     return [];
   }
+}
+
+/**
+ * Short-TTL cache for per-token sparkline series (Next.js Data Cache, shared
+ * across requests/instances). A 24h mini-chart tolerates ~60s staleness, so this
+ * turns the per-token Birdeye history_price N+1 (the slow, rate-limited part)
+ * into instant cache reads. apiKey is read from env inside so it's not a key part.
+ */
+const fetchHistorySeriesCached = unstable_cache(
+  async (chain: string, address: string): Promise<number[]> => {
+    const apiKey = process.env.UNIBLOCK_API_KEY || "";
+    return fetchHistorySeriesUncached(apiKey, chain, address);
+  },
+  ["birdeye-sparkline-24h-v1"],
+  { revalidate: 60, tags: ["birdeye-sparkline"] }
+);
+
+async function fetchHistorySeries(
+  _apiKey: string,
+  chain: string,
+  address: string
+): Promise<number[]> {
+  return fetchHistorySeriesCached(chain, address);
 }
 
 function createLimiter(concurrency: number) {

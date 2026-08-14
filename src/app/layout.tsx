@@ -1,7 +1,10 @@
 // src/app/layout.tsx
 import type { Metadata } from "next";
 import Script from "next/script";
-import { Geist, Geist_Mono } from "next/font/google";
+// TEMP (local test only — REVERT before commit): this machine can't reach Google
+// Fonts, so `next/font/google` times out at build. Substitute a system font stack
+// so the build works offline. Restore with: git checkout -- src/app/layout.tsx
+// import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { PrivyProviderWrapper } from "@/components/providers/PrivyProvider";
 import { PostHogProviderWrapper } from "@/components/providers/PostHogProvider";
@@ -15,15 +18,10 @@ import { NotificationToaster } from "@/components/ui/notification";
 import { SpeedInsights } from "@vercel/speed-insights/next";
 import { Analytics } from "@vercel/analytics/next";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-});
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
-});
+// TEMP (local test only): fake the next/font objects with a className that maps
+// the same CSS variables to system fonts (defined below in a <style>).
+const geistSans = { variable: "font-geist-sans-fallback" };
+const geistMono = { variable: "font-geist-mono-fallback" };
 
 // Base URL for absolute social card image URLs (X/Twitter requires absolute URLs)
 const SITE_BASE_URL =
@@ -138,6 +136,9 @@ export const metadata: Metadata = {
     icon: "/favicon.png",
     apple: "/favicon.png",
   },
+  // PWA manifest served statically from /public/manifest.json (required at this
+  // exact path by the PWA tooling; single source of truth for install metadata).
+  manifest: "/manifest.json",
   alternates: {
     canonical: "/",
   },
@@ -198,6 +199,17 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
+      <head>
+        {/* TEMP (local test only): map the Geist CSS variables to system fonts. */}
+        <style
+          dangerouslySetInnerHTML={{
+            __html: `
+              .font-geist-sans-fallback { --font-geist-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+              .font-geist-mono-fallback { --font-geist-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+            `,
+          }}
+        />
+      </head>
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >

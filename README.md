@@ -386,7 +386,6 @@ For support and questions:
 - ✅ Phantom wallet direct integration
 
 ---
-
 Built with ❤️ for the crypto and DeFi community
 
 RaptorX - Where AI meets multi-chain trading intelligence

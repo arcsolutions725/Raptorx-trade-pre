@@ -82,7 +82,7 @@ interface SwapTransaction {
   toToken: string;
   fromAddress: string;
   toAddress: string;
-  chain: "solana" | "bnb" | "base";
+  chain: "solana" | "bnb" | "base" | "ethereum" | "monad" | "robinhood";
   isBuy: boolean; // true for buy, false for sell
   walletAddress?: string | null;
   fromAmountRaw?: string | null;
@@ -100,7 +100,7 @@ interface SwapTransaction {
  *   toToken: string,
  *   fromAddress: string,
  *   toAddress: string,
- *   chain: "solana" | "bnb" | "base",
+ *   chain: "solana" | "bnb" | "base" | "ethereum" | "monad" | "robinhood",
  *   isBuy: boolean,
  *   walletAddress?: string,
  *   fromAmountRaw?: string,

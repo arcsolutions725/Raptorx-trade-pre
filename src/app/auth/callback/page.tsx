@@ -3,6 +3,10 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
+import {
+  consumePhantomReturnUrl,
+  preferLifiPhantomWallet,
+} from "@/lib/phantomReturnUrl";
 import Image from "next/image";
 
 export default function AuthCallbackPage() {
@@ -17,7 +21,6 @@ export default function AuthCallbackPage() {
 
       setIsSyncing(true);
       try {
-        // Create or update user in our PostgreSQL DB using phantomId
         await fetch("/api/user", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -33,9 +36,10 @@ export default function AuthCallbackPage() {
       } finally {
         setIsSyncing(false);
         setIsRedirecting(true);
-        // Small delay to ensure data is committed
+        preferLifiPhantomWallet();
+        const returnTo = consumePhantomReturnUrl("/");
         setTimeout(() => {
-          router.push("/");
+          router.push(returnTo);
         }, 500);
       }
     };
@@ -84,7 +88,7 @@ export default function AuthCallbackPage() {
             {isSyncing
               ? "Please wait while we sync your account information"
               : isRedirecting
-                ? "Taking you to the main page"
+                ? "Taking you back to your swap"
                 : "Please wait while we verify your connection"}
           </p>
         </div>

@@ -5,6 +5,7 @@ export const SCREENER_CHAIN_SLUGS = [
   "monad",
   "base",
   "solana",
+  "robinhood",
   "bnb",
   "ethereum",
 ] as const;
@@ -53,6 +54,7 @@ export function chainFromToken(t: TrendingToken): Chain {
   if (id === "base" || id === "8453") return "base";
   if (id === "monad" || id === "10143") return "monad";
   if (id === "ethereum" || id === "eth" || id === "1") return "ethereum";
+  if (id === "robinhood") return "robinhood";
   return "solana";
 }
 
@@ -155,6 +157,7 @@ export function tokenMatchesChain(t: TrendingToken, chain: Chain): boolean {
   if (chain === "monad") return id === "monad" || id === "10143";
   if (chain === "ethereum")
     return id === "ethereum" || id === "eth" || id === "1";
+  if (chain === "robinhood") return id === "robinhood";
   return true;
 }
 

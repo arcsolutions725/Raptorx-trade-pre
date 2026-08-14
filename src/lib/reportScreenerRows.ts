@@ -1,10 +1,16 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { unstable_cache } from "next/cache";
 import {
   enrichWithCreationMixedChains,
   normalizeEpochToSeconds,
 } from "@/lib/birdeyeTokenCreationInfo";
+import { applyDexMarketOverlay } from "@/lib/dexscreenerMarketData";
 import { normGoldenDbChain } from "@/lib/goldenReportRegistryMatch";
 import { prisma } from "@/lib/prisma";
+import { getRobinhoodTokenByAddress } from "@/lib/robinhoodTokens";
+
+/** Invalidated by the admin dashboard when a project is added/edited/removed. */
+export const REPORT_SCREENER_ROWS_TAG = "report-screener-rows";
 
 const UNIBLOCK_BIRDEYE_BASE = "https://api.uniblock.dev/direct/v1/Birdeye";
 const BIRDEYE_TOKEN_OVERVIEW = `${UNIBLOCK_BIRDEYE_BASE}/defi/token_overview`;
@@ -201,6 +207,7 @@ function dbChainToBirdeyeXChain(dbChain: string): string | null {
   if (c === "base") return "base";
   if (c === "ethereum") return "ethereum";
   if (c === "monad") return "monad";
+  // Robinhood is intentionally absent: Birdeye doesn't support it (see below).
   return null;
 }
 
@@ -209,8 +216,10 @@ function stubRowFromProject(contractAddress: string, dbChain: string): any {
   const addr = contractAddress.trim();
   const tokenAddress = isEvmAddress(addr) ? addr.toLowerCase() : addr;
   const chainId =
-    dbChainToBirdeyeXChain(dbChain) ??
-    (isEvmAddress(addr) ? "ethereum" : "solana");
+    normGoldenDbChain(dbChain) === "robinhood"
+      ? "robinhood"
+      : (dbChainToBirdeyeXChain(dbChain) ??
+        (isEvmAddress(addr) ? "ethereum" : "solana"));
 
   return {
     chainId,
@@ -226,6 +235,13 @@ async function tokenRowFromProject(
 ): Promise<any> {
   const addr = contractAddress.trim();
   if (!addr) return stubRowFromProject(contractAddress, dbChain);
+
+  // Robinhood Chain: Uniblock/Birdeye doesn't support it, so this row comes from
+  // DexScreener — same source the Robinhood tab of the trending table uses.
+  if (normGoldenDbChain(dbChain) === "robinhood") {
+    const row = await getRobinhoodTokenByAddress(addr);
+    return row ?? stubRowFromProject(addr, dbChain);
+  }
 
   if (!isEvmAddress(addr)) {
     const data = await fetchBirdeyeTokenOverview(addr, "solana", apiKey);
@@ -250,8 +266,13 @@ async function tokenRowFromProject(
 
 /**
  * Golden (`isGolden: true`) or Pump (`isGolden: false`) registry → Birdeye overview rows.
+ *
+ * Expensive: one Birdeye `token_overview` call per registry project (a few more
+ * for EVM tokens whose chain has to be probed), at concurrency 3. Always go
+ * through `getReportScreenerTokenRows` so this runs at most once per revalidate
+ * window rather than once per request.
  */
-export async function getReportScreenerTokenRows(
+async function buildReportScreenerTokenRows(
   isGolden: boolean,
   opts: ReportScreenerFetchOptions = {},
 ): Promise<ReportScreenerResult> {
@@ -272,12 +293,36 @@ export async function getReportScreenerTokenRows(
     return { items: [], registryCount: 0 };
   }
 
+  // Keep at 3. Raising it does NOT speed the rebuild up: Uniblock/Birdeye
+  // rate-limits the burst, every 429 costs a 500-1500ms backoff, and a token
+  // that 429s never populates OVERVIEW_CACHE, so the next rebuild re-pays it.
+  // Measured: concurrency 12 took ~16.6s cold vs ~6.0s at 3.
   const limiter = createLimiter(3);
   const rows = await Promise.all(
     projects.map((p) =>
       limiter(() => tokenRowFromProject(p.contractAddress, p.chain, apiKey)),
     ),
   );
+
+  // Align market cap with the embedded DexScreener chart — exactly like the main
+  // trending table does. Birdeye's overview number is supply-based and, when it
+  // has no `mc`, falls back to `realMc` (circulating supply). For tokens whose
+  // circulating < total (e.g. pump.fun mints), that badly undercounts and
+  // disagrees with the chart, which prices the full supply. Overlaying
+  // DexScreener's `marketCap ?? fdv` per chain fixes both the value and the sort.
+  const rowsByChain = new Map<string, any[]>();
+  for (const r of rows) {
+    const c = String(r?.chainId ?? "").toLowerCase();
+    if (!rowsByChain.has(c)) rowsByChain.set(c, []);
+    rowsByChain.get(c)!.push(r);
+  }
+  const overlaidGroups = await Promise.all(
+    Array.from(rowsByChain.entries()).map(([c, group]) =>
+      applyDexMarketOverlay(group, c).catch(() => group),
+    ),
+  );
+  rows.length = 0;
+  rows.push(...overlaidGroups.flat());
 
   rows.sort((a, b) => {
     const mcA = a?.marketCap ?? 0;
@@ -293,4 +338,28 @@ export async function getReportScreenerTokenRows(
     : rows;
 
   return { items, registryCount };
+}
+
+/**
+ * Cached rows, shared across server instances via the Next.js Data Cache.
+ *
+ * The module-level OVERVIEW_CACHE above is per-process, so on Vercel it only
+ * ever warms the one lambda that served the request (or the cron) — every other
+ * instance pays the full ~5s Birdeye fan-out. This cache is shared, so the
+ * prewarm cron's hit benefits real traffic too.
+ *
+ * A throw is not cached, so a Birdeye/DB blip won't pin an error for 60s.
+ */
+const buildReportScreenerTokenRowsCached = unstable_cache(
+  async (isGolden: boolean, includeAge: boolean) =>
+    buildReportScreenerTokenRows(isGolden, { includeAge }),
+  ["report-screener-rows-v1"],
+  { revalidate: 60, tags: [REPORT_SCREENER_ROWS_TAG] },
+);
+
+export async function getReportScreenerTokenRows(
+  isGolden: boolean,
+  opts: ReportScreenerFetchOptions = {},
+): Promise<ReportScreenerResult> {
+  return buildReportScreenerTokenRowsCached(isGolden, opts.includeAge ?? false);
 }

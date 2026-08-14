@@ -22,6 +22,8 @@ import { DexSwapper } from "@/components/swap/DexSwapper";
 import RexHeader from "@/components/ui/layout/Header";
 import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
 import { useEthereumWalletAddress } from "@/hooks/useEthereumWalletAddress";
+import { consumePhantomResumeSwap } from "@/lib/phantomReturnUrl";
+import { resolveSwapChain } from "@/lib/swapChain";
 
 /* Technical Indicators + Analysis */
 import TechnicalIndicators from "@/app/(rexscreener)/_components/technicalindicators/TechnicalIndicators";
@@ -52,6 +54,7 @@ interface Props {
   onTokenSelect?: (token: TrendingToken | null) => void;
   selectedChain?:
     | "solana"
+    | "robinhood"
     | "bsc"
     | "ethereum"
     | "base"
@@ -152,6 +155,21 @@ export function GenerateRexscreenerReport({
   // Combined authentication state
   const authenticated = privyAuthenticated || phantomAuthenticated;
 
+  /**
+   * Returning from the Phantom app: surface the Exchange, not the report.
+   *
+   * The user left this page mid-connect and lands back in a fresh tab, so put them
+   * where they were going rather than at the top of the chart they scrolled past.
+   */
+  const phantomResumedRef = useRef(false);
+  useEffect(() => {
+    if (consumePhantomResumeSwap()) {
+      phantomResumedRef.current = true;
+      setSwapMinimized(false);
+      setContentMinimized(true);
+    }
+  }, []);
+
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [selectedReportId, setSelectedReportId] = useState<string | null>(null);
@@ -245,11 +263,27 @@ export function GenerateRexscreenerReport({
     setAllowAutoPickPilotReport(true);
   }, [chartAddrNorm]);
 
-  // Handle forceShowExchange prop changes - show both report view and trading view
+  /**
+   * One panel at a time — show the user what they actually asked for.
+   *
+   * "Enter the Exchange" sets forceShowExchange, "Claw AI" clears it. Previously the
+   * former un-collapsed BOTH panels, so a user who clicked Exchange got the AI report
+   * stacked on top of it and had to scroll past a chart to reach the swap.
+   */
   useEffect(() => {
+    // ...unless we just came back from Phantom. This effect runs after the resume
+    // effect on the same mount and would otherwise stomp the view it positioned.
+    // Consume the flag so genuine later changes still take effect.
+    if (phantomResumedRef.current) {
+      phantomResumedRef.current = false;
+      return;
+    }
     if (forceShowExchange) {
       setSwapMinimized(false);
-      setContentMinimized(false);
+      setContentMinimized(true); // Exchange only
+    } else {
+      setSwapMinimized(true);
+      setContentMinimized(false); // Intelligence report only
     }
   }, [forceShowExchange]);
 
@@ -312,7 +346,13 @@ export function GenerateRexscreenerReport({
       !!chart && !!grContract && grContract === chart;
     const gidForPilot = shellReportMatchesChart ? grId : null;
 
-    if (selectedReportId && serverReports.length) {
+    if (selectedReportId) {
+      // Trust an explicitly-selected report id when the reports list is momentarily
+      // empty (e.g. a background refetch briefly clears it). Flipping pilotReportId
+      // to null here unmounts the chat panel, which aborts an in-flight follow-up
+      // mid-stream — the response then never renders. Only fall through if the list
+      // IS loaded and genuinely no longer contains this id (e.g. after a delete).
+      if (!serverReports.length) return String(selectedReportId);
       const row = (
         serverReports as { id?: string; contractAddress?: string }[]
       ).find((x) => x?.id != null && String(x.id) === String(selectedReportId));
@@ -410,35 +450,19 @@ export function GenerateRexscreenerReport({
 
   const { solanaAddress } = useSolanaWalletAddress();
   const { ethereumAddress } = useEthereumWalletAddress();
-  const dexForceChain =
-    activeReport?.chain === "bsc" || activeReport?.chain === "bnb"
-      ? "bsc"
-      : activeReport?.chain === "ethereum" || activeReport?.chain === "eth"
-        ? "ethereum"
-      : activeReport?.chain === "solana"
-        ? "solana"
-        : activeReport?.chain === "base"
-          ? "base"
-    : activeReport?.chain === "monad"
-      ? "monad"
-          : selectedChain === "bsc"
-            ? "bsc"
-            : selectedChain === "ethereum"
-              ? "ethereum"
-            : selectedChain === "base"
-              ? "base"
-              : selectedChain === "solana"
-        ? "solana"
-        : selectedChain === "monad"
-          ? "monad"
-          : undefined;
+  // The chain must describe the token the swap targets — see resolveSwapChain for why
+  // the report's own `chain` cannot be trusted ahead of the charted token.
+  const dexForceChain = resolveSwapChain({
+    swapTokenAddress: currentTokenAddress,
+    token: currentSelectedToken,
+    reportChain: activeReport?.chain,
+    reportContractAddress: activeReport?.contractAddress,
+    routeChain: selectedChain,
+  });
   const dexWalletAddress =
     dexForceChain === "solana"
       ? solanaAddress
-      : dexForceChain === "bsc" ||
-          dexForceChain === "ethereum" ||
-          dexForceChain === "base" ||
-          dexForceChain === "monad"
+      : dexForceChain
         ? ethereumAddress
         : null;
 
@@ -1026,13 +1050,24 @@ export function GenerateRexscreenerReport({
                 <div className="w-full flex items-center justify-center">
                   {!swapMinimized && (
                     <div className="w-full flex justify-between items-center bg-[#141414] px-5 py-3 shrink-0">
-                      <div className="flex flex-col items-start ">
-                        <h6 className="text-[12px]! font-normal! text-[#F2F2F2]">
-                          Exchange Tokens Instantly
-                        </h6>
-                        <p className="text-[12px] font-normal text-[#7A7A7A]">
-                          Fast, secure swaps powered by RaptorX.
-                        </p>
+                      <div className="flex items-center gap-4">
+                        {onClose && (
+                          <button
+                            onClick={onClose}
+                            className="flex items-center justify-center gap-1 z-51 w-10 h-10 bg-[#3C3C3C] rounded-lg cursor-pointer text-[14px] shrink-0"
+                            aria-label="Close exchange"
+                          >
+                            <X width={18} height={18} />
+                          </button>
+                        )}
+                        <div className="flex flex-col items-start ">
+                          <h6 className="text-[12px]! font-normal! text-[#F2F2F2]">
+                            Exchange Tokens Instantly
+                          </h6>
+                          <p className="text-[12px] font-normal text-[#7A7A7A]">
+                            Fast, secure swaps powered by RaptorX.
+                          </p>
+                        </div>
                       </div>
                       <button
                         onClick={() => setSwapMinimized(true)}

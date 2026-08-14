@@ -4,7 +4,14 @@
  * `token_overview` often omits creation time; this endpoint supplies `blockUnixTime`.
  */
 
+import { unstable_cache } from "next/cache";
 import { tryDexscreenerEarliestPairCreatedSeconds } from "@/lib/api/dexscreener";
+import {
+  readAgeRecordsFromDb,
+  ageRecordCovers,
+  saveAges,
+  ageKey,
+} from "@/lib/tokenAgeStore";
 
 const UNIBLOCK_BIRDEYE_BASE = "https://api.uniblock.dev/direct/v1/Birdeye";
 const BIRDEYE_CREATION = `${UNIBLOCK_BIRDEYE_BASE}/defi/token_creation_info`;
@@ -132,7 +139,7 @@ type CreationTryKind =
   | { kind: "no_timestamp" }
   | { kind: "retry"; waitMs?: number };
 
-async function fetchCreationInfo(
+async function fetchCreationInfoUncached(
   address: string,
   chain: string,
   apiKey: string,
@@ -259,6 +266,37 @@ async function fetchCreationInfo(
   }
 }
 
+/**
+ * Persistent, cross-request cache for creation timestamps (Next.js Data Cache).
+ * Creation time is immutable, so a stale value is always correct. We also cache
+ * "not found" (as `null`) so tokens without creation info don't re-storm Birdeye
+ * (with retries) on every request — the single biggest cost of the trending list.
+ * apiKey is read from env inside the cached fn so it never becomes part of the key.
+ */
+const creationInfoCached = unstable_cache(
+  async (address: string, chain: string): Promise<number | null> => {
+    const apiKey = process.env.UNIBLOCK_API_KEY || "";
+    const t = await fetchCreationInfoUncached(address, chain, apiKey);
+    return typeof t === "number" ? t : null;
+  },
+  ["birdeye-token-creation-info-v1"],
+  { revalidate: 21_600, tags: ["birdeye-creation"] } // 6h; immutable data
+);
+
+/** Cached facade used by the enrichment paths (falls back to `undefined` for "not found"). */
+async function fetchCreationInfo(
+  address: string,
+  chain: string
+): Promise<number | undefined> {
+  if (!address) return undefined;
+  if (chain.toLowerCase() === "solana") {
+    const known = KNOWN_CREATION_TIMES[address.toLowerCase()];
+    if (typeof known === "number") return known;
+  }
+  const v = await creationInfoCached(address, chain);
+  return typeof v === "number" ? v : undefined;
+}
+
 function maxReasonableCreatedSec(): number {
   return Math.floor(Date.now() / 1000) + 86_400;
 }
@@ -331,34 +369,55 @@ export async function enrichWithCreation(
 ) {
   if (!items.length) return items;
 
-  const limiter = createLimiter(concurrency);
+  // 1. Serve Age from our own DB first — no external call for tokens we already know.
+  const dbRecs = await readAgeRecordsFromDb(
+    items
+      .map((it) => ({ chain, address: it?.tokenAddress as string }))
+      .filter((t) => t.address),
+  );
+  const withDb = items.map((it) => {
+    const addr = it?.tokenAddress as string | undefined;
+    if (addr) {
+      const rec = dbRecs.get(ageKey(chain, addr));
+      if (
+        rec &&
+        typeof rec.createdAtUnix === "number" &&
+        hasUsableCreatedAt({ createdAt: rec.createdAtUnix })
+      ) {
+        return { ...it, createdAt: rec.createdAtUnix };
+      }
+    }
+    if (hasUsableCreatedAt(it)) {
+      const n = normalizeEpochToSeconds(it?.createdAt);
+      return typeof n === "number" ? { ...it, createdAt: n } : it;
+    }
+    return it;
+  });
 
+  // 2. Fall back to the external lookup only for tokens still missing Age AND not
+  //    covered by a fresh DB record (found, or recently checked-unknown).
+  const limiter = createLimiter(concurrency);
   const fetchSet = new Set<string>();
-  for (const item of items) {
+  for (const item of withDb) {
     const addr = item?.tokenAddress as string | undefined;
-    if (!addr) continue;
-    if (!hasUsableCreatedAt(item)) fetchSet.add(addr);
+    if (!addr || hasUsableCreatedAt(item)) continue;
+    if (ageRecordCovers(dbRecs.get(ageKey(chain, addr)))) continue;
+    fetchSet.add(addr);
   }
   const addressesToFetch = Array.from(fetchSet);
 
-  if (!addressesToFetch.length) {
-    return items.map((it) => {
-      if (!hasUsableCreatedAt(it)) return it;
-      const n = normalizeEpochToSeconds(it?.createdAt);
-      return typeof n === "number" ? { ...it, createdAt: n } : it;
-    });
-  }
+  if (!addressesToFetch.length) return withDb;
 
   const times = await Promise.all(
     addressesToFetch.map((addr) =>
-      limiter(() => fetchCreationInfo(addr, chain, apiKey))
+      limiter(() => fetchCreationInfo(addr, chain))
     )
   );
 
   const byAddr = new Map<string, number | undefined>();
   addressesToFetch.forEach((addr, i) => byAddr.set(addr, times[i]));
 
-  const birdeyeMerged = items.map((it) => {
+  const birdeyeMerged = withDb.map((it) => {
     const addr = it?.tokenAddress as string | undefined;
     if (!addr) return it;
     const createdFromCreationInfo = byAddr.get(addr);
@@ -375,7 +434,23 @@ export async function enrichWithCreation(
     };
   });
 
-  return enrichDexscreenerWhereMissing(birdeyeMerged, concurrency);
+  const finalItems = await enrichDexscreenerWhereMissing(birdeyeMerged, concurrency);
+
+  // 3. Persist the lookup result so this token is served from the DB next time:
+  //    a real Age (immutable) or a checked-unknown marker (so we don't re-hammer
+  //    the upstream for tokens with no discoverable creation time).
+  const toSave: Array<{ chain: string; address: string; createdAtUnix: number | null; source?: string }> = [];
+  for (const it of finalItems) {
+    const addr = it?.tokenAddress as string | undefined;
+    if (!addr || !fetchSet.has(addr)) continue;
+    const n = normalizeEpochToSeconds(it?.createdAt);
+    const val =
+      typeof n === "number" && hasUsableCreatedAt({ createdAt: n }) ? n : null;
+    toSave.push({ chain, address: addr, createdAtUnix: val, source: val === null ? "none" : "trending" });
+  }
+  await saveAges(toSave);
+
+  return finalItems;
 }
 
 const EVM_FALLBACK_CHAINS = ["ethereum", "bsc", "base", "monad"] as const;
@@ -393,49 +468,58 @@ export async function enrichWithCreationMixedChains(
 ) {
   if (!items.length) return items;
 
+  const itemChain = (it: any): string => {
+    const c = it?.chainId;
+    return typeof c === "string" && c.trim() ? c.trim() : "solana";
+  };
+
+  // 1. Serve Age from our own DB first (per-item chain).
+  const dbRecs = await readAgeRecordsFromDb(
+    items
+      .map((it) => ({ chain: itemChain(it), address: it?.tokenAddress as string }))
+      .filter((t) => t.address),
+  );
+  const withDb = items.map((it) => {
+    const addr = it?.tokenAddress as string | undefined;
+    if (addr) {
+      const rec = dbRecs.get(ageKey(itemChain(it), addr));
+      if (
+        rec &&
+        typeof rec.createdAtUnix === "number" &&
+        hasUsableCreatedAt({ createdAt: rec.createdAtUnix })
+      ) {
+        return { ...it, createdAt: rec.createdAtUnix };
+      }
+    }
+    if (hasUsableCreatedAt(it)) {
+      const n = normalizeEpochToSeconds(it?.createdAt);
+      return typeof n === "number" ? { ...it, createdAt: n } : it;
+    }
+    return it;
+  });
+
   const limiter = createLimiter(concurrency);
 
-  const missingKeys = new Set<string>();
-  for (const item of items) {
-    const addr = item?.tokenAddress as string | undefined;
-    if (!addr) continue;
-    const chainRaw = item?.chainId;
-    const chain =
-      typeof chainRaw === "string" && chainRaw.trim()
-        ? chainRaw.trim()
-        : "solana";
-    const key = `${chain}:${addr}`;
-    if (!hasUsableCreatedAt(item)) missingKeys.add(key);
-  }
-
+  // 2. Fetch only tokens still missing AND not covered by a fresh DB record.
   type Pair = { chain: string; addr: string; key: string };
   const pairs: Pair[] = [];
   const addedKeys = new Set<string>();
-  for (const item of items) {
+  for (const item of withDb) {
     const addr = item?.tokenAddress as string | undefined;
-    if (!addr) continue;
-    const chainRaw = item?.chainId;
-    const chain =
-      typeof chainRaw === "string" && chainRaw.trim()
-        ? chainRaw.trim()
-        : "solana";
+    if (!addr || hasUsableCreatedAt(item)) continue;
+    const chain = itemChain(item);
     const key = `${chain}:${addr}`;
-    if (!missingKeys.has(key) || addedKeys.has(key)) continue;
+    if (addedKeys.has(key)) continue;
+    if (ageRecordCovers(dbRecs.get(ageKey(chain, addr)))) continue;
     addedKeys.add(key);
     pairs.push({ chain, addr, key });
   }
 
-  if (!pairs.length) {
-    return items.map((it) => {
-      if (!hasUsableCreatedAt(it)) return it;
-      const n = normalizeEpochToSeconds(it?.createdAt);
-      return typeof n === "number" ? { ...it, createdAt: n } : it;
-    });
-  }
+  if (!pairs.length) return withDb;
 
   const times = await Promise.all(
     pairs.map((p) =>
-      limiter(() => fetchCreationInfo(p.addr, p.chain, apiKey))
+      limiter(() => fetchCreationInfo(p.addr, p.chain))
     )
   );
 
@@ -455,7 +539,7 @@ export async function enrichWithCreationMixedChains(
         limiter(async () => {
           for (const alt of EVM_FALLBACK_CHAINS) {
             if (alt === p.chain) continue;
-            const t = await fetchCreationInfo(p.addr, alt, apiKey, 5000, 1, 1);
+            const t = await fetchCreationInfoUncached(p.addr, alt, apiKey, 5000, 1, 1);
             if (typeof t === "number") {
               byKey.set(p.key, t);
               return;
@@ -466,14 +550,10 @@ export async function enrichWithCreationMixedChains(
     );
   }
 
-  const birdeyeMerged = items.map((it) => {
+  const birdeyeMerged = withDb.map((it) => {
     const addr = it?.tokenAddress as string | undefined;
     if (!addr) return it;
-    const chainRaw = it?.chainId;
-    const chain =
-      typeof chainRaw === "string" && chainRaw.trim()
-        ? chainRaw.trim()
-        : "solana";
+    const chain = itemChain(it);
     const key = `${chain}:${addr}`;
     const createdFromCreationInfo = byKey.get(key);
     const merged =
@@ -489,5 +569,21 @@ export async function enrichWithCreationMixedChains(
     };
   });
 
-  return enrichDexscreenerWhereMissing(birdeyeMerged, concurrency);
+  const finalItems = await enrichDexscreenerWhereMissing(birdeyeMerged, concurrency);
+
+  // 3. Persist results (found + checked-unknown) for the tokens we looked up.
+  const toSave: Array<{ chain: string; address: string; createdAtUnix: number | null; source?: string }> = [];
+  for (const it of finalItems) {
+    const addr = it?.tokenAddress as string | undefined;
+    if (!addr) continue;
+    const chain = itemChain(it);
+    if (!addedKeys.has(`${chain}:${addr}`)) continue;
+    const n = normalizeEpochToSeconds(it?.createdAt);
+    const val =
+      typeof n === "number" && hasUsableCreatedAt({ createdAt: n }) ? n : null;
+    toSave.push({ chain, address: addr, createdAtUnix: val, source: val === null ? "none" : "report" });
+  }
+  await saveAges(toSave);
+
+  return finalItems;
 }

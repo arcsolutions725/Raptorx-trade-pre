@@ -13,6 +13,7 @@ import ChatInput, {
   type ClawSelectionContext,
 } from "./_components/chat/ChatInput";
 import { CLAW_V5_PENDING_STREAM_KEY } from "@/lib/clawV5/streamingReportDisplay";
+import { consumeClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
 import RexHeader from "@/components/ui/layout/Header";
 import Footer from "@/components/ui/layout/Footer";
 import {
@@ -51,6 +52,53 @@ export default function ClawV5Page() {
   const [marketMode, setMarketMode] = useState<PredictionMarketMode>("Markets");
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallLimitCode, setPaywallLimitCode] = useState<PaywallLimitCode | null>(null);
+  const welcomeScrollRef = useRef<HTMLDivElement | null>(null);
+  const scrollIntentRef = useRef<{ read: boolean; toInput: boolean }>({
+    read: false,
+    toInput: false,
+  });
+
+  // Where the mobile welcome screen lands on arrival:
+  //   - via the header's "Claw AI 5.0" button → bottom (prompt cards + input)
+  //   - refresh / direct visit               → top (logo + title)
+  // (Not gated on `isLoading` — that only tracks the sidebar's chat fetch and
+  // never resolves when signed out, but the welcome content renders regardless.)
+  useEffect(() => {
+    if (isSending) return;
+    if (typeof window === "undefined") return;
+
+    const el = welcomeScrollRef.current;
+    if (!el) return;
+
+    // Consume once per mount — StrictMode re-runs this effect, and the flag is
+    // cleared on first read.
+    if (!scrollIntentRef.current.read) {
+      scrollIntentRef.current = {
+        read: true,
+        toInput: consumeClawV5ScrollToInput(),
+      };
+    }
+
+    // Mobile only — on md+ the content fits and the centered layout looks right.
+    const isMobile = !window.matchMedia("(min-width: 768px)").matches;
+    if (!isMobile || !scrollIntentRef.current.toInput) {
+      el.scrollTop = 0;
+      return;
+    }
+
+    const toBottom = () => {
+      el.scrollTop = el.scrollHeight;
+    };
+    toBottom();
+    // Images/fonts settle after first paint and grow the content — re-pin.
+    const rafId = requestAnimationFrame(toBottom);
+    const timerId = window.setTimeout(toBottom, 300);
+
+    return () => {
+      cancelAnimationFrame(rafId);
+      window.clearTimeout(timerId);
+    };
+  }, [isSending]);
 
   // Fetch user ID
   useEffect(() => {
@@ -358,7 +406,10 @@ export default function ClawV5Page() {
 
             <div className="flex-1 flex flex-col bg-black min-w-0 min-h-0">
               {/* Scroll matches chat thread: custom scrollbar + min-h-0 flex fix */}
-              <div className="flex-1 overflow-y-auto overflow-x-clip min-h-0 custom-chat-messages-scrollbar px-2 md:px-4 pt-14 md:pt-8 pb-2">
+              <div
+                ref={welcomeScrollRef}
+                className="flex-1 overflow-y-auto overflow-x-clip min-h-0 custom-chat-messages-scrollbar px-2 md:px-4 pt-2 md:pt-8 pb-2"
+              >
                 <div
                   className={`mx-auto w-full max-w-4xl flex flex-col pb-3 md:pb-6 ${
                     isSending
@@ -376,7 +427,7 @@ export default function ClawV5Page() {
                 ) : (
                   <>
                     {/* Claw v5 Icon */}
-                    <div className="mb-4 md:mb-8 w-14 h-14 md:w-24 md:h-24 relative">
+                    <div className="mb-2 md:mb-8 w-12 h-12 md:w-24 md:h-24 relative">
                       <Image
                         src="/images/claw-v5.webp"
                         alt="Claw v5"
@@ -387,7 +438,7 @@ export default function ClawV5Page() {
                     </div>
 
                     {/* Welcome Message */}
-                    <h1 className="text-lg md:text-xl font-semibold! text-white/85 mb-4 md:mb-8 text-center px-2 md:px-4 leading-snug max-w-[22rem] md:max-w-none">
+                    <h1 className="text-[18px] md:text-xl font-semibold! text-white/85 mb-7 md:mb-8 text-center px-2 md:px-4 leading-snug max-w-[22rem] md:max-w-none">
                       Claw: The Thinking Engine for Prediction Markets & Crypto
                     </h1>
 
@@ -400,16 +451,16 @@ export default function ClawV5Page() {
                           )
                         }
                         disabled={!authenticated}
-                        className="bg-[#141414] border border-[#3C3C3C] hover:border-[#FFC000]/40 rounded-2xl p-4 md:p-6 text-left transition-colors w-full shadow-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-[#3C3C3C]"
+                        className="bg-[#141414] border border-[#3C3C3C] hover:border-[#FFC000]/40 rounded-2xl p-2 md:p-6 text-left transition-colors w-full shadow-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-[#3C3C3C]"
                       >
                         <div className="flex items-center gap-3 mb-3">
-                          <span className="w-11 h-11 flex items-center justify-center overflow-hidden">
+                          <span className="w-9 h-9 md:w-11 md:h-11 flex items-center justify-center overflow-hidden">
                             <Image
                               src="/images/market-prompt.webp"
                               alt="Markets Prompt"
                               width={28}
                               height={28}
-                              className="w-11 h-11 object-contain"
+                              className="w-9 h-9 md:w-11 md:h-11 object-contain"
                               priority
                             />
                           </span>
@@ -434,13 +485,13 @@ export default function ClawV5Page() {
                         className="bg-[#141414] border border-[#3C3C3C] hover:border-[#FFC000]/40 rounded-2xl p-4 md:p-6 text-left transition-colors w-full shadow-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-[#3C3C3C]"
                       >
                         <div className="flex items-center gap-3 mb-3">
-                          <span className="w-11 h-11 flex items-center justify-center overflow-hidden">
+                          <span className="w-9 h-9 md:w-11 md:h-11 flex items-center justify-center overflow-hidden">
                             <Image
                               src="/images/crypto-prompt.webp"
                               alt="Crypto Prompt"
                               width={28}
                               height={28}
-                              className="w-11 h-11 object-contain"
+                              className="w-9 h-9 md:w-11 md:h-11 object-contain"
                               priority
                             />
                           </span>

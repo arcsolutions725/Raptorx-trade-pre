@@ -28,6 +28,7 @@ import {
 } from "@/hooks/useReports";
 import { useRegenerateReport } from "@/hooks/useRegenerateReport";
 import { PaywallModal, type PaywallLimitCode } from "@/components/ui/modal/PaywallModal";
+import { showErrorNotification } from "@/components/ui/notification";
 import { CoinOMetry } from "@/components/CoinOMetry";
 import { HolderAnalyticsComponent } from "@/components/analytics/HolderAnalytics";
 import { BirdeyeSafetyAnalyticsComponent } from "@/components/analytics/BirdeyeSafetyAnalytics";
@@ -1079,6 +1080,9 @@ export default function ChatInterface({
   const handleSend = useCallback(async () => {
     if (!inputMessage.trim() || sending || !reportData?.id) return;
 
+    // Capture the text now so we can restore it into the box if the send fails —
+    // otherwise a failed follow-up just vanishes and the user has to retype it.
+    const sentText = inputMessage.trim();
     const nowIso = new Date().toISOString();
     let acc = "";
 
@@ -1098,7 +1102,7 @@ export default function ChatInterface({
       await appendMessage.mutateAsync({
         reportId,
         role: "user",
-        content: inputMessage.trim(),
+        content: sentText,
         timestamp: nowIso,
       });
 
@@ -1107,7 +1111,7 @@ export default function ChatInterface({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           reportId,
-          message: inputMessage.trim(),
+          message: sentText,
           reportData: reportData.content,
           contractAddress: reportData.contractAddress,
           ticker: reportData.ticker,
@@ -1170,7 +1174,16 @@ export default function ChatInterface({
         setPaywallLimitCode(code);
         setShowPaywall(true);
       } else {
+        // Previously this only console.error'd, so a failed follow-up looked like
+        // the message silently vanished. Surface the real error and put the text
+        // back so it isn't lost. The status makes the cause obvious (e.g. 404
+        // "Report not found" = the report isn't persisted server-side).
         console.error("Chat error:", e);
+        const detail = e?.status
+          ? `${e.message || "Request failed"} (${e.status})`
+          : e?.message || "Something went wrong. Please try again.";
+        showErrorNotification(detail);
+        setInputMessage((cur) => (cur.trim() ? cur : sentText));
       }
     } finally {
       abortControllerRef.current = null;
