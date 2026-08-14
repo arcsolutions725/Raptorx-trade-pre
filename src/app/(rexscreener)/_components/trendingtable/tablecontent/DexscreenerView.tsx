@@ -287,6 +287,7 @@ export default function DexscreenerView({
           contractAddress: tokenAddress,
           ticker: token.symbol,
           projectName: token.name,
+          chain: token.chainId,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -352,10 +353,19 @@ export default function DexscreenerView({
 
           <div className="flex items-center gap-2 flex-wrap">
             {isGenerating && countdown !== null ? (
-              <div className={REPORT_BTN_SLOT_CLASS}>
-                <div className="text-[#FFD700] font-bold text-sm animate-pulse">
-                  {countdown}s
+              <div className="flex items-center gap-1">
+                <div className={REPORT_BTN_SLOT_CLASS}>
+                  <div className="text-[#FFD700] font-bold text-sm animate-pulse">
+                    {countdown}s
+                  </div>
                 </div>
+                <GlossyReportButton
+                  label="What's New"
+                  variant="whats-new"
+                  onClick={!authenticated ? handleSignIn : onWhatsNewClick}
+                  disabled={!ready || whatsNewLoading}
+                  ariaLabel={`What's New for ${token?.symbol || title || "token"}`}
+                />
               </div>
             ) : (
               <div className="flex items-center gap-1">
@@ -370,7 +380,7 @@ export default function DexscreenerView({
                   label="What's New"
                   variant="whats-new"
                   onClick={!authenticated ? handleSignIn : onWhatsNewClick}
-                  disabled={isGenerating || !ready || whatsNewLoading}
+                  disabled={!ready || whatsNewLoading}
                   ariaLabel={`What's New for ${token?.symbol || title || "token"}`}
                 />
               </div>

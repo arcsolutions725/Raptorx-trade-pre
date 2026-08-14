@@ -341,6 +341,7 @@ export function TableRow({
           contractAddress: token.tokenAddress,
           ticker: token.symbol,
           projectName: token.name,
+          chain: token.chainId,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -488,67 +489,65 @@ export function TableRow({
       <div
         className={`sm:sticky sm:left-100 relative h-auto min-h-12.75 w-full sm:z-10 flex items-center justify-center px-3 py-1 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
       >
-        {isGenerating && countdown !== null ? (
-          <div className="flex flex-col items-center">
-            <div className="text-[#FFD700] font-bold text-lg animate-pulse">
-              {countdown}s
+        <div className="flex flex-col items-center justify-center gap-0.5">
+          {isGenerating && countdown !== null ? (
+            <div className="flex h-7.5 w-17.5 items-center justify-center">
+              <div className="text-[#FFD700] font-bold text-lg animate-pulse">
+                {countdown}s
+              </div>
             </div>
-          </div>
-        ) : (
-          <>
-            <div className="flex flex-col items-center justify-center gap-0.5">
-              <GlossyReportButton
-                label="Full Report"
-                variant="full-report"
-                onClick={!authenticated ? handleSignIn : onGenerateClick}
-                disabled={isGenerating || !ready || whatsNewLoading}
-                ariaLabel={`Full Report for ${displayName}`}
-              />
-              <GlossyReportButton
-                label="What's New"
-                variant="whats-new"
-                onClick={!authenticated ? handleSignIn : onWhatsNewClick}
-                disabled={isGenerating || !ready || whatsNewLoading}
-                ariaLabel={`What's New for ${displayName}`}
-              />
-            </div>
+          ) : (
+            <GlossyReportButton
+              label="Full Report"
+              variant="full-report"
+              onClick={!authenticated ? handleSignIn : onGenerateClick}
+              disabled={isGenerating || !ready || whatsNewLoading}
+              ariaLabel={`Full Report for ${displayName}`}
+            />
+          )}
+          <GlossyReportButton
+            label="What's New"
+            variant="whats-new"
+            onClick={!authenticated ? handleSignIn : onWhatsNewClick}
+            disabled={!ready || whatsNewLoading}
+            ariaLabel={`What's New for ${displayName}`}
+          />
+        </div>
 
-            <a
-              href={explorerUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-lg text-[#ffc000] transition-colors cursor-pointer hover:text-[#ffda44]"
-              aria-label={`View on ${
-                isBaseChain
-                  ? "BaseScan"
-                  : isEthereumChain
-                    ? "Etherscan"
-                  : isBnbChain
-                    ? "BSCScan"
-                    : isMonadChain
-                      ? "MonadScan"
-                      : isRobinhoodChain
-                        ? "Robinhood"
-                        : "SolScan"
-              }`}
-              title={`View token on ${
-                isBaseChain
-                  ? "BaseScan"
-                  : isEthereumChain
-                    ? "Etherscan"
-                  : isBnbChain
-                    ? "BSCScan"
-                    : isMonadChain
-                      ? "MonadScan"
-                      : isRobinhoodChain
-                        ? "Robinhood"
-                        : "SolScan"
-              }`}
-            >
-              <ExternalLink className="w-3.5 h-3.5" />
-            </a>
-          </>
-        )}
+        <a
+          href={explorerUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-lg text-[#ffc000] transition-colors cursor-pointer hover:text-[#ffda44]"
+          aria-label={`View on ${
+            isBaseChain
+              ? "BaseScan"
+              : isEthereumChain
+                ? "Etherscan"
+              : isBnbChain
+                ? "BSCScan"
+                : isMonadChain
+                  ? "MonadScan"
+                  : isRobinhoodChain
+                    ? "Robinhood"
+                    : "SolScan"
+          }`}
+          title={`View token on ${
+            isBaseChain
+              ? "BaseScan"
+              : isEthereumChain
+                ? "Etherscan"
+              : isBnbChain
+                ? "BSCScan"
+                : isMonadChain
+                  ? "MonadScan"
+                  : isRobinhoodChain
+                    ? "Robinhood"
+                    : "SolScan"
+          }`}
+        >
+          <ExternalLink className="w-3.5 h-3.5" />
+        </a>
       </div>
 
       {/* Market Cap — 24h price %-based multiplier */}

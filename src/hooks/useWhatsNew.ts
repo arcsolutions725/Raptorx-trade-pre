@@ -7,6 +7,7 @@ type Args = {
   contractAddress: string;
   ticker: string;
   projectName?: string;
+  chain?: string;
 };
 
 export function useWhatsNew(userId?: string | null) {
@@ -21,7 +22,7 @@ export function useWhatsNew(userId?: string | null) {
   }, []);
 
   const fetchWhatsNew = useCallback(
-    async ({ contractAddress, ticker, projectName }: Args) => {
+    async ({ contractAddress, ticker, projectName, chain }: Args) => {
       if (!userId) throw new Error("Sign in to view What's New.");
       if (!ticker?.trim()) {
         throw new Error("Missing ticker.");
@@ -44,6 +45,7 @@ export function useWhatsNew(userId?: string | null) {
             contractAddress,
             ticker,
             projectName,
+            chain,
           }),
         });
         const json = await res.json().catch(() => ({}));

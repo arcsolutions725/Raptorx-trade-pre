@@ -1,16 +1,16 @@
 # Graph Report - RaptorXchange  (2026-08-14)
 
 ## Corpus Check
-- 584 files · ~2,774,976 words
+- 584 files · ~2,774,888 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3251 nodes · 7181 edges · 292 communities (191 shown, 101 thin omitted)
+- 3251 nodes · 7181 edges · 291 communities (190 shown, 101 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 50 edges (avg confidence: 0.7)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `0dcfc965`
+- Built from commit: `7e50f3af`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -258,7 +258,6 @@
 - dev-ipv4.mjs
 - config/index.ts
 - vercel.json
-- copy-to-clipboard
 - @privy-io/server-auth
 - recharts
 - sharp
@@ -292,7 +291,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (292 total, 101 thin omitted)
+## Communities (291 total, 101 thin omitted)
 
 ### Community 0 - "shared/ProbabilityChart.tsx"
 Cohesion: 0.06
@@ -303,7 +302,7 @@ Cohesion: 0.14
 Nodes (25): ChatSidebar(), ChatSidebarProps, RexChat(), RexChatProps, User, ChatInterface(), DexScreenerPair, isDexScreenerPair() (+17 more)
 
 ### Community 2 - "KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx"
-Cohesion: 0.09
+Cohesion: 0.08
 Nodes (47): BuySellWidget(), BuySellWidgetProps, BuySellWidget(), BuySellWidgetProps, LimitlessMarketOption, MyriadBuySellWidget(), MyriadBuySellWidgetProps, OutcomeOpt (+39 more)
 
 ### Community 3 - "trending/route.ts"
@@ -431,8 +430,8 @@ Cohesion: 0.11
 Nodes (22): usePredictFunCategorySubTags(), usePredictFunPoliticsSubTags(), PREDICT_FUN_CATEGORY_SUB_TAG_SPECS, PREDICT_FUN_NO_SUB_TAG_PARENT_IDS, predictFunCategoryHasSubTags(), PredictFunCategorySubTag, PredictFunCategorySubTagSpec, predictFunSubTagIdFromLabel() (+14 more)
 
 ### Community 35 - "predictFunRedeem.ts"
-Cohesion: 0.11
-Nodes (26): ensureBnbChain(), PrivyWalletLike, usePredictFunRedeem(), PREDICT_FUN_ADDRESSES_BY_CHAIN_ID, PredictFunChainId, predictFunConditionalTokensAddress(), predictFunExchangeAddress(), PredictFunMarketFlags (+18 more)
+Cohesion: 0.07
+Nodes (42): ensureBnbChain(), PrivyWalletLike, usePredictFunRedeem(), buildPredictFunLimitOrder(), PREDICT_FUN_ADDRESSES_BY_CHAIN_ID, PREDICT_FUN_EIP712_DOMAIN, PREDICT_FUN_ORDER_STRUCTURE, PredictFunChainId (+34 more)
 
 ### Community 36 - "Robinhood Launchpad — Curve & Accounting Specification"
 Cohesion: 0.15
@@ -527,7 +526,7 @@ Cohesion: 0.39
 Nodes (8): buildTweetSearchQueries(), getTweetsSearch(), mapTweet(), mergeTweets(), sanitizeTicker(), searchTweetsOnce(), tweetFetchErrorMessage(), TWITTER_API_KEY
 
 ### Community 60 - "utils/polymarketTrading.ts"
-Cohesion: 0.11
+Cohesion: 0.12
 Nodes (20): GET(), KalshiOrderBook(), KalshiOrderBookProps, MyriadOrderBook(), MyriadOrderBookProps, OutcomeOpt, OrderBook(), OrderBookProps (+12 more)
 
 ### Community 61 - "PredictFunBuySellWidget.tsx"
@@ -547,8 +546,8 @@ Cohesion: 0.15
 Nodes (15): AIGeneratedMarketsReport(), AIGeneratedMarketsReportProps, AssistantAvatar, EmptyState, EmptyStateProps, markdownComponents, pickMarketImageFromData(), rehypePlugins (+7 more)
 
 ### Community 65 - "orderEip712.ts"
-Cohesion: 0.18
-Nodes (16): buildPredictFunLimitOrder(), PREDICT_FUN_EIP712_DOMAIN, PREDICT_FUN_ORDER_STRUCTURE, PredictFunContractOrder, PredictFunOrderSide, predictFunPriceFraction(), predictFunPricePerShareWei(), PredictFunSignatureType (+8 more)
+Cohesion: 0.16
+Nodes (16): formatDate(), formatPrice(), formatSize(), PolymarketInfoModal(), PolymarketInfoModalProps, marketTitleCache, useMarketTitles(), usePolymarketTradesSync() (+8 more)
 
 ### Community 66 - "useRegenerateReport.ts"
 Cohesion: 0.13
@@ -556,7 +555,7 @@ Nodes (16): GET(), createAnalysisPrompt(), deepseekClient, fetchTradingViewData(
 
 ### Community 67 - "dependencies"
 Cohesion: 0.12
-Nodes (17): ai, ethers, @heliofi/checkout-react, dependencies, ai, ethers, @heliofi/checkout-react, @phantom/browser-sdk (+9 more)
+Nodes (17): copy-to-clipboard, ethers, @heliofi/checkout-react, dependencies, copy-to-clipboard, ethers, @heliofi/checkout-react, @phantom/browser-sdk (+9 more)
 
 ### Community 68 - "manifest.json"
 Cohesion: 0.12
@@ -614,10 +613,6 @@ Nodes (17): GET(), GET(), POST(), GET(), defaultMyriadOrdersNetworkId(), GET(), 
 Cohesion: 0.17
 Nodes (12): 14.10 Universal hook responsibilities, 14.11 Protected split-routing algorithm, 14.1 Launch token, 14.2 Launch and pool registry, 14.3 Per-launch fee and reward policy, 14.4 Eligibility registry, 14.5 One-person/one-reward-wallet registry, 14.6 Fee splitter (+4 more)
 
-### Community 82 - "useResolveScreenerTokenSlug.ts"
-Cohesion: 0.29
-Nodes (13): useMyriadOrdersHistory(), useMyriadUserMarketsModal(), useMyriadUserTradeEvents(), MyriadOrderRowParsed, MyriadUserEventRowParsed, MyriadUserMarketPositionRow, numOr0(), parseMyriadOrdersListPayload() (+5 more)
-
 ### Community 83 - "MyriadActivity.tsx"
 Cohesion: 0.43
 Nodes (5): MyriadActivity(), EventsResponse, MyriadMarketEvent, useMyriadMarketEvents(), getTimeAgo()
@@ -635,8 +630,8 @@ Cohesion: 0.32
 Nodes (9): POST(), requireUserId(), attachReferralOnce(), generateUniqueReferralCode(), generateUniqueUsername(), generateUsername(), GET(), POST() (+1 more)
 
 ### Community 87 - "parseMyriadModalApi.ts"
-Cohesion: 0.06
-Nodes (55): formatDate(), formatKalshiDate(), formatKalshiFillPrice(), formatKalshiFillTime(), formatPrice(), formatSize(), MarketInfoModal(), MarketInfoModalProps (+47 more)
+Cohesion: 0.07
+Nodes (52): formatDate(), formatKalshiDate(), formatKalshiFillPrice(), formatKalshiFillTime(), formatPrice(), formatSize(), MarketInfoModal(), MarketInfoModalProps (+44 more)
 
 ### Community 88 - "marketDocument.ts"
 Cohesion: 0.31
@@ -898,7 +893,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.034) - this node is a cross-community bridge._
 - **Why does `useReportGenStatus()` connect `useReportGenStatus` to `AIGeneratedMarketsReport.tsx`, `MarketDataTable/index.tsx`, `usePhantomConnect`, `Footer.tsx`, `_components/rexchat/ChatInterface.tsx`, `dexscreener.ts`, `useGenerateRexReport.ts`?**
   _High betweenness centrality (0.029) - this node is a cross-community bridge._
-- **Why does `showErrorNotification()` connect `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx` to `RexMarketsCardView.tsx`, `_components/rexchat/ChatInterface.tsx`, `[id]/page.tsx`, `AccountModal.tsx`, `politicsTags.ts`, `PredictFunMarketInfoPanel.tsx`, `parseMyriadModalApi.ts`, `predictFunOutcomePrices.ts`?**
+- **Why does `showErrorNotification()` connect `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx` to `orderEip712.ts`, `RexMarketsCardView.tsx`, `_components/rexchat/ChatInterface.tsx`, `[id]/page.tsx`, `AccountModal.tsx`, `politicsTags.ts`, `PredictFunMarketInfoPanel.tsx`, `parseMyriadModalApi.ts`, `predictFunOutcomePrices.ts`?**
   _High betweenness centrality (0.026) - this node is a cross-community bridge._
 - **What connects `__filename`, `__dirname`, `compat` to the rest of the system?**
   _805 weakly-connected nodes found - possible documentation gaps or missing edges._
@@ -907,4 +902,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `useMyriadAmmTrade.ts` be split into smaller, more focused modules?**
   _Cohesion score 0.13725490196078433 - nodes in this community are weakly interconnected._
 - **Should `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.08619777895293496 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.08173076923076923 - nodes in this community are weakly interconnected._

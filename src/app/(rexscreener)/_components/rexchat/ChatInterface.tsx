@@ -28,6 +28,13 @@ import {
 } from "@/hooks/useReports";
 import { useRegenerateReport } from "@/hooks/useRegenerateReport";
 import { PaywallModal, type PaywallLimitCode } from "@/components/ui/modal/PaywallModal";
+import {
+  WhatsNewModal,
+} from "@/components/ui/modal/WhatsNewModal";
+import { ProjectSocialLinks } from "@/components/ui/ProjectSocialLinks";
+import { collectProjectSocials } from "@/lib/api/projectSocials";
+import { GlossyReportButton } from "@/app/(rexscreener)/_components/trendingtable/tablecontent/GlossyReportButton";
+import { useWhatsNew } from "@/hooks/useWhatsNew";
 import { showErrorNotification } from "@/components/ui/notification";
 import { CoinOMetry } from "@/components/CoinOMetry";
 import { HolderAnalyticsComponent } from "@/components/analytics/HolderAnalytics";
@@ -172,6 +179,14 @@ export default function ChatInterface({
   const [shouldAutoScroll, setShouldAutoScroll] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallLimitCode, setPaywallLimitCode] = useState<PaywallLimitCode | null>(null);
+  const [whatsNewOpen, setWhatsNewOpen] = useState(false);
+  const {
+    loading: whatsNewLoading,
+    error: whatsNewError,
+    result: whatsNewResult,
+    fetchWhatsNew,
+    clear: clearWhatsNew,
+  } = useWhatsNew(userId);
 
   // BNB Analytics state - now using stored data with fallback to API
   const [holderAnalytics, setHolderAnalytics] =
@@ -283,6 +298,11 @@ export default function ChatInterface({
     const dd = reportData?.dexData as unknown;
     return isDexScreenerPair(dd) ? (dd as DexScreenerPair) : undefined;
   }, [reportData?.dexData]);
+
+  const projectLinks = useMemo(
+    () => collectProjectSocials({ info: dexData?.info }),
+    [dexData],
+  );
 
   const isBNBToken = useMemo(
     () =>
@@ -590,10 +610,24 @@ export default function ChatInterface({
     }
   };
 
+  const onWhatsNewClick = async () => {
+    const ticker = String(reportData?.ticker || "").trim();
+    if (!ticker) return;
+    setWhatsNewOpen(true);
+    try {
+      await fetchWhatsNew({
+        contractAddress: String(reportData?.contractAddress || ""),
+        ticker,
+        projectName: reportData?.projectName || undefined,
+        chain: reportData?.chain || undefined,
+      });
+    } catch {
+      // error is already stored on the hook
+    }
+  };
+
   const logo = dexData?.info?.imageUrl;
   const headerImage = dexData?.info?.header;
-  const websites = dexData?.info?.websites || [];
-  const socials = dexData?.info?.socials || [];
 
   function renderTweetsSection(): React.ReactNode {
     const tweetsData = reportData?.tweetsData;
@@ -1277,6 +1311,11 @@ export default function ChatInterface({
               </h2>
             </div>
 
+            <ProjectSocialLinks
+              links={projectLinks}
+              className="justify-center"
+            />
+
             {/* Last updated timestamp (placed outside row for proper centering) */}
             <p className="text-sm text-white/60 -mt-2 text-center w-full">
               {formatRelativeTime(reportData.updatedAt)}
@@ -1292,55 +1331,20 @@ export default function ChatInterface({
                   className="rounded-lg border border-white/10 object-cover w-[200] h-[60]"
                 />
               )}
-              <div className="flex fle-row justify-center w-full gap-8 mt-1">
-                {websites?.[0]?.url && (
-                  <a
-                    href={websites[0].url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="text-white/60 hover:text-white transition"
-                  >
-                    <Image
-                      src={"/images/earth.png"}
-                      alt="earth png"
-                      width={28}
-                      height={25}
-                    />
-                  </a>
-                )}
-                {socials?.map((s, idx) => {
-                  if (!s.url) return null;
-                  const isX = s.type === "twitter";
-                  const isTg = s.type === "telegram";
-                  const icon = isX
-                    ? "/images/x.png"
-                    : isTg
-                    ? "/images/telegram.png"
-                    : null;
-                  if (!icon) return null;
-                  return (
-                    <a
-                      key={idx}
-                      href={s.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-white/60 hover:text-white transition"
-                    >
-                      <Image
-                        src={icon}
-                        alt={`${s.type} icon`}
-                        width={25}
-                        height={25}
-                      />
-                    </a>
-                  );
-                })}
-              </div>
             </div>
           </div>
 
           <div className="w-full flex flex-wrap items-center justify-between gap-2">
-            <RegenerateButton />
+            <div className="flex flex-wrap items-center gap-2">
+              <RegenerateButton />
+              <GlossyReportButton
+                label="What's New"
+                variant="whats-new"
+                onClick={onWhatsNewClick}
+                disabled={whatsNewLoading}
+                ariaLabel="What's New"
+              />
+            </div>
             <div className="flex items-center">
               <CopyContractAddressButton
                 contractaddress={reportData?.contractAddress ?? ""}
@@ -1473,6 +1477,17 @@ export default function ChatInterface({
       context="rexscreener"
       limitCode={paywallLimitCode ?? undefined}
       paymentMetadata={{ userId }}
+    />
+    <WhatsNewModal
+      open={whatsNewOpen}
+      onClose={() => {
+        setWhatsNewOpen(false);
+        clearWhatsNew();
+      }}
+      loading={whatsNewLoading}
+      error={whatsNewError}
+      result={whatsNewResult}
+      fallbackLinks={projectLinks}
     />
   </>
   );

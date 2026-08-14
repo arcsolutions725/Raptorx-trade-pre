@@ -3,6 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
 import { getTweetsSearch } from "@/lib/api/tweet";
+import { getDexscreenerData } from "@/lib/api/dexscreener";
+import {
+  collectProjectSocials,
+  type ProjectSocialLinks,
+} from "@/lib/api/projectSocials";
 import {
   formatTweetsForPrompt,
   selectTopQualityTweets,
@@ -20,6 +25,25 @@ function requireUserId(req: NextRequest): string {
   return uid;
 }
 
+async function loadProjectSocials(
+  contractAddress: string,
+  chain?: string,
+): Promise<ProjectSocialLinks> {
+  if (!contractAddress) return {};
+  try {
+    const dex = await Promise.race([
+      getDexscreenerData(contractAddress, chain),
+      new Promise<{ error: string }>((resolve) =>
+        setTimeout(() => resolve({ error: "timeout" }), 6000),
+      ),
+    ]);
+    if (!dex || "error" in dex) return {};
+    return collectProjectSocials({ info: dex.info });
+  } catch {
+    return {};
+  }
+}
+
 /**
  * POST /api/whats-new
  * Lightweight "What's New" brief: top 5 quality tweets + one-paragraph interpretation.
@@ -32,6 +56,10 @@ export async function POST(req: NextRequest) {
     const ticker = String(body?.ticker || "").trim();
     const projectName =
       typeof body?.projectName === "string" ? body.projectName.trim() : "";
+    const chain =
+      typeof body?.chain === "string" ? body.chain.trim() : "";
+
+    const socialsPromise = loadProjectSocials(contractAddress, chain || undefined);
 
     if (!ticker) {
       return NextResponse.json(
@@ -58,6 +86,7 @@ export async function POST(req: NextRequest) {
       );
     } catch (tweetErr: any) {
       console.error("whats-new: tweet fetch failed:", tweetErr?.message || tweetErr);
+      const links = await socialsPromise;
       return NextResponse.json({
         ok: true,
         summary:
@@ -69,6 +98,7 @@ export async function POST(req: NextRequest) {
           ticker,
           projectName: projectName || null,
           generatedAt: new Date().toISOString(),
+          links,
         },
       });
     }
@@ -78,6 +108,7 @@ export async function POST(req: NextRequest) {
         typeof tweetsResult.error === "string"
           ? tweetsResult.error
           : tweetsResult.error?.message || "Tweet search is temporarily unavailable.";
+      const links = await socialsPromise;
       return NextResponse.json({
         ok: true,
         summary: `${detail} Try What's New again in a moment.`,
@@ -88,6 +119,7 @@ export async function POST(req: NextRequest) {
           ticker,
           projectName: projectName || null,
           generatedAt: new Date().toISOString(),
+          links,
         },
       });
     }
@@ -135,6 +167,7 @@ ${formatTweetsForPrompt(top)}`;
       }
     }
 
+    const links = await socialsPromise;
     return NextResponse.json({
       ok: true,
       summary,
@@ -145,6 +178,7 @@ ${formatTweetsForPrompt(top)}`;
         ticker,
         projectName: projectName || null,
         generatedAt: new Date().toISOString(),
+        links,
       },
     });
   } catch (e: any) {

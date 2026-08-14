@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "src/app/(rexscreener)/_components/rexchat/ChatInterface.tsx": {
-    "mtime": 1786590289.7243023,
-    "ast_hash": "3d2caad036e9c02e550f54f3e7cc67ce",
+    "mtime": 1786700719.831468,
+    "ast_hash": "ec945827ec8c5a7a983fd0fb6c617722",
     "semantic_hash": ""
   },
   "src/app/(rexscreener)/_components/rexchat/ChatSidebar.tsx": {
@@ -170,8 +170,8 @@
     "semantic_hash": "fcf56348f0bbf8e5e2adf68d16d13a97"
   },
   "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx": {
-    "mtime": 1786691104.6691484,
-    "ast_hash": "7e9ff311634fc4686fac9062c74622f7",
+    "mtime": 1786700607.2340076,
+    "ast_hash": "5d3bd5c11214224ebe7a072b188a94f5",
     "semantic_hash": ""
   },
   "src/app/(rexscreener)/_components/trendingtable/tablecontent/ExplorerModal.tsx": {
@@ -185,8 +185,8 @@
     "semantic_hash": "98824b9d3f3850ae46d02e91c71f4390"
   },
   "src/app/(rexscreener)/_components/trendingtable/tablecontent/TableRow.tsx": {
-    "mtime": 1786691112.4607923,
-    "ast_hash": "1ad3b713299cda757302d38fd45fb501",
+    "mtime": 1786700604.430797,
+    "ast_hash": "3a12a5bb8082792a9a91d0fa440b9691",
     "semantic_hash": ""
   },
   "src/app/(rexscreener)/_components/trendingtable/tablecontent/Token24hSparkline.tsx": {
@@ -3395,18 +3395,18 @@
     "semantic_hash": ""
   },
   "src/app/api/whats-new/route.ts": {
-    "mtime": 1786689283.123495,
-    "ast_hash": "3443ece24b65e5d99ffffa46c8a0fb2e",
+    "mtime": 1786700577.5107744,
+    "ast_hash": "2343cd331d1bd8aba32cd0bf80a6111b",
     "semantic_hash": ""
   },
   "src/components/ui/modal/WhatsNewModal.tsx": {
-    "mtime": 1786689915.0676858,
-    "ast_hash": "e1271741e7243aa8adfdd4ccf3ba0774",
+    "mtime": 1786700676.5442154,
+    "ast_hash": "6d843215d71dfce21be9cad1decb1773",
     "semantic_hash": ""
   },
   "src/hooks/useWhatsNew.ts": {
-    "mtime": 1786689283.124495,
-    "ast_hash": "71ffeb6ed8f1fbb1bd0fd383230f13d2",
+    "mtime": 1786700608.2670853,
+    "ast_hash": "24b113f9b7935e2abec6344cf8744dab",
     "semantic_hash": ""
   },
   "src/lib/api/tweetQuality.ts": {
@@ -3427,6 +3427,16 @@
   "public/images/whats-new-transparent.png": {
     "mtime": 1786689283.1204948,
     "ast_hash": "81c6b6a750c3ac1b527677620f1bd7d7",
+    "semantic_hash": ""
+  },
+  "src/components/ui/ProjectSocialLinks.tsx": {
+    "mtime": 1786700693.9275217,
+    "ast_hash": "6ecbdb2f4ba8f2179f4811d9c6c3b04b",
+    "semantic_hash": ""
+  },
+  "src/lib/api/projectSocials.ts": {
+    "mtime": 1786700554.316032,
+    "ast_hash": "0d781b0963e183843a9aa7d43b214dc2",
     "semantic_hash": ""
   }
 }

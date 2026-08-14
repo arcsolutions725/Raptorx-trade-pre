@@ -1187,8 +1187,8 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "package_dependencies_ai",
-      "community": 67,
-      "community_name": "dependencies",
+      "community": 82,
+      "community_name": "useResolveScreenerTokenSlug.ts",
       "norm_label": "ai"
     },
     {
@@ -1198,8 +1198,8 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "ai",
-      "community": 67,
-      "community_name": "dependencies",
+      "community": 82,
+      "community_name": "useResolveScreenerTokenSlug.ts",
       "norm_label": "ai"
     },
     {
@@ -1275,8 +1275,8 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "package_dependencies_copy_to_clipboard",
-      "community": 286,
-      "community_name": "copy-to-clipboard",
+      "community": 67,
+      "community_name": "dependencies",
       "norm_label": "copy-to-clipboard"
     },
     {
@@ -1286,8 +1286,8 @@
       "source_location": "L66",
       "_origin": "ast",
       "id": "copy_to_clipboard",
-      "community": 286,
-      "community_name": "copy-to-clipboard",
+      "community": 67,
+      "community_name": "dependencies",
       "norm_label": "copy-to-clipboard"
     },
     {
@@ -3131,7 +3131,7 @@
       "label": "DexscreenerViewProps",
       "file_type": "code",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L31",
+      "source_location": "L30",
       "_origin": "ast",
       "id": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview_dexscreenerviewprops",
       "community": 19,
@@ -3142,7 +3142,7 @@
       "label": "DexscreenerView()",
       "file_type": "code",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L48",
+      "source_location": "L47",
       "_origin": "ast",
       "id": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview_dexscreenerview",
       "community": 19,
@@ -17137,8 +17137,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_components_ui_modal_polymarketinfomodal",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "polymarketinfomodal.tsx"
     },
     {
@@ -17148,8 +17148,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_components_ui_modal_polymarketinfomodal_polymarketinfomodalprops",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "polymarketinfomodalprops"
     },
     {
@@ -17159,8 +17159,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "src_components_ui_modal_polymarketinfomodal_formatdate",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "formatdate()"
     },
     {
@@ -17170,8 +17170,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "src_components_ui_modal_polymarketinfomodal_formatprice",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "formatprice()"
     },
     {
@@ -17181,8 +17181,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "src_components_ui_modal_polymarketinfomodal_formatsize",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "formatsize()"
     },
     {
@@ -17192,8 +17192,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "src_components_ui_modal_polymarketinfomodal_polymarketinfomodal",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "polymarketinfomodal()"
     },
     {
@@ -19656,8 +19656,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_usemarkettitle",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "usemarkettitle.ts"
     },
     {
@@ -19667,8 +19667,8 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "src_hooks_usemarkettitle_markettitlecache",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "markettitlecache"
     },
     {
@@ -19678,8 +19678,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "src_hooks_usemarkettitle_usemarkettitle",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "usemarkettitle()"
     },
     {
@@ -19689,8 +19689,8 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "src_hooks_usemarkettitle_usemarkettitles",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "usemarkettitles()"
     },
     {
@@ -19997,8 +19997,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_usemyriadopenordersmodal",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "usemyriadopenordersmodal.ts"
     },
     {
@@ -20008,8 +20008,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "src_hooks_usemyriadopenordersmodal_usemyriadordershistory",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "usemyriadordershistory()"
     },
     {
@@ -20019,8 +20019,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "src_hooks_usemyriadopenordersmodal_usemyriadusermarketsmodal",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "usemyriadusermarketsmodal()"
     },
     {
@@ -20030,8 +20030,8 @@
       "source_location": "L83",
       "_origin": "ast",
       "id": "src_hooks_usemyriadopenordersmodal_usemyriadusertradeevents",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "usemyriadusertradeevents()"
     },
     {
@@ -20503,8 +20503,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_usepolymarkettradessync",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "usepolymarkettradessync.ts"
     },
     {
@@ -20514,8 +20514,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "src_hooks_usepolymarkettradessync_usepolymarkettradessync",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "usepolymarkettradessync()"
     },
     {
@@ -21339,8 +21339,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_useredeemposition",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "useredeemposition.ts"
     },
     {
@@ -21350,8 +21350,8 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "src_hooks_useredeemposition_useredeemposition",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "useredeemposition()"
     },
     {
@@ -21944,8 +21944,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_usetrades",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "usetrades.ts"
     },
     {
@@ -21955,8 +21955,8 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "src_hooks_usetrades_polymarkettrade",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "polymarkettrade"
     },
     {
@@ -21966,8 +21966,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "src_hooks_usetrades_usetrades",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "usetrades()"
     },
     {
@@ -22241,8 +22241,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_useuserposition",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "useuserposition.ts"
     },
     {
@@ -22252,8 +22252,8 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "src_hooks_useuserposition_polymarketposition",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "polymarketposition"
     },
     {
@@ -22263,8 +22263,8 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "src_hooks_useuserposition_useuserpositions",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "useuserpositions()"
     },
     {
@@ -26344,8 +26344,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_lib_myriad_parsemyriadmodalapi",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "parsemyriadmodalapi.ts"
     },
     {
@@ -26355,8 +26355,8 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "src_lib_myriad_parsemyriadmodalapi_myriadorderrowparsed",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "myriadorderrowparsed"
     },
     {
@@ -26366,8 +26366,8 @@
       "source_location": "L19",
       "_origin": "ast",
       "id": "src_lib_myriad_parsemyriadmodalapi_readuintstring",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "readuintstring()"
     },
     {
@@ -26377,8 +26377,8 @@
       "source_location": "L25",
       "_origin": "ast",
       "id": "src_lib_myriad_parsemyriadmodalapi_readmarketid",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "readmarketid()"
     },
     {
@@ -26388,8 +26388,8 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "src_lib_myriad_parsemyriadmodalapi_parsemyriadorderslistpayload",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "parsemyriadorderslistpayload()"
     },
     {
@@ -26421,8 +26421,8 @@
       "source_location": "L82",
       "_origin": "ast",
       "id": "src_lib_myriad_parsemyriadmodalapi_myriadusermarketpositionrow",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "myriadusermarketpositionrow"
     },
     {
@@ -26432,8 +26432,8 @@
       "source_location": "L94",
       "_origin": "ast",
       "id": "src_lib_myriad_parsemyriadmodalapi_myriadusereventrowparsed",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "myriadusereventrowparsed"
     },
     {
@@ -26443,8 +26443,8 @@
       "source_location": "L108",
       "_origin": "ast",
       "id": "src_lib_myriad_parsemyriadmodalapi_numor0",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "numor0()"
     },
     {
@@ -26454,8 +26454,8 @@
       "source_location": "L117",
       "_origin": "ast",
       "id": "src_lib_myriad_parsemyriadmodalapi_readtimestamp",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "readtimestamp()"
     },
     {
@@ -26465,8 +26465,8 @@
       "source_location": "L124",
       "_origin": "ast",
       "id": "src_lib_myriad_parsemyriadmodalapi_parsemyriadusereventspayload",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "parsemyriadusereventspayload()"
     },
     {
@@ -26476,8 +26476,8 @@
       "source_location": "L170",
       "_origin": "ast",
       "id": "src_lib_myriad_parsemyriadmodalapi_parsemyriadusermarketspayload",
-      "community": 82,
-      "community_name": "useResolveScreenerTokenSlug.ts",
+      "community": 87,
+      "community_name": "parseMyriadModalApi.ts",
       "norm_label": "parsemyriadusermarketspayload()"
     },
     {
@@ -28478,8 +28478,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_lib_predictfun_ordereip712",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "ordereip712.ts"
     },
     {
@@ -28500,8 +28500,8 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "src_lib_predictfun_ordereip712_predictfunorderside",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "predictfunorderside"
     },
     {
@@ -28511,8 +28511,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "src_lib_predictfun_ordereip712_predictfunsignaturetype",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "predictfunsignaturetype"
     },
     {
@@ -28533,8 +28533,8 @@
       "source_location": "L13",
       "_origin": "ast",
       "id": "src_lib_predictfun_ordereip712_predictfuncontractorder",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "predictfuncontractorder"
     },
     {
@@ -28544,8 +28544,8 @@
       "source_location": "L34",
       "_origin": "ast",
       "id": "src_lib_predictfun_ordereip712_predict_fun_eip712_domain",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "predict_fun_eip712_domain"
     },
     {
@@ -28555,8 +28555,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "src_lib_predictfun_ordereip712_predict_fun_order_structure",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "predict_fun_order_structure"
     },
     {
@@ -28599,8 +28599,8 @@
       "source_location": "L118",
       "_origin": "ast",
       "id": "src_lib_predictfun_ordereip712_randomsaltstring",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "randomsaltstring()"
     },
     {
@@ -28610,8 +28610,8 @@
       "source_location": "L126",
       "_origin": "ast",
       "id": "src_lib_predictfun_ordereip712_roundpredictfunprice",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "roundpredictfunprice()"
     },
     {
@@ -28621,8 +28621,8 @@
       "source_location": "L133",
       "_origin": "ast",
       "id": "src_lib_predictfun_ordereip712_predictfunpricefraction",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "predictfunpricefraction()"
     },
     {
@@ -28632,8 +28632,8 @@
       "source_location": "L152",
       "_origin": "ast",
       "id": "src_lib_predictfun_ordereip712_predictfunpricepersharewei",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "predictfunpricepersharewei()"
     },
     {
@@ -28643,8 +28643,8 @@
       "source_location": "L159",
       "_origin": "ast",
       "id": "src_lib_predictfun_ordereip712_buildpredictfunlimitorder",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "buildpredictfunlimitorder()"
     },
     {
@@ -30051,8 +30051,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_lib_predictfun_predictfunlimitorderamounts",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "predictfunlimitorderamounts.ts"
     },
     {
@@ -30062,8 +30062,8 @@
       "source_location": "L10",
       "_origin": "ast",
       "id": "src_lib_predictfun_predictfunlimitorderamounts_min_shares_wei",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "min_shares_wei"
     },
     {
@@ -30073,8 +30073,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "src_lib_predictfun_predictfunlimitorderamounts_min_order_wei",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "min_order_wei"
     },
     {
@@ -30084,8 +30084,8 @@
       "source_location": "L17",
       "_origin": "ast",
       "id": "src_lib_predictfun_predictfunlimitorderamounts_retainsignificantdigitswei",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "retainsignificantdigitswei()"
     },
     {
@@ -30095,8 +30095,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "src_lib_predictfun_predictfunlimitorderamounts_assertbuyamountsmatchprice",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "assertbuyamountsmatchprice()"
     },
     {
@@ -30106,8 +30106,8 @@
       "source_location": "L39",
       "_origin": "ast",
       "id": "src_lib_predictfun_predictfunlimitorderamounts_assertsellamountsmatchprice",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "assertsellamountsmatchprice()"
     },
     {
@@ -30117,8 +30117,8 @@
       "source_location": "L55",
       "_origin": "ast",
       "id": "src_lib_predictfun_predictfunlimitorderamounts_buildpredictfunlimitorderamounts",
-      "community": 65,
-      "community_name": "orderEip712.ts",
+      "community": 35,
+      "community_name": "predictFunRedeem.ts",
       "norm_label": "buildpredictfunlimitorderamounts()"
     },
     {
@@ -33219,8 +33219,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "src_providers_tradingprovder_tradingcontext",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "tradingcontext"
     },
     {
@@ -33736,8 +33736,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_utils_polymarkettrading",
-      "community": 60,
-      "community_name": "utils/polymarketTrading.ts",
+      "community": 2,
+      "community_name": "KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx",
       "norm_label": "utils/polymarkettrading.ts"
     },
     {
@@ -33780,8 +33780,8 @@
       "source_location": "L33",
       "_origin": "ast",
       "id": "src_utils_polymarkettrading_gettimerange",
-      "community": 60,
-      "community_name": "utils/polymarketTrading.ts",
+      "community": 2,
+      "community_name": "KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx",
       "norm_label": "gettimerange()"
     },
     {
@@ -33791,8 +33791,8 @@
       "source_location": "L60",
       "_origin": "ast",
       "id": "src_utils_polymarkettrading_getresolution",
-      "community": 60,
-      "community_name": "utils/polymarketTrading.ts",
+      "community": 2,
+      "community_name": "KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx",
       "norm_label": "getresolution()"
     },
     {
@@ -33846,8 +33846,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "src_utils_redeem_redeemparams",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "redeemparams"
     },
     {
@@ -33857,8 +33857,8 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "src_utils_redeem_createredeemtx",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 65,
+      "community_name": "orderEip712.ts",
       "norm_label": "createredeemtx()"
     },
     {
@@ -41464,7 +41464,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L48",
+      "source_location": "L47",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41475,7 +41475,7 @@
       "relation": "contains",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L31",
+      "source_location": "L30",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41487,7 +41487,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L22",
+      "source_location": "L21",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41499,7 +41499,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L28",
+      "source_location": "L27",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41511,7 +41511,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L28",
+      "source_location": "L27",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41523,7 +41523,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L23",
+      "source_location": "L22",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41535,7 +41535,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L23",
+      "source_location": "L22",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41547,7 +41547,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L24",
+      "source_location": "L23",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41559,7 +41559,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L24",
+      "source_location": "L23",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41571,7 +41571,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L24",
+      "source_location": "L23",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41583,7 +41583,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L17",
+      "source_location": "L16",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41595,7 +41595,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L17",
+      "source_location": "L16",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41607,7 +41607,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L29",
+      "source_location": "L28",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41619,7 +41619,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L29",
+      "source_location": "L28",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41631,7 +41631,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L29",
+      "source_location": "L28",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41643,7 +41643,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L18",
+      "source_location": "L17",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41655,7 +41655,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L18",
+      "source_location": "L17",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41667,7 +41667,7 @@
       "context": "import",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L18",
+      "source_location": "L17",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview",
@@ -41692,7 +41692,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L90",
+      "source_location": "L89",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview_dexscreenerview",
@@ -41704,7 +41704,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx",
-      "source_location": "L164",
+      "source_location": "L163",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_dexscreenerview_dexscreenerview",
@@ -42154,7 +42154,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/TableRow.tsx",
-      "source_location": "L242",
+      "source_location": "L240",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_tablerow_tablerow",
@@ -42166,7 +42166,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/TableRow.tsx",
-      "source_location": "L242",
+      "source_location": "L240",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_tablerow_tablerow",
@@ -42178,7 +42178,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/TableRow.tsx",
-      "source_location": "L240",
+      "source_location": "L238",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_tablerow_tablerow",
@@ -42190,7 +42190,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/TableRow.tsx",
-      "source_location": "L246",
+      "source_location": "L244",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_tablerow_tablerow",
@@ -42239,7 +42239,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/TableRow.tsx",
-      "source_location": "L574",
+      "source_location": "L560",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_tablerow_tablerow",
@@ -119363,5 +119363,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "0dcfc96540db33d12834a073962fd5fbdf39ad6c"
+  "built_at_commit": "7e50f3af78f613672e48d301dd61ba1bc2b2546e"
 }

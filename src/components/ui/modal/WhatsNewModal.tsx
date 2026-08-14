@@ -4,6 +4,8 @@ import { useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
 import { X, ExternalLink, Heart, Repeat2, Eye } from "lucide-react";
 import type { WhatsNewTweet } from "@/lib/api/tweetQuality";
+import type { ProjectSocialLinks } from "@/lib/api/projectSocials";
+import { ProjectSocialLinks as SocialLinks } from "@/components/ui/ProjectSocialLinks";
 
 export type WhatsNewResult = {
   summary: string;
@@ -13,6 +15,7 @@ export type WhatsNewResult = {
     ticker: string;
     projectName?: string | null;
     generatedAt?: string;
+    links?: ProjectSocialLinks;
   };
 };
 
@@ -22,6 +25,7 @@ type Props = {
   loading?: boolean;
   error?: string | null;
   result: WhatsNewResult | null;
+  fallbackLinks?: ProjectSocialLinks | null;
 };
 
 function formatCount(n: number): string {
@@ -68,6 +72,7 @@ export function WhatsNewModal({
   loading = false,
   error = null,
   result,
+  fallbackLinks = null,
 }: Props) {
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -108,7 +113,7 @@ export function WhatsNewModal({
         onClick={onClose}
       />
       <div className="relative z-10 flex max-h-[min(88dvh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#121212] shadow-2xl shadow-black/60">
-        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-3">
+        <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
           <div className="min-w-0">
             <div className="text-[11px] font-semibold uppercase tracking-wider text-[#dc143c]">
               What&apos;s New
@@ -121,6 +126,10 @@ export function WhatsNewModal({
                 </span>
               ) : null}
             </div>
+            <SocialLinks
+              links={result?.metadata?.links || fallbackLinks || undefined}
+              className="mt-1.5"
+            />
           </div>
           <button
             type="button"
