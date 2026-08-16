@@ -9,6 +9,7 @@ import {
   getRobinhoodTokenByAddress,
   searchRobinhoodTokens,
 } from "@/lib/robinhoodTokens";
+import { shouldKeepSolanaTrendingToken } from "@/lib/solanaTrendingQuality";
 
 export const dynamic = "force-dynamic";
 
@@ -651,7 +652,9 @@ async function loadSolanaVerifiedPageFromJupiter(opts: {
   if (!catalog?.length) return null;
 
   const filtered = catalog.filter(
-    (n) => (n?.liquidityUsd ?? 0) >= min_liquidity
+    (n) =>
+      (n?.liquidityUsd ?? 0) >= min_liquidity &&
+      shouldKeepSolanaTrendingToken(n)
   );
   const sortV3 = birdeyeV3SortBy(sort_by);
   const sorted = [...filtered];
@@ -1877,8 +1880,12 @@ async function fetchChainTokens(opts: {
 
       // Apply market cap filter for BNB tokens (remove tokens with mc = 0 or null)
       const marketCapFiltered = filterValidMarketCap(filtered, chain);
+      const qualityFiltered =
+        chain === "solana"
+          ? marketCapFiltered.filter(shouldKeepSolanaTrendingToken)
+          : marketCapFiltered;
 
-      collected.push(...marketCapFiltered);
+      collected.push(...qualityFiltered);
 
       if (listed.meta.hasNext === false) break;
       if (listed.tokens.length < listed.meta.pageLimit) break;
@@ -2099,9 +2106,10 @@ export async function POST(request: NextRequest) {
     verifiedTotal = undefined;
   }
 
-  // If we need verified-only pagination, we must over-fetch until we can fill (offset + limit)
-  // If we want the *exact* total of verified that also satisfy Birdeye filters, we must exhaust upstream
-  const needPostFilterPagination = verified_only;
+  // Over-fetch when we drop rows after Birdeye (verified list and/or Solana fakes)
+  // so the page still fills to `limit`.
+  const needQualityFilter = chain === "solana";
+  const needPostFilterPagination = verified_only || needQualityFilter;
   const needVerifiedTotal = verified_only && force_full_scan;
 
   let upstreamTotal: number | undefined;
@@ -2121,7 +2129,7 @@ export async function POST(request: NextRequest) {
 
     const remainingSlots = targetListLen - collected.length;
     const batchLimit =
-      needPostFilterPagination && verifiedSet
+      needPostFilterPagination
         ? BIRDEYE_V3_LIST_MAX
         : Math.min(
             BIRDEYE_V3_LIST_MAX,
@@ -2161,12 +2169,15 @@ export async function POST(request: NextRequest) {
 
     // Apply market cap filter for BNB tokens (remove tokens with mc = 0 or null)
     const afterMarketCapFilter = filterValidMarketCap(afterVerified, chain);
+    const afterQuality = needQualityFilter
+      ? afterMarketCapFilter.filter(shouldKeepSolanaTrendingToken)
+      : afterMarketCapFilter;
 
     // Optimized de-duplication using Set for O(1) lookups
     const seenAddresses = new Set(
       collected.map((x) => (x?.tokenAddress || "").toLowerCase())
     );
-    for (const n of afterMarketCapFilter) {
+    for (const n of afterQuality) {
       const addr = (n?.tokenAddress || "").toLowerCase();
       if (!addr || seenAddresses.has(addr)) continue;
       seenAddresses.add(addr);

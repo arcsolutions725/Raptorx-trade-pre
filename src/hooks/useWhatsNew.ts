@@ -8,6 +8,7 @@ type Args = {
   ticker: string;
   projectName?: string;
   chain?: string;
+  imageUrl?: string;
 };
 
 export function useWhatsNew(userId?: string | null) {
@@ -22,7 +23,7 @@ export function useWhatsNew(userId?: string | null) {
   }, []);
 
   const fetchWhatsNew = useCallback(
-    async ({ contractAddress, ticker, projectName, chain }: Args) => {
+    async ({ contractAddress, ticker, projectName, chain, imageUrl }: Args) => {
       if (!userId) throw new Error("Sign in to view What's New.");
       if (!ticker?.trim()) {
         throw new Error("Missing ticker.");
@@ -46,6 +47,7 @@ export function useWhatsNew(userId?: string | null) {
             ticker,
             projectName,
             chain,
+            imageUrl,
           }),
         });
         const json = await res.json().catch(() => ({}));
@@ -56,14 +58,19 @@ export function useWhatsNew(userId?: string | null) {
 
         const next: WhatsNewResult = {
           summary: String(json.summary || ""),
+          paragraphs: Array.isArray(json.paragraphs) ? json.paragraphs : undefined,
           tweets: Array.isArray(json.tweets) ? json.tweets : [],
           metadata: json.metadata,
         };
         setResult(next);
         return next;
       } catch (e: unknown) {
-        const msg =
+        const raw =
           e instanceof Error ? e.message : "Failed to load What's New.";
+        const msg =
+          /prisma|database server|TURBOPACK|pooled\.db/i.test(raw)
+            ? "Couldn't load What's New right now. Please try again."
+            : raw;
         setError(msg);
         throw e;
       } finally {

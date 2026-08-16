@@ -283,11 +283,12 @@ export default function DexscreenerView({
           "Content-Type": "application/json",
           "x-user-id": currentUserId,
         },
-        body: JSON.stringify({
+          body: JSON.stringify({
           contractAddress: tokenAddress,
           ticker: token.symbol,
           projectName: token.name,
           chain: token.chainId,
+          imageUrl: token.logo,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -296,6 +297,7 @@ export default function DexscreenerView({
       }
       setWhatsNewResult({
         summary: String(json.summary || ""),
+        paragraphs: Array.isArray(json.paragraphs) ? json.paragraphs : undefined,
         tweets: Array.isArray(json.tweets) ? json.tweets : [],
         metadata: json.metadata,
       });
@@ -485,6 +487,7 @@ export default function DexscreenerView({
         loading={whatsNewLoading}
         error={whatsNewError}
         result={whatsNewResult}
+        imageUrl={token.logo}
       />
     </div>
   );

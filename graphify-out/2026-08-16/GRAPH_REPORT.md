@@ -1,11 +1,11 @@
 # Graph Report - RaptorXchange  (2026-08-16)
 
 ## Corpus Check
-- 587 files · ~3,364,703 words
+- 587 files · ~3,364,647 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3298 nodes · 7280 edges · 297 communities (195 shown, 102 thin omitted)
+- 3296 nodes · 7278 edges · 294 communities (193 shown, 101 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 52 edges (avg confidence: 0.71)
 - Token cost: 0 input · 0 output
 
@@ -95,6 +95,7 @@
 - golden-reports/projects/route.ts
 - useLimitlessMarkets.ts
 - [id]/page.tsx
+- myriadFetchText
 - ensureOutcomeTokenApproval.ts
 - useResolveScreenerTokenSlug.ts
 - MyriadActivity.tsx
@@ -265,9 +266,7 @@
 - recharts
 - sharp
 - @tiptap/extension-placeholder
-- referral/route.ts
 - bs58
-- volume/route.ts
 
 ## God Nodes (most connected - your core abstractions)
 1. `usePhantomConnect()` - 46 edges
@@ -282,8 +281,6 @@
 10. `showSuccessNotification()` - 27 edges
 
 ## Surprising Connections (you probably didn't know these)
-- `normalizeSourceUrl()` --indirect_call--> `k()`  [INFERRED]
-  src/app/api/claw-v5/chats/[id]/messages/route.ts → src/lib/storage/reportCache.ts
 - `GET()` --indirect_call--> `key()`  [INFERRED]
   src/app/api/limitless/markets-by-category/route.ts → src/lib/goldenReportEditorCache.ts
 - `GET()` --indirect_call--> `k()`  [INFERRED]
@@ -292,31 +289,33 @@
   src/app/api/myriad/holders/route.ts → src/lib/storage/reportCache.ts
 - `fetchBirdeyeSearchTokenResults()` --indirect_call--> `k()`  [INFERRED]
   src/app/api/trending/route.ts → src/lib/storage/reportCache.ts
+- `enrichTokenlistPricePercent24h()` --indirect_call--> `key()`  [INFERRED]
+  src/app/api/trending/route.ts → src/lib/goldenReportEditorCache.ts
 
 ## Import Cycles
 - None detected.
 
-## Communities (297 total, 102 thin omitted)
+## Communities (294 total, 101 thin omitted)
 
 ### Community 0 - "shared/ProbabilityChart.tsx"
-Cohesion: 0.07
-Nodes (60): ChartDataPoint, CustomTooltip(), CustomTooltipProps, filterActiveMarkets(), MARKET_COLORS, MarketKey, PriceChart(), PriceChartProps (+52 more)
+Cohesion: 0.08
+Nodes (54): ChartDataPoint, CustomTooltip(), CustomTooltipProps, filterActiveMarkets(), MARKET_COLORS, MarketKey, PriceChart(), PriceChartProps (+46 more)
 
 ### Community 1 - "useMyriadAmmTrade.ts"
-Cohesion: 0.16
-Nodes (21): ChatSidebar(), ChatSidebarProps, RexChat(), RexChatProps, ChatInterface(), ChatSidebar(), ChatSidebarProps, RexChat() (+13 more)
+Cohesion: 0.12
+Nodes (28): ChatSidebar(), ChatSidebarProps, RexChat(), RexChatProps, ChatInterface(), DexScreenerPair, isDexScreenerPair(), Props (+20 more)
 
 ### Community 2 - "KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx"
-Cohesion: 0.09
-Nodes (43): BuySellWidget(), BuySellWidgetProps, BuySellWidget(), BuySellWidgetProps, LimitlessMarketOption, MyriadBuySellWidget(), MyriadBuySellWidgetProps, OutcomeOpt (+35 more)
+Cohesion: 0.07
+Nodes (45): BuySellWidget(), BuySellWidgetProps, BuySellModal(), BuySellModalProps, BuySellWidget(), BuySellWidgetProps, LimitlessMarketOption, LimitlessVenue (+37 more)
 
 ### Community 3 - "trending/route.ts"
-Cohesion: 0.09
-Nodes (51): applyLiveMarketData(), applyTickerSearchResultFilter(), BIRDEYE_V3_SORT_ALLOWED, BIRDEYE_V3_SORT_LEGACY, birdeyeSearchChainQuery(), birdeyeTokenAddressParam(), birdeyeV3SortBy(), buildAllChainsTickerSearchPage() (+43 more)
+Cohesion: 0.12
+Nodes (35): applyLiveMarketData(), applyTickerSearchResultFilter(), BIRDEYE_V3_SORT_ALLOWED, BIRDEYE_V3_SORT_LEGACY, birdeyeSearchChainQuery(), birdeyeV3SortBy(), clampBirdeyeV3OffsetLimit(), coerceFiniteNumber() (+27 more)
 
 ### Community 4 - "MarketDataTable/index.tsx"
 Cohesion: 0.11
-Nodes (21): Home(), PrivyUserWithEmail, Props, IndicatorType, TechnicalIndicatorProps, TrendingTable(), TrendingTableProps, Props (+13 more)
+Nodes (22): Home(), PrivyUserWithEmail, Props, IndicatorType, TechnicalIndicatorProps, TrendingTable(), TrendingTableProps, DailyTasksPopup() (+14 more)
 
 ### Community 5 - "MarketInfoModal.tsx"
 Cohesion: 0.24
@@ -328,19 +327,19 @@ Nodes (45): eslint, eslint-config-next, @eslint/eslintrc, devDependencies, eslin
 
 ### Community 7 - "usePhantomConnect"
 Cohesion: 0.12
-Nodes (27): GenerateHandler, RexMarketsGenerateReportContext, RexMarketsGenerateReportContextValue, RexMarketsGenerateReportProvider(), RexMarketsReport(), RexMarketsReportProps, RexMarketsTable(), RexMarketsTableProps (+19 more)
+Nodes (28): GenerateHandler, RexMarketsGenerateReportContext, RexMarketsGenerateReportContextValue, RexMarketsGenerateReportProvider(), RexMarketsReport(), RexMarketsReportProps, RexMarketsTable(), RexMarketsTableProps (+20 more)
 
 ### Community 8 - "mapPredictFunMarketRow.ts"
-Cohesion: 0.14
-Nodes (33): GET(), MarketDetails, childNeedsEnrichment(), fetchPredictFunSubMarket(), usePredictFunPilotSubMarkets(), childNeedsStatsEnrichment(), enrichPredictFunCategoryChildren(), mergeChildMarket() (+25 more)
+Cohesion: 0.11
+Nodes (39): GET(), OutcomeOption, PredictFunTradingInterfaceProps, centsFromFirstOutcomeAsk(), extractCategoryNodes(), mapCategoryNodeToRow(), PredictFunCategoryNode, PredictFunMarketRow (+31 more)
 
 ### Community 9 - "useLaunches.ts"
 Cohesion: 0.20
 Nodes (17): createPhantomDeeplinkChain(), PhantomDesktopConnectModal(), Props, registerPhantomStandardWallet(), findPhantomWallet(), PhantomStandardWalletRegistrar(), isPhantomDeeplinkEnv(), onPhantomTakeover() (+9 more)
 
 ### Community 10 - "useReportGenStatus"
-Cohesion: 0.10
-Nodes (24): CATEGORY_MAP, mapCategoryToType(), MarketDataTable(), MarketDataTableProps, MarketsLayoutView, normalizeCategory(), RowsPerPageSelect, RowsPerPageSelectProps (+16 more)
+Cohesion: 0.09
+Nodes (21): CATEGORY_MAP, mapCategoryToType(), MarketDataTable(), MarketDataTableProps, MarketsLayoutView, normalizeCategory(), RowsPerPageSelect, RowsPerPageSelectProps (+13 more)
 
 ### Community 11 - "RexScreenerShell.tsx"
 Cohesion: 0.12
@@ -348,27 +347,27 @@ Nodes (34): RexScreenerChainPage(), RexScreenerTokenPage(), browserPathMatchesTa
 
 ### Community 12 - "approvals.ts"
 Cohesion: 0.09
-Nodes (29): CTF_CONTRACT_ADDRESS, CTF_EXCHANGE_ADDRESS, LIMITLESS_CTF_BASE_ADDRESS, NEG_RISK_ADAPTER_ADDRESS, NEG_RISK_CTF_EXCHANGE_ADDRESS, USDC_BASE_ADDRESS, USDC_E_CONTRACT_ADDRESS, CTF_REDEEM_ABI (+21 more)
+Nodes (30): QUERY_REFETCH_INTERVALS, QUERY_STALE_TIMES, CTF_CONTRACT_ADDRESS, CTF_EXCHANGE_ADDRESS, LIMITLESS_CTF_BASE_ADDRESS, NEG_RISK_ADAPTER_ADDRESS, NEG_RISK_CTF_EXCHANGE_ADDRESS, USDC_BASE_ADDRESS (+22 more)
 
 ### Community 13 - "useWallet"
 Cohesion: 0.12
-Nodes (28): metadata, POLYMARKET_PROFILE_URL(), REMOTE_SIGNING_URL(), useWallet(), WalletContext, WalletContextType, useClobClient(), GeoblockStatus (+20 more)
+Nodes (29): metadata, DepositWithdrawModal(), POLYMARKET_PROFILE_URL(), REMOTE_SIGNING_URL(), useWallet(), WalletContext, WalletContextType, useClobClient() (+21 more)
 
 ### Community 14 - "_components/rexchat/ChatInterface.tsx"
-Cohesion: 0.21
-Nodes (16): GET(), readJwt(), POST(), GET(), GET(), POST(), readJwt(), GET() (+8 more)
+Cohesion: 0.15
+Nodes (13): DexScreenerPair, isDexScreenerPair(), Props, PilotReportHistoryButton(), Props, getRexPilotReportSectionIcon(), renderRexPilotMarkdownSection(), RexPilotReportSectionsStream() (+5 more)
 
 ### Community 15 - "AccountModal.tsx"
-Cohesion: 0.06
-Nodes (54): GET(), normChain(), normContract(), PUT(), requireUserId(), DELETE(), findProjectInsensitive(), GET() (+46 more)
+Cohesion: 0.10
+Nodes (31): GoldenTeamUpdatesEditor(), GoldenTeamUpdatesEditorCore(), GoldenTeamUpdatesEditorCoreProps, GoldenTeamUpdatesEditorProps, ReferralInputProps, ReferralShare(), ReferralShareProps, AccountModal() (+23 more)
 
 ### Community 16 - "market/index.ts"
-Cohesion: 0.10
-Nodes (35): buildRexmarketsEmbedsFromMarketData(), clampInt(), extractDirectMarketLink(), fetchJson(), fetchRexmarketsMarketDetails(), findRexmarketsEmbedsForQuery(), getBaseUrl(), getKalshiDetailsDirect() (+27 more)
+Cohesion: 0.11
+Nodes (33): buildRexmarketsEmbedsFromMarketData(), clampInt(), extractDirectMarketLink(), fetchJson(), fetchRexmarketsMarketDetails(), findRexmarketsEmbedsForQuery(), getBaseUrl(), getKalshiDetailsDirect() (+25 more)
 
 ### Community 17 - "topPredictionMarkets.ts"
-Cohesion: 0.10
-Nodes (31): buildKalshiCards(), buildLimitlessCards(), buildMyriadCards(), buildPolymarketCards(), buildPredictFunCards(), fetchKalshiSeriesDirect(), fetchLimitlessEventsForTop(), fetchLimitlessNavigationDirect() (+23 more)
+Cohesion: 0.09
+Nodes (33): buildKalshiCards(), buildLimitlessCards(), buildMyriadCards(), buildPolymarketCards(), buildPredictFunCards(), fetchKalshiSeriesDirect(), fetchLimitlessEventsForTop(), fetchLimitlessNavigationDirect() (+25 more)
 
 ### Community 18 - "useTrendingTokens.ts"
 Cohesion: 0.19
@@ -379,44 +378,44 @@ Cohesion: 0.19
 Nodes (11): Item, itemsFrom(), ProjectSocialLinks(), Props, absUrl(), classifyHost(), collectProjectSocials(), DexInfo (+3 more)
 
 ### Community 20 - "_components/generatereport/index.tsx"
-Cohesion: 0.09
-Nodes (21): buildPolymarketLimitlessRows(), DenseCardProps, MarketDenseCard, MarketWithSource, OutcomeRowItem, parsePolymarketSubMarketPrices(), parseSubMarketYesProb(), RexMarketsCardViewProps (+13 more)
+Cohesion: 0.10
+Nodes (18): buildPolymarketLimitlessRows(), DenseCardProps, MarketDenseCard, MarketWithSource, OutcomeRowItem, parsePolymarketSubMarketPrices(), parseSubMarketYesProb(), RexMarketsCardViewProps (+10 more)
 
 ### Community 21 - "_components/trendingtable/tablecontent/index.tsx"
-Cohesion: 0.08
-Nodes (31): TokenSearchBar(), TokenSearchBarProps, Chain, ChainButtons(), ChainButtonsProps, SliderStyle, buildChartTitle(), isInGoldenInfoZone() (+23 more)
+Cohesion: 0.09
+Nodes (30): TokenSearchBar(), TokenSearchBarProps, Chain, ChainButtons(), ChainButtonsProps, SliderStyle, buildChartTitle(), isInGoldenInfoZone() (+22 more)
 
 ### Community 22 - "MarketCategory.tsx"
-Cohesion: 0.10
-Nodes (23): CATEGORY_SKELETON_PILL_WIDTHS, MarketCategory(), MarketCategoryProps, MYRIAD_CATEGORIES, SliderStyle, KalshiCategoriesResponse, useKalshiCategories(), LimitlessCategoriesData (+15 more)
+Cohesion: 0.11
+Nodes (20): CATEGORY_SKELETON_PILL_WIDTHS, MarketCategory(), MarketCategoryProps, MYRIAD_CATEGORIES, SliderStyle, KalshiCategoriesResponse, useKalshiCategories(), LimitlessTagGroup (+12 more)
 
 ### Community 23 - "links.ts"
-Cohesion: 0.17
-Nodes (22): createDappKeypair(), DappKeypair, encryptPayload(), armStoreFallback(), dappPublicKey(), Deeplink, navigateAndHang(), openPhantomConnect() (+14 more)
+Cohesion: 0.14
+Nodes (26): requireSignTarget(), createDappKeypair(), DappKeypair, encryptPayload(), AWAITING_SIGNATURE, eachStep(), findPendingSignTarget(), armStoreFallback() (+18 more)
 
 ### Community 24 - "useGenerateRexReport.ts"
-Cohesion: 0.13
-Nodes (20): DexscreenerView(), DexscreenerViewProps, findInterval(), GROUPS, IntervalItem, QUICK, ExplorerModalProps, fromEpochSeconds() (+12 more)
+Cohesion: 0.10
+Nodes (24): DexscreenerView(), DexscreenerViewProps, findInterval(), GROUPS, IntervalItem, QUICK, ExplorerModalProps, fromEpochSeconds() (+16 more)
 
 ### Community 25 - "DepositWithdrawModal.tsx"
 Cohesion: 0.23
 Nodes (13): POST(), requireUserId(), BASE_QUOTE_ASSETS, buildTweetSearchQueries(), getTweetsSearch(), isBaseQuoteAsset(), mapTweet(), mergeTweets() (+5 more)
 
 ### Community 26 - "MarketsData.tsx"
-Cohesion: 0.17
-Nodes (20): formatBidAsk(), formatPredictFunBidAsk(), formatPrice(), formatProbability(), getEffectiveLiquidity(), isCompletedMarket(), MarketsData(), MarketsDataProps (+12 more)
+Cohesion: 0.09
+Nodes (32): formatBidAsk(), formatPredictFunBidAsk(), formatPrice(), formatProbability(), getEffectiveLiquidity(), isCompletedMarket(), MarketsData(), MarketsDataProps (+24 more)
 
 ### Community 27 - "predictFunGetJson"
-Cohesion: 0.16
-Nodes (17): buildPredictFunLimitOrder(), PREDICT_FUN_EIP712_DOMAIN, PREDICT_FUN_ORDER_STRUCTURE, PredictFunContractOrder, PredictFunMarketFlags, PredictFunOrderSide, predictFunPriceFraction(), predictFunPricePerShareWei() (+9 more)
+Cohesion: 0.18
+Nodes (16): buildPredictFunLimitOrder(), PREDICT_FUN_EIP712_DOMAIN, PREDICT_FUN_ORDER_STRUCTURE, PredictFunContractOrder, PredictFunOrderSide, predictFunPriceFraction(), predictFunPricePerShareWei(), PredictFunSignatureType (+8 more)
 
 ### Community 28 - "rexscreener/rexchat/ChatInterface.tsx"
-Cohesion: 0.11
-Nodes (12): BirdeyeSafetyAnalyticsComponent(), BirdeyeSafetyAnalyticsProps, CoinOMetry(), DexScreenerPair, isDexScreenerPair(), Props, PaymentMetadata, PaywallContext (+4 more)
+Cohesion: 0.22
+Nodes (3): BirdeyeSafetyAnalyticsComponent(), BirdeyeSafetyAnalyticsProps, SecurityAnalytics
 
 ### Community 29 - "predictFunClientAuth.ts"
-Cohesion: 0.18
-Nodes (23): usePredictFunAuthJwt(), clearPredictFunJwt(), getPredictFunJwtStorageKey(), readPredictFunJwt(), writePredictFunJwt(), eip712WrapHash(), hashKernelMessage(), isPredictFunPredictAccount() (+15 more)
+Cohesion: 0.26
+Nodes (17): usePredictFunAuthJwt(), clearPredictFunJwt(), getPredictFunJwtStorageKey(), readPredictFunJwt(), writePredictFunJwt(), clearPredictFunPredictAccount(), getPredictFunAccountStorageKey(), readPredictFunPredictAccount() (+9 more)
 
 ### Community 30 - "compilerOptions"
 Cohesion: 0.07
@@ -427,20 +426,20 @@ Cohesion: 0.33
 Nodes (8): AnyTx, broadcastAndConfirm(), BroadcastResult, rawBytes(), recentBlockhash(), txSignature(), getHeliusRpcUrl(), NOTE: This helper is safe to use in client components only with a NEXT_PUBLIC_ e
 
 ### Community 32 - "parsePredictFunModalApi.ts"
-Cohesion: 0.26
-Nodes (18): usePredictFunMarketMatches(), buildPredictFunUnifiedTradeRows(), extractArray(), extractPredictFunList(), formatPriceValue(), formatSizeValue(), mapMatchEventToTradeRows(), mapOrderEntryToTradeRow() (+10 more)
+Cohesion: 0.24
+Nodes (20): usePredictFunMarketMatches(), buildPredictFunPositionRows(), buildPredictFunUnifiedTradeRows(), extractArray(), extractPredictFunList(), formatPriceValue(), formatSizeValue(), mapMatchEventToTradeRows() (+12 more)
 
 ### Community 33 - "reportScreenerRows.ts"
-Cohesion: 0.16
-Nodes (22): GET(), GET(), applyDexMarketOverlay(), normGoldenDbChain(), getGoldenReportScreenerTokenRows(), getPumpReportScreenerTokenRows(), buildReportScreenerTokenRows(), buildReportScreenerTokenRowsCached (+14 more)
+Cohesion: 0.29
+Nodes (14): applyDexMarketOverlay(), normGoldenDbChain(), buildReportScreenerTokenRows(), coerceFiniteNumber(), createLimiter(), dbChainToBirdeyeXChain(), EVM_BIRDEYE_CHAINS, fetchBirdeyeTokenOverview() (+6 more)
 
 ### Community 34 - "navigation.ts"
 Cohesion: 0.11
 Nodes (22): usePredictFunCategorySubTags(), usePredictFunPoliticsSubTags(), PREDICT_FUN_CATEGORY_SUB_TAG_SPECS, PREDICT_FUN_NO_SUB_TAG_PARENT_IDS, predictFunCategoryHasSubTags(), PredictFunCategorySubTag, PredictFunCategorySubTagSpec, predictFunSubTagIdFromLabel() (+14 more)
 
 ### Community 35 - "predictFunRedeem.ts"
-Cohesion: 0.13
-Nodes (16): GET(), createAnalysisPrompt(), deepseekClient, fetchTradingViewData(), generateAnalysis(), IndicatorType, POST(), rateLimitMap (+8 more)
+Cohesion: 0.14
+Nodes (10): GET(), DexscreenerView(), DexscreenerViewProps, ExplorerModalProps, BUTTON_ART, GlossyButtonProps, GlossyReportButton(), DexScreenerPair (+2 more)
 
 ### Community 36 - "Robinhood Launchpad — Curve & Accounting Specification"
 Cohesion: 0.19
@@ -448,59 +447,55 @@ Nodes (25): tryDexscreenerEarliestPairCreatedSeconds(), coerceFiniteNumber(), cr
 
 ### Community 37 - "messages/route.ts"
 Cohesion: 0.09
-Nodes (18): ClawCryptoChainUi, extractUrls(), normalizeAndDedupeUrls(), normalizeSourceUrl(), openRouter, POST(), classifyQuestionDomain(), maybeCryptoHeuristic() (+10 more)
+Nodes (19): ClawCryptoChainUi, extractUrls(), normalizeAndDedupeUrls(), normalizeSourceUrl(), openRouter, POST(), classifyQuestionDomain(), maybeCryptoHeuristic() (+11 more)
 
 ### Community 38 - "phantomStandardWallet.ts"
-Cohesion: 0.10
-Nodes (10): ACCOUNT_FEATURES, ChangeListener, deserializeTx(), PHANTOM_ICON, PhantomStandardChain, PhantomStandardWallet, NOTE: the Wallet Standard passes transactions as serialized `Uint8Array`, while, serializeTx() (+2 more)
+Cohesion: 0.14
+Nodes (14): AuthCallbackPage(), ACCOUNT_FEATURES, ChangeListener, deserializeTx(), PHANTOM_ICON, PhantomStandardChain, NOTE: the Wallet Standard passes transactions as serialized `Uint8Array`, while, serializeTx() (+6 more)
 
 ### Community 39 - "compilerOptions"
-Cohesion: 0.15
-Nodes (18): GET(), ALLOWED_SORT, ALLOWED_STATUS, GET(), Attempt, GET(), hasCommentsPayload(), GET() (+10 more)
+Cohesion: 0.10
+Nodes (34): GET(), readJwt(), GET(), POST(), ALLOWED_SORT, ALLOWED_STATUS, GET(), Attempt (+26 more)
 
 ### Community 40 - "prisma.ts"
-Cohesion: 0.18
-Nodes (8): GET(), GET(), normContract(), normalizeAddress(), POST(), GET(), goldenRegistryKey(), normGoldenContractAddress()
+Cohesion: 0.11
+Nodes (8): GET(), normContract(), normalizeAddress(), POST(), GET(), startOfThisWeekUTC(), GET(), requireUserId()
 
 ### Community 41 - "RexMarketsEmbed.tsx"
-Cohesion: 0.16
-Nodes (17): buildLimitlessMultiChart(), buildPredictFunEmbedTableRows(), filterAndSortByLiquidity(), formatBidAsk(), formatPredictFunBidAsk(), formatPrice(), formatProbability(), getEffectiveLiquidity() (+9 more)
-
-### Community 42 - "PredictFunTradingInterface/index.tsx"
-Cohesion: 0.15
-Nodes (16): formatDate(), formatPrice(), formatSize(), PolymarketInfoModal(), PolymarketInfoModalProps, OrderParams, useClobOrder(), marketTitleCache (+8 more)
+Cohesion: 0.12
+Nodes (26): buildLimitlessMultiChart(), buildPredictFunEmbedTableRows(), filterAndSortByLiquidity(), formatBidAsk(), formatPredictFunBidAsk(), formatPrice(), formatProbability(), getEffectiveLiquidity() (+18 more)
 
 ### Community 43 - "predictfun/parsePriceChart.ts"
-Cohesion: 0.17
-Nodes (21): fetchPredictFunSeries(), PredictFunChartMarketRef, usePredictFunMultiTimeseries(), buildPredictFunMultiChart(), ChartRow, extractPredictFunTimeseriesSeries(), forwardFillChartRows(), getPredictFunChartInterval() (+13 more)
+Cohesion: 0.16
+Nodes (23): fetchPredictFunSeries(), PredictFunChartMarketRef, usePredictFunMultiTimeseries(), usePredictFunTimeseries(), buildPredictFunMultiChart(), buildPredictFunSingleChart(), ChartRow, extractPredictFunTimeseriesSeries() (+15 more)
 
 ### Community 44 - "offchain/package.json"
 Cohesion: 0.12
 Nodes (16): 12. Contract topology, 13. Core data types, 15. Factory and graduation pseudocode, 18. Launch UI calculations, 1. Product in one paragraph, 23. What RaptorX needs from 0x, 24. What RaptorX needs from Robinhood, 25. Robinhood Chain and V4 deployment references (+8 more)
 
 ### Community 45 - "limits.ts"
-Cohesion: 0.24
-Nodes (14): POST(), requireUserId(), BUILTIN_BYPASS_USERNAMES, envBypassEmails(), envBypassUsernames(), parseList(), userHasSubscriptionBypass(), checkAndIncrementUsage() (+6 more)
+Cohesion: 0.17
+Nodes (20): POST(), requireUserId(), awardReportPoints(), client, formatTimestamp(), POST(), requireUserId(), summarizeMarketDataForReport() (+12 more)
 
 ### Community 46 - "crypto/index.ts"
-Cohesion: 0.16
-Nodes (22): CryptoIndicatorType, CryptoToolIntent, detectCryptoToolIntent(), extractAddressFromText(), fetchTechnicalAnalysis(), fetchTechnicalReport(), fetchTechnicalReportStream(), getCryptoToolOutputsForQuery() (+14 more)
+Cohesion: 0.11
+Nodes (30): createAnalysisPrompt(), deepseekClient, fetchTradingViewData(), generateAnalysis(), IndicatorType, POST(), rateLimitMap, validateRequest() (+22 more)
 
 ### Community 47 - "usePredictFunCryptoPriceChart.ts"
-Cohesion: 0.24
-Nodes (12): LivePriceTick, useCryptoLivePriceStream(), buildSessionAnchor(), ChartRow, densifyChartRows(), extendSeriesToNow(), fetchCryptoPriceHistory(), mergeChartRows() (+4 more)
+Cohesion: 0.15
+Nodes (20): ChartRow, CryptoTooltip(), formatAxisTime(), formatTimeLeft(), PredictFunCryptoUpDownChart(), LivePriceTick, useCryptoLivePriceStream(), buildSessionAnchor() (+12 more)
 
 ### Community 48 - "useMyriadOrder.ts"
-Cohesion: 0.23
-Nodes (10): ActivityFeed(), ActivityFeedProps, TopHolders(), TopHoldersProps, useActivityFeed(), UseActivityFeedParams, useTopHolders(), PolymarketTradingInterfaceProps (+2 more)
+Cohesion: 0.29
+Nodes (14): GET(), normChain(), normContract(), PUT(), requireUserId(), escapeHtmlForPilotTeamUpdateBody(), formatGoldenPublishedAtForUserTimezone(), isGoldenEditorAuthorized() (+6 more)
 
 ### Community 49 - "PhantomStandardWalletRegistrar.tsx"
 Cohesion: 0.14
 Nodes (5): Conversation, Message, NavigationState, Report, StorageManager
 
 ### Community 50 - "PredictFunMarketInfoPanel.tsx"
-Cohesion: 0.17
-Nodes (19): getOutcomeRawForSelected(), OutcomeOpt, parseUsdInput(), PredictFunBuySellWidget(), PredictFunBuySellWidgetProps, SubMarketOption, buildPredictFunTypedData(), hashPredictFunTypedData() (+11 more)
+Cohesion: 0.09
+Nodes (36): getOutcomeRawForSelected(), OutcomeOpt, parseUsdInput(), PredictFunBuySellWidget(), PredictFunBuySellWidgetProps, SubMarketOption, showInfoNotification(), PredictFunOutcome (+28 more)
 
 ### Community 51 - "useTechnicalAnalysis.ts"
 Cohesion: 0.12
@@ -511,20 +506,20 @@ Cohesion: 0.21
 Nodes (17): GET(), GET(), ALLOWED_CRYPTO_INTERVALS, ALLOWED_CRYPTO_SYMBOLS, CacheEntry, COINGECKO_COIN_IDS, coingeckoHeaders(), CryptoPricePoint (+9 more)
 
 ### Community 53 - "runKeeper.ts"
-Cohesion: 0.18
-Nodes (8): PilotPlatform, pilotPlatformFromPathAndListing(), RexMarketsReportData(), RexMarketsReportDataProps, DataSource, DataSourceContext, DataSourceContextType, DataSourceProvider()
+Cohesion: 0.29
+Nodes (8): GET(), GET(), getGoldenReportScreenerTokenRows(), getPumpReportScreenerTokenRows(), buildReportScreenerTokenRowsCached, getReportScreenerTokenRows(), ReportScreenerFetchOptions, ReportScreenerResult
 
 ### Community 54 - "generate-report/route.ts"
-Cohesion: 0.10
-Nodes (37): TechnicalReportEmbed(), ChatInterface(), DexScreenerPair, isDexScreenerPair(), Props, PilotReportHistoryButton(), Props, getRexPilotReportSectionIcon() (+29 more)
+Cohesion: 0.15
+Nodes (21): TechnicalReportEmbed(), ChatInterface(), contractMatchesReportToken(), RexScreenerStreamingReport(), RexScreenerStreamingReportProps, StreamSkeleton, TokenStreamHeader, BNB_ONLY_SECTION_TITLE_MARKERS (+13 more)
 
 ### Community 55 - "phantom/callback/page.tsx"
-Cohesion: 0.24
-Nodes (15): awardReportPoints(), buildJsonFromCachedReportRow(), client, normAddr(), normTicker(), POST(), requireUserId(), streamCryptoReportAsSse() (+7 more)
+Cohesion: 0.33
+Nodes (11): awardReportPoints(), buildJsonFromCachedReportRow(), client, normAddr(), normTicker(), POST(), requireUserId(), streamCryptoReportAsSse() (+3 more)
 
 ### Community 56 - "parsePredictFunRedeem.ts"
-Cohesion: 0.15
-Nodes (32): buildPredictFunPositionRows(), mapPredictFunPositionRow(), extractPredictFunPositionsList(), predictFunPositionShares(), isExplicitlyLosingPosition(), normalizeConditionId(), outcomeNameToIndexSet(), parsePredictFunPositionRedeemParams() (+24 more)
+Cohesion: 0.16
+Nodes (30): extractPredictFunPositionsList(), predictFunPositionShares(), isExplicitlyLosingPosition(), normalizeConditionId(), outcomeNameToIndexSet(), parsePredictFunPositionRedeemParams(), predictFunPositionMarketFlags(), predictFunPositionRedeemEligible() (+22 more)
 
 ### Community 57 - "distributor.ts"
 Cohesion: 0.52
@@ -535,8 +530,8 @@ Cohesion: 0.14
 Nodes (13): GET(), getBadgeForPoints(), LeaderboardEntry, getInitials(), Leaderboard(), LeaderboardProps, PodiumCard(), PodiumUser (+5 more)
 
 ### Community 59 - "SwapWidget.tsx"
-Cohesion: 0.13
-Nodes (31): RexMarketsEmbedMarketDataChart(), ChartRow, CryptoTooltip(), formatAxisTime(), formatTimeLeft(), PredictFunCryptoUpDownChart(), OutcomeOption, PredictFunTradingInterface() (+23 more)
+Cohesion: 0.30
+Nodes (15): buildPredictFunCryptoChartContext(), firstObject(), isPredictFunCryptoUpDownRaw(), parseIsoMs(), PredictFunCryptoMarketDataRow, PredictFunCryptoVariantData, readMarketDataRows(), readNestedMarkets() (+7 more)
 
 ### Community 60 - "utils/polymarketTrading.ts"
 Cohesion: 0.20
@@ -547,8 +542,8 @@ Cohesion: 0.23
 Nodes (8): GET(), analyzeHolderDistribution(), convertBitQueryToHolderData(), fetchTokenHolders(), fetchTotalHoldersCount(), getBNBHolderAnalytics(), TokenHolderData, TokenInfo
 
 ### Community 62 - "rexscreener/trendingtable/tablecontent/index.tsx"
-Cohesion: 0.12
-Nodes (15): PageLoaderOverlay(), TokenSearchBar(), TokenSearchBarProps, Chain, ChainButtons(), ChainButtonsProps, SliderStyle, buildChartTitle() (+7 more)
+Cohesion: 0.08
+Nodes (25): TokenSearchBar(), TokenSearchBarProps, Chain, ChainButtons(), ChainButtonsProps, SliderStyle, buildChartTitle(), RowsPerPageSelectProps (+17 more)
 
 ### Community 63 - "WagamiProvider.tsx"
 Cohesion: 0.16
@@ -559,8 +554,8 @@ Cohesion: 0.15
 Nodes (15): AIGeneratedMarketsReport(), AIGeneratedMarketsReportProps, AssistantAvatar, EmptyState, EmptyStateProps, markdownComponents, pickMarketImageFromData(), rehypePlugins (+7 more)
 
 ### Community 65 - "orderEip712.ts"
-Cohesion: 0.36
-Nodes (9): centsFromFirstOutcomeAsk(), extractCategoryNodes(), mapCategoryNodeToRow(), PredictFunCategoryNode, PredictFunMarketRow, usePredictFunMarkets(), predictFunChildToCardSubMarket(), predictFunFirstOutcomeAskCents() (+1 more)
+Cohesion: 0.17
+Nodes (17): birdeyeTokenAddressParam(), buildAllChainsTickerSearchPage(), buildSolanaTickerSearchPage(), chainFromBirdeyeSearchNetwork(), collectTickerSearchPage(), createLimiter(), enrichTokenlistPricePercent24h(), fetchBirdeyeTokenOverview() (+9 more)
 
 ### Community 66 - "useRegenerateReport.ts"
 Cohesion: 0.17
@@ -575,60 +570,64 @@ Cohesion: 0.12
 Nodes (16): background_color, categories, description, dir, display, icons, lang, name (+8 more)
 
 ### Community 69 - "HolderAvatar.tsx"
-Cohesion: 0.27
-Nodes (7): TopHolders(), TopHoldersProps, HolderAvatar(), HolderAvatarProps, LimitlessHolder, LimitlessHoldersResponse, useLimitlessHolders()
+Cohesion: 0.10
+Nodes (23): TopHolders(), TopHoldersProps, MyriadActivity(), MyriadTopHolders(), ActivityFeed(), ActivityFeedProps, HolderAvatar(), HolderAvatarProps (+15 more)
 
 ### Community 70 - "sparklines/route.ts"
 Cohesion: 0.24
 Nodes (16): birdeyeAddressForFetch(), birdeyeChain(), coerceFiniteNumber(), createLimiter(), downsampleSeries(), extractHistoryItems(), fetchHistorySeries(), fetchHistorySeriesCached (+8 more)
 
 ### Community 71 - "app/layout.tsx"
-Cohesion: 0.11
-Nodes (13): geistMono, geistSans, metadata, PhantomConnectProvider(), isPostHogConfigured, PostHogProviderWrapper(), PrivyProviderWrapper(), PrivyProviderWrapperProps (+5 more)
+Cohesion: 0.14
+Nodes (10): geistMono, geistSans, metadata, PhantomConnectProvider(), isPostHogConfigured, PostHogProviderWrapper(), PrivyProviderWrapper(), PrivyProviderWrapperProps (+2 more)
 
 ### Community 72 - "types/polymarketTrading.ts"
-Cohesion: 0.19
-Nodes (10): formatCount(), formatTweetAge(), ICONS, paragraphsFromResult(), parseTweetDate(), Props, SOCIAL_SLOTS, WhatsNewModal() (+2 more)
+Cohesion: 0.17
+Nodes (12): formatCount(), formatTweetAge(), paragraphsFromResult(), parseTweetDate(), Props, SOCIAL_SLOTS, WhatsNewModal(), WhatsNewParagraph (+4 more)
 
 ### Community 73 - "RexMarketsCardView.tsx"
-Cohesion: 0.16
-Nodes (16): BUTTON_ART, GlossyButtonProps, GlossyReportButton(), formatMultiplierMagnitudeFromPercent(), fromEpochSeconds(), pct24h(), pickVolume24h(), Props (+8 more)
+Cohesion: 0.20
+Nodes (14): formatMultiplierMagnitudeFromPercent(), fromEpochSeconds(), pct24h(), pickVolume24h(), Props, TableRow(), timeSince(), ValueWithDayChange() (+6 more)
 
 ### Community 74 - "livePoolPrice.ts"
 Cohesion: 0.09
-Nodes (28): DEX_CHAIN_SLUG, cache, cacheKey(), DexMarketRow, Entry, fetchBatchInto(), getDexMarketData(), inflight (+20 more)
+Nodes (27): DEX_CHAIN_SLUG, cache, cacheKey(), DexMarketRow, Entry, fetchBatchInto(), getDexMarketData(), inflight (+19 more)
 
 ### Community 75 - "feeSettlement.ts"
 Cohesion: 0.30
 Nodes (11): POST(), requireUserId(), POST(), findTransactionById(), getHelioTransactions(), getUserIdFromTransaction(), HelioTransaction, HelioTransactionMeta (+3 more)
 
 ### Community 76 - "goldenReportTeamUpdate.ts"
-Cohesion: 0.25
-Nodes (6): BuySellModalProps, COLORS, generateMockHistoricalData(), ProbabilityChart(), ProbabilityChartProps, MarketOutcome
+Cohesion: 0.20
+Nodes (11): COLORS, generateMockHistoricalData(), ProbabilityChart(), ProbabilityChartProps, generateKalshiMockHistoricalDataDeterministic(), generateMockHistoricalDataDeterministic(), hashString(), KalshiChartDataPoint (+3 more)
 
 ### Community 77 - "golden-reports/projects/route.ts"
-Cohesion: 0.36
-Nodes (8): PredictFunOutcome, isNoLike(), isYesLike(), outcomeMidPrice(), PredictFunOrderbookLevels, predictFunOrderbookTradePrice01(), predictFunOutcomePrice01(), resolvePredictFunTradePrice01()
+Cohesion: 0.28
+Nodes (13): DELETE(), findProjectInsensitive(), GET(), normChain(), normContract(), POST(), DELETE(), findProjectInsensitive() (+5 more)
 
 ### Community 78 - "useLimitlessMarkets.ts"
-Cohesion: 0.39
-Nodes (6): awardReportPoints(), client, normAddr(), normTicker(), POST(), requireUserId()
+Cohesion: 0.23
+Nodes (11): awardReportPoints(), client, normAddr(), normTicker(), POST(), requireUserId(), CoinGeckoMarketData, CoinGeckoTokenData (+3 more)
 
 ### Community 79 - "[id]/page.tsx"
-Cohesion: 0.06
-Nodes (44): ChatContextMenu(), ChatContextMenuProps, ChatInput(), ChatInputProps, ClawSelectionContext, CRYPTO_CHAIN_LABEL, isMarketsModeProvider(), LABEL_BY_MODE (+36 more)
+Cohesion: 0.07
+Nodes (40): ChatContextMenu(), ChatContextMenuProps, ChatInput(), ChatInputProps, ClawSelectionContext, CRYPTO_CHAIN_LABEL, isMarketsModeProvider(), LABEL_BY_MODE (+32 more)
+
+### Community 80 - "myriadFetchText"
+Cohesion: 0.15
+Nodes (17): GET(), GET(), POST(), GET(), defaultMyriadOrdersNetworkId(), GET(), networkIdFromRequestBody(), POST() (+9 more)
 
 ### Community 81 - "ensureOutcomeTokenApproval.ts"
 Cohesion: 0.17
 Nodes (12): 14.10 Universal hook responsibilities, 14.11 Protected split-routing algorithm, 14.1 Launch token, 14.2 Launch and pool registry, 14.3 Per-launch fee and reward policy, 14.4 Eligibility registry, 14.5 One-person/one-reward-wallet registry, 14.6 Fee splitter (+4 more)
 
 ### Community 82 - "useResolveScreenerTokenSlug.ts"
-Cohesion: 0.06
-Nodes (49): GET(), GET(), POST(), GET(), GET(), defaultMyriadOrdersNetworkId(), GET(), networkIdFromRequestBody() (+41 more)
+Cohesion: 0.09
+Nodes (32): GET(), MyriadAmmTradeParams, MyriadAmmTradeResult, QuoteApiResponse, useMyriadAmmTrade(), MyriadPlaceOrderParams, MyriadPlaceOrderResult, MyriadTimeInForce (+24 more)
 
 ### Community 83 - "MyriadActivity.tsx"
-Cohesion: 0.32
-Nodes (6): LimitlessOrderBook(), LimitlessOrderBookProps, OrderBookRow, LimitlessOrderBookEntry, LimitlessOrderBookResponse, useLimitlessOrderBook()
+Cohesion: 0.33
+Nodes (11): useMyriadOrdersHistory(), MyriadOrderRowParsed, MyriadUserEventRowParsed, MyriadUserMarketPositionRow, numOr0(), parseMyriadOrdersListPayload(), parseMyriadUserEventsPayload(), parseMyriadUserMarketsPayload() (+3 more)
 
 ### Community 84 - "PredictFunActivity.tsx"
 Cohesion: 0.27
@@ -639,32 +638,32 @@ Cohesion: 0.60
 Nodes (3): POST(), POST(), enrichReportScreenerTokenAges()
 
 ### Community 86 - "phantomDeeplinkChain.ts"
-Cohesion: 0.26
-Nodes (11): client, POST(), requireUserId(), attachReferralOnce(), generateUniqueReferralCode(), generateUniqueUsername(), generateUsername(), GET() (+3 more)
+Cohesion: 0.28
+Nodes (10): client, POST(), requireUserId(), attachReferralOnce(), generateUniqueReferralCode(), generateUniqueUsername(), generateUsername(), GET() (+2 more)
 
 ### Community 87 - "parseMyriadModalApi.ts"
-Cohesion: 0.08
-Nodes (48): formatDate(), formatKalshiDate(), formatKalshiFillPrice(), formatKalshiFillTime(), formatPrice(), formatSize(), MarketInfoModal(), MarketInfoModalProps (+40 more)
+Cohesion: 0.06
+Nodes (55): formatDate(), formatKalshiDate(), formatKalshiFillPrice(), formatKalshiFillTime(), formatPrice(), formatSize(), MarketInfoModal(), MarketInfoModalProps (+47 more)
 
 ### Community 88 - "marketDocument.ts"
 Cohesion: 0.31
 Nodes (11): GET(), fetchLimitlessMarketDocument(), findLimitlessMarketInSearchList(), isLimitlessExpired(), limitlessApiDocumentToRexMarketDetails(), liquidityNumber(), normalizeYesNoFractions(), outcomeRowFromChild() (+3 more)
 
 ### Community 89 - "confirm/route.ts"
-Cohesion: 0.18
-Nodes (19): GET(), MyriadOutcomeOption, MyriadTradingInterfaceProps, mapMyriadMarketDetailToMarketDetails(), MyriadMarketCollateralToken, MyriadMarketDetailApi, MyriadOutcomeCharts, MyriadOutcomeDetail (+11 more)
+Cohesion: 0.34
+Nodes (11): GET(), mapMyriadMarketDetailToMarketDetails(), MyriadMarketCollateralToken, MyriadMarketDetailApi, MyriadOutcomeCharts, readExecutionMode(), deriveChainMarketIdFromOutcomeTokenId(), parseMyriadUintField() (+3 more)
 
 ### Community 90 - "screenerRowMerge.ts"
 Cohesion: 0.07
-Nodes (35): useRexMarketsGenerateReportOptional(), BuySellModal(), BuySellModalProps, INTERVALS, KalshiTradingInterface(), KalshiTradingInterfaceProps, BuySellModal(), BuySellModalProps (+27 more)
+Nodes (40): useRexMarketsGenerateReportOptional(), PilotPlatform, pilotPlatformFromPathAndListing(), RexMarketsReportData(), RexMarketsReportDataProps, BuySellModal(), BuySellModalProps, INTERVALS (+32 more)
 
 ### Community 91 - "deepseek.ts"
 Cohesion: 0.19
 Nodes (9): client, createReportPrompt(), DeepSeekRequest, generateReportWithDeepSeek(), DexScreenerTokenProfile, SolscanData, SolscanHolder, SolscanToken (+1 more)
 
 ### Community 92 - "predictFunOutcomePrices.ts"
-Cohesion: 0.36
-Nodes (6): MyriadTopHolders(), HoldersResponse, MyriadHolderRow, MyriadHoldersOutcomeGroup, useMyriadHoldersDetail(), formatAddress()
+Cohesion: 0.67
+Nodes (6): isPredictFunMarketResolved(), isPredictFunMarketTradable(), readEndsAtMs(), readMarketFields(), TERMINAL_STATUS, TERMINAL_TRADING
 
 ### Community 93 - "normalizeKalshiEventTicker"
 Cohesion: 0.27
@@ -675,44 +674,44 @@ Cohesion: 0.29
 Nodes (11): Citation, extractCitationListBlock(), formatRexPilotChatLines(), linkifyInline(), matchSectionHeaderKind(), mergeCitationSegments(), normalizeSourceUrl(), parseCitationFromListLine() (+3 more)
 
 ### Community 95 - "RexMarketsTable/index.tsx"
-Cohesion: 0.26
-Nodes (8): KalshiOrderBook(), KalshiOrderBookProps, OrderBook(), OrderBookProps, KalshiOrderBookResponse, useKalshiOrderBook(), useOrderBook(), OrderBookEntry
+Cohesion: 0.18
+Nodes (13): KalshiOrderBook(), KalshiOrderBookProps, OrderBook(), OrderBookProps, TopHolders(), TopHoldersProps, KalshiOrderBookResponse, useKalshiOrderBook() (+5 more)
 
 ### Community 96 - "MarketDataTable/TableHeader.tsx"
 Cohesion: 0.29
 Nodes (10): analyzeLiquidityPools(), BirdeyeMetadataResponse, BirdeyeSecurityResponse, BirdeyeTokenMetadata, BirdeyeTokenSecurityData, calculateBirdeyeRiskScore(), fetchBirdeyeTokenMetadata(), fetchBirdeyeTokenSecurity() (+2 more)
 
 ### Community 97 - "enrichReportScreenerTokenAges"
-Cohesion: 0.31
-Nodes (5): DailyTasksStatus, GET(), requireUserId(), DailyTasksPopup(), DailyTasksPopupProps
+Cohesion: 0.36
+Nodes (4): DailyTasksStatus, GET(), requireUserId(), DailyTasksPopupProps
 
 ### Community 99 - "polymarket/orderbook/route.ts"
-Cohesion: 0.14
-Nodes (23): PredictFunMarketInfoPanel(), PredictFunMarketInfoPanelProps, fetchPredictFunApi(), usePredictFunOrderMatches(), usePredictFunOrdersHistory(), fetchPositionsForAddress(), fetchPredictFunDepositAddress(), mergePositionsBodies() (+15 more)
+Cohesion: 0.22
+Nodes (15): PredictFunMarketInfoPanel(), PredictFunMarketInfoPanelProps, fetchPredictFunApi(), usePredictFunOrderMatches(), usePredictFunOrdersHistory(), fetchPredictFunMarketMeta(), usePredictFunPositionsMarketMeta(), PredictFunModalPositionRow (+7 more)
 
 ### Community 100 - "11. Arbitrage and keeper system"
 Cohesion: 0.29
 Nodes (7): 11.1 Why the keeper is required, 11.2 Divergence, 11.3 Two trade directions, 11.4 Keeper fee exemption, 11.5 Keeper float, 11.6 External arbitrage discovery, 11. Arbitrage and keeper system
 
 ### Community 101 - "_components/trendingtable/tablecontent/TableHeader.tsx"
-Cohesion: 0.48
-Nodes (6): awardReportPoints(), client, formatTimestamp(), POST(), requireUserId(), summarizeMarketDataForReport()
+Cohesion: 0.26
+Nodes (11): fetchPositionsForAddress(), fetchPredictFunDepositAddress(), mergePositionsBodies(), PredictFunPosition, PredictFunPositionsResponse, usePredictFunPositions(), UsePredictFunPositionsOptions, PredictFunChainId (+3 more)
 
 ### Community 102 - "src/config.ts"
 Cohesion: 0.29
 Nodes (7): 16.1 Service inventory, 16.2 Fee settlement keeper, 16.3 Holder snapshot, 16.4 Equal-share root, 16.5 Automatic distributor, 16.6 Arbitrage keeper, 16. Offchain services
 
 ### Community 103 - "usePredictFunPositions.ts"
-Cohesion: 0.36
-Nodes (12): handleTokenSearch(), buildRobinhoodTokens(), discoverAddresses(), fetchPairs(), getJson(), getRobinhoodAddresses, getRobinhoodTokenByAddress(), getRobinhoodTokens() (+4 more)
+Cohesion: 0.39
+Nodes (11): buildRobinhoodTokens(), discoverAddresses(), fetchPairs(), getJson(), getRobinhoodAddresses, getRobinhoodTokenByAddress(), getRobinhoodTokens(), mapPairToToken() (+3 more)
 
 ### Community 104 - "merkleTree.ts"
 Cohesion: 0.29
 Nodes (7): 19.1 Launch and graduation, 19.2 Fees, 19.3 Routing, 19.4 Rewards, 19.5 Oracles and market data, 19.6 Operations, 19. Security invariants
 
 ### Community 105 - "TopMarketsCards.tsx"
-Cohesion: 0.20
-Nodes (11): capitalizeFirst(), CardGroupTitle(), DeepAnalysisHandler, DeepAnalysisParams, formatVolume(), MarketCard(), MarketItem, Provider (+3 more)
+Cohesion: 0.09
+Nodes (20): CryptoTechnicalEmbed(), baseMarkdownComponents, Citation, Message(), MessageProps, normalizeSourceUrl(), parseSourcesSection(), NOTE: In some builds the <pre> children can start with a newline text node (+12 more)
 
 ### Community 106 - "KalshiTradingInterface/components/Comments/Comments.tsx"
 Cohesion: 0.29
@@ -723,8 +722,8 @@ Cohesion: 0.29
 Nodes (7): 9.1 Two mutually exclusive groups, 9.2 Equal payout, 9.3 Maximum theoretical qualified holder count, 9.4 Default triggers and payout examples, 9.5 Per-launch configurable triggers, 9.6 Snapshot and payout checks, 9. Dual equal-share rewards
 
 ### Community 108 - "reportCache.ts"
-Cohesion: 0.12
-Nodes (25): ensureBnbChain(), PrivyWalletLike, usePredictFunRedeem(), PREDICT_FUN_ADDRESSES_BY_CHAIN_ID, PredictFunChainId, predictFunConditionalTokensAddress(), predictFunExchangeAddress(), PredictFunPositionRedeemParams (+17 more)
+Cohesion: 0.18
+Nodes (15): ensureBnbChain(), PrivyWalletLike, usePredictFunRedeem(), PREDICT_FUN_ADDRESSES_BY_CHAIN_ID, predictFunConditionalTokensAddress(), PredictFunPositionRedeemParams, CTF_REDEEM_ABI, encodeKernelExecutePayload() (+7 more)
 
 ### Community 109 - "prewarm/route.ts"
 Cohesion: 0.38
@@ -739,8 +738,8 @@ Cohesion: 0.33
 Nodes (8): CommentRow(), getTimeAgo(), PredictFunComments(), PredictFunCommentsProps, extractCommentsFromBody(), pickCommentCollections(), PredictFunComment, usePredictFunComments()
 
 ### Community 112 - "usePredictFunMarkets.ts"
-Cohesion: 0.43
-Nodes (5): MyriadActivity(), EventsResponse, MyriadMarketEvent, useMyriadMarketEvents(), getTimeAgo()
+Cohesion: 0.29
+Nodes (8): LimitlessMarket, LimitlessTagFilter, MyriadMarketRow, useMyriadMarkets(), centsDisplay(), mapMyriadApiMarketToRow(), MyriadApiMarket, MyriadOutcome
 
 ### Community 114 - "17. RexScreener implementation"
 Cohesion: 0.33
@@ -755,8 +754,8 @@ Cohesion: 0.31
 Nodes (7): ConcentrationMetrics(), formatAddress(), formatNumber(), HolderAnalyticsComponent(), HolderAnalyticsProps, TopHoldersTable(), HolderAnalytics
 
 ### Community 117 - "sortLimitlessMarketsByVolumeDesc"
-Cohesion: 0.10
-Nodes (35): AuthCallbackPage(), CryptoSwapPanel(), resolveSwapChainFromPayload(), GenerateRexscreenerReport(), User, SubscribeSuccessPage(), PhantomConnectProviderProps, usePhantomConnect() (+27 more)
+Cohesion: 0.13
+Nodes (24): CryptoSwapPanel(), resolveSwapChainFromPayload(), GenerateRexscreenerReport(), User, GenerateRexscreenerReport(), User, DexSwapper(), DexSwapperProps (+16 more)
 
 ### Community 118 - "points/route.ts"
 Cohesion: 0.39
@@ -823,8 +822,8 @@ Cohesion: 0.38
 Nodes (5): PREDICT_FUN_SPORTS_SUB_TAG_IDS, PREDICT_FUN_SPORTS_SUB_TAGS, predictFunIsSportsSubTagId(), PredictFunSportsSubTag, predictFunSportsSubTagFromValue()
 
 ### Community 135 - "polymarket/orderbook/route.ts"
-Cohesion: 0.11
-Nodes (20): DepositWithdrawModalProps, KalshiWithdrawAsset, MyriadWithdrawAsset, PlatformTab, QUERY_REFETCH_INTERVALS, QUERY_STALE_TIMES, basePublicClient, useBaseBalance() (+12 more)
+Cohesion: 0.13
+Nodes (16): DepositWithdrawModalProps, KalshiWithdrawAsset, MyriadWithdrawAsset, PlatformTab, fetchBnbUsd(), gasReserveWeiCached, MYRIAD_BNB_WITHDRAW_GAS_RESERVE_BNB, MYRIAD_BSC_USD1 (+8 more)
 
 ### Community 137 - "eslint.config.mjs"
 Cohesion: 0.40
@@ -859,8 +858,8 @@ Cohesion: 0.83
 Nodes (3): createSignature(), GET(), getBaseUrl()
 
 ### Community 148 - "referral/route.ts"
-Cohesion: 0.40
-Nodes (4): requireSignTarget(), AWAITING_SIGNATURE, eachStep(), findPendingSignTarget()
+Cohesion: 0.46
+Nodes (5): GET(), GET(), goldenRegistryKey(), goldenRegistryKeyFromTrendingToken(), normGoldenContractAddress()
 
 ### Community 149 - "solanaTrendingQuality.ts"
 Cohesion: 0.52
@@ -875,16 +874,16 @@ Cohesion: 0.53
 Nodes (5): coingeckoConfig(), fetchTopMarkets(), GET(), mapTokens(), TopCryptoToken
 
 ### Community 183 - "volume/route.ts"
-Cohesion: 0.17
-Nodes (10): Report, postRegenerate(), postRegenerateStream(), RegenerateArgs, UseRegenerateReportOptions, empty, listeners, marketReportStreamStore (+2 more)
+Cohesion: 0.29
+Nodes (5): empty, listeners, marketReportStreamStore, Snapshot, state
 
 ### Community 185 - "copy-to-clipboard"
 Cohesion: 0.40
 Nodes (5): 21.1 Market health, 21.2 Fee health, 21.3 Reward health, 21.4 RexScreener health, 21. Monitoring
 
 ### Community 216 - "ClientOnly.tsx"
-Cohesion: 0.29
-Nodes (8): ClientOnly(), ClientOnlyProps, subscribe(), useHydrated(), HandlerRefs, resolveChain(), SwapWidget(), SwapWidgetProps
+Cohesion: 0.60
+Nodes (4): ClientOnly(), ClientOnlyProps, subscribe(), useHydrated()
 
 ### Community 217 - "rehype-sanitize"
 Cohesion: 0.40
@@ -903,24 +902,24 @@ Cohesion: 0.83
 Nodes (3): DELETE(), GET(), requireUserId()
 
 ## Knowledge Gaps
-- **816 isolated node(s):** `__filename`, `__dirname`, `compat`, `eslintConfig`, `nextConfig` (+811 more)
+- **815 isolated node(s):** `__filename`, `__dirname`, `compat`, `eslintConfig`, `nextConfig` (+810 more)
   These have ≤1 connection - possible missing edges or undocumented components.
-- **102 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
+- **101 thin communities (<3 nodes) omitted from report** — run `graphify query` to explore isolated nodes.
 
 ## Suggested Questions
 _Questions this graph is uniquely positioned to answer:_
 
-- **Why does `usePhantomConnect()` connect `sortLimitlessMarketsByVolumeDesc` to `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx`, `MarketDataTable/index.tsx`, `usePhantomConnect`, `useLaunches.ts`, `RexScreenerShell.tsx`, `[id]/page.tsx`, `parseMyriadModalApi.ts`?**
+- **Why does `usePhantomConnect()` connect `usePhantomConnect` to `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx`, `MarketDataTable/index.tsx`, `phantomStandardWallet.ts`, `useLaunches.ts`, `RexScreenerShell.tsx`, `[id]/page.tsx`, `sortLimitlessMarketsByVolumeDesc`, `parseMyriadModalApi.ts`, `rexscreener/trendingtable/tablecontent/index.tsx`?**
   _High betweenness centrality (0.036) - this node is a cross-community bridge._
-- **Why does `showErrorNotification()` connect `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx` to `polymarket/orderbook/route.ts`, `myriad/markets/route.ts`, `PredictFunTradingInterface/index.tsx`, `AccountModal.tsx`, `[id]/page.tsx`, `PredictFunMarketInfoPanel.tsx`, `generate-report/route.ts`, `parseMyriadModalApi.ts`?**
+- **Why does `useReportGenStatus()` connect `screenerRowMerge.ts` to `AIGeneratedMarketsReport.tsx`, `predictFunRedeem.ts`, `usePhantomConnect`, `mapPredictFunMarketRow.ts`, `RexMarketsCardView.tsx`, `_components/generatereport/index.tsx`, `sortLimitlessMarketsByVolumeDesc`, `generate-report/route.ts`, `useGenerateRexReport.ts`, `MarketsData.tsx`?**
+  _High betweenness centrality (0.028) - this node is a cross-community bridge._
+- **Why does `showErrorNotification()` connect `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx` to `polymarket/orderbook/route.ts`, `myriad/markets/route.ts`, `_components/rexchat/ChatInterface.tsx`, `[id]/page.tsx`, `AccountModal.tsx`, `PredictFunMarketInfoPanel.tsx`, `generate-report/route.ts`, `parseMyriadModalApi.ts`?**
   _High betweenness centrality (0.027) - this node is a cross-community bridge._
-- **Why does `useReportGenStatus()` connect `screenerRowMerge.ts` to `AIGeneratedMarketsReport.tsx`, `usePhantomConnect`, `RexMarketsCardView.tsx`, `_components/generatereport/index.tsx`, `runKeeper.ts`, `sortLimitlessMarketsByVolumeDesc`, `generate-report/route.ts`, `useGenerateRexReport.ts`, `confirm/route.ts`, `SwapWidget.tsx`?**
-  _High betweenness centrality (0.024) - this node is a cross-community bridge._
 - **What connects `__filename`, `__dirname`, `compat` to the rest of the system?**
-  _816 weakly-connected nodes found - possible documentation gaps or missing edges._
+  _815 weakly-connected nodes found - possible documentation gaps or missing edges._
 - **Should `shared/ProbabilityChart.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.06862745098039216 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07868852459016394 - nodes in this community are weakly interconnected._
+- **Should `useMyriadAmmTrade.ts` be split into smaller, more focused modules?**
+  _Cohesion score 0.12222222222222222 - nodes in this community are weakly interconnected._
 - **Should `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.09209039548022599 - nodes in this community are weakly interconnected._
-- **Should `trending/route.ts` be split into smaller, more focused modules?**
-  _Cohesion score 0.09200603318250378 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.07287093942054433 - nodes in this community are weakly interconnected._

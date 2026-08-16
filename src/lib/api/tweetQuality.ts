@@ -3,6 +3,151 @@ import type { TweetData } from "@/lib/api/tweet";
 const SCAM_RE =
   /\b(dm\s*me|guaranteed\s+\d|100x|1000x|airdrop\s*claim|send\s+(sol|eth|bnb)|double\s+your|free\s+mint|seed\s*phrase|connect\s+wallet\s+to\s+claim|giveaway\s+bot)\b/i;
 
+const BASE_QUOTE_ASSETS = new Set([
+  "SOL",
+  "WSOL",
+  "ETH",
+  "WETH",
+  "BTC",
+  "BNB",
+  "WBNB",
+  "USDC",
+  "USDT",
+  "DAI",
+  "MON",
+]);
+
+const STABLECOINS = new Set(["USDC", "USDT", "DAI"]);
+
+const MEME_LAUNCH_RE =
+  /\b(just\s+launched|fair\s*launch|stealth\s*launch|new\s+(gem|meme|token|coin)|ca\s*:|contract\s*:|dev\s+sold|bundled|sniper|ape\s+this)\b/i;
+
+const LISTING_SPAM_RE =
+  /\b(launchpad|presale|now\s+live|just\s+listed|listed\s+on|listing\s+on|bep20|bep-20|erc20|erc-20|new\s+pair|add(?:ed)?\s+liquidity|live\s+on\s+(pcs|pancake|uniswap|raydium))\b/i;
+
+const BASE_ASSET_TOPIC_RE =
+  /\b(price|etf|etfs|staking|staked|validator|tps|network|blockchain|ecosystem|tvl|sec|spot\s+etf|firedancer|inflation|supply|holders?|chart|breakout|support|resistance|market\s+cap|mcap)\b/i;
+
+const STABLE_TOPIC_RE =
+  /\b(circle|tether|peg|depeg|de-peg|reserves?|attestation|issuer|redemption|blackrock|buidl|stablecoin|usd\s+coin)\b/i;
+
+export type TweetAssetContext = {
+  ticker: string;
+  projectName?: string;
+};
+
+function sanitizeTicker(ticker: string): string {
+  return ticker.replace(/^\$+/, "").replace(/[^\w]/g, "").slice(0, 32);
+}
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function extractCashtags(text: string): string[] {
+  return (text.match(/\$[A-Za-z][A-Za-z0-9-]{1,20}/g) || []).map((c) =>
+    c.slice(1).toUpperCase(),
+  );
+}
+
+function hasExactCashtag(text: string, symbol: string): boolean {
+  return new RegExp(
+    `(?<![A-Za-z0-9])\\$${escapeRegExp(symbol)}(?![A-Za-z0-9-])`,
+    "i",
+  ).test(text);
+}
+
+function hasHyphenatedTicker(text: string, symbol: string): boolean {
+  return new RegExp(`\\$${escapeRegExp(symbol)}-[A-Za-z0-9]+`, "i").test(text);
+}
+
+const GENERIC_PROJECT_NAME_RE =
+  /^(wrapped\s+)?(sol|solana|usd coin|tether|usd|usdc|usdt|coin|token|finance|protocol|ai|inu|cat|dog|pepe|meme)$/i;
+
+function mentionsSubject(
+  text: string,
+  symbol: string,
+  projectName?: string,
+): boolean {
+  if (hasExactCashtag(text, symbol)) return true;
+  if (
+    new RegExp(
+      `(?<![A-Za-z0-9#])#${escapeRegExp(symbol)}(?![A-Za-z0-9-])`,
+      "i",
+    ).test(text)
+  ) {
+    return true;
+  }
+  if (STABLECOINS.has(symbol) || BASE_QUOTE_ASSETS.has(symbol)) return false;
+  const name = (projectName || "").trim();
+  if (name.length >= 5 && !GENERIC_PROJECT_NAME_RE.test(name)) {
+    return new RegExp(`\\b${escapeRegExp(name)}\\b`, "i").test(text);
+  }
+  return false;
+}
+
+function cashtagCounts(tags: string[]): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const tag of tags) {
+    counts.set(tag, (counts.get(tag) || 0) + 1);
+  }
+  return counts;
+}
+
+/**
+ * Applies to every coin: keep tweets about THIS ticker as the subject.
+ * Drops listing spam, $TICKER-BEP20 clones, and multi-coin shill lists.
+ */
+export function isOnTopicForAsset(
+  t: TweetData,
+  ticker: string,
+  projectName?: string,
+): boolean {
+  const text = t.text || "";
+  const symbol = sanitizeTicker(ticker).toUpperCase();
+  if (!symbol || !text.trim()) return false;
+
+  const namedSolana =
+    (symbol === "SOL" || symbol === "WSOL") &&
+    /\bsolana\b/i.test(text) &&
+    BASE_ASSET_TOPIC_RE.test(text);
+  if (!mentionsSubject(text, symbol, projectName) && !namedSolana) return false;
+  if (hasHyphenatedTicker(text, symbol)) return false;
+  if (LISTING_SPAM_RE.test(text) || MEME_LAUNCH_RE.test(text) || SCAM_RE.test(text)) {
+    return false;
+  }
+  if (
+    /\b(launched|launching|deployed|fair\s*launch|stealth).{0,60}\b(on\s+\$?[a-z]{2,10}|on\s+solana|on\s+ethereum|on\s+bsc)\b/i.test(
+      text,
+    )
+  ) {
+    return false;
+  }
+
+  const tags = extractCashtags(text).map((c) =>
+    c.includes("-") ? c.split("-")[0] : c,
+  );
+  const others = tags.filter((c) => {
+    if (c === symbol) return false;
+    if (c === `W${symbol}` || symbol === `W${c}`) return false;
+    return true;
+  });
+  const counts = cashtagCounts(tags);
+  const subjectCount = counts.get(symbol) || (namedSolana ? 1 : 0);
+  const maxOther = Math.max(0, ...[...counts.entries()].filter(([c]) => c !== symbol).map(([, n]) => n));
+  if (maxOther > subjectCount) return false;
+
+  const isBase = BASE_QUOTE_ASSETS.has(symbol);
+  if (isBase) {
+    if (others.length >= 1) return false;
+    if (STABLECOINS.has(symbol)) return STABLE_TOPIC_RE.test(text);
+    return BASE_ASSET_TOPIC_RE.test(text);
+  }
+
+  if (others.length >= 2) return false;
+  return true;
+}
+
 export type WhatsNewTweet = {
   id: string;
   text: string;
@@ -73,10 +218,17 @@ export function isHighQualityTweetCandidate(t: TweetData): boolean {
 export function selectTopQualityTweets(
   tweets: TweetData[],
   topN: number = 5,
+  asset?: TweetAssetContext,
 ): TweetData[] {
   const pool = Array.isArray(tweets) ? tweets : [];
-  const filtered = pool.filter(isHighQualityTweetCandidate);
-  const ranked = (filtered.length > 0 ? filtered : pool)
+  const ticker = asset?.ticker?.trim();
+  const onTopic = ticker
+    ? pool.filter((t) => isOnTopicForAsset(t, ticker, asset?.projectName))
+    : pool;
+  // Never fall back to off-topic tweets — empty is better than the wrong asset.
+  const source = onTopic;
+  const filtered = source.filter(isHighQualityTweetCandidate);
+  const ranked = (filtered.length > 0 ? filtered : source)
     .slice()
     .sort((a, b) => qualityScore(b) - qualityScore(a));
 

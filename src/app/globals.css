@@ -769,3 +769,41 @@ a.chakra-link.custom-fcnbia {
   display: hidden !important;
 }
 
+@keyframes whatsNewMascotBounce {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-14px);
+  }
+}
+
+.whats-new-mascot-bounce {
+  animation: whatsNewMascotBounce 1.15s ease-in-out infinite;
+}
+
+@keyframes whatsNewEllipsis {
+  0% {
+    content: "";
+  }
+  25% {
+    content: ".";
+  }
+  50% {
+    content: "..";
+  }
+  75%,
+  100% {
+    content: "...";
+  }
+}
+
+.whats-new-ellipsis::after {
+  display: inline-block;
+  width: 1.2em;
+  text-align: left;
+  content: "";
+  animation: whatsNewEllipsis 1.4s steps(1, end) infinite;
+}
+

@@ -337,11 +337,12 @@ export function TableRow({
           "Content-Type": "application/json",
           "x-user-id": currentUserId,
         },
-        body: JSON.stringify({
+          body: JSON.stringify({
           contractAddress: token.tokenAddress,
           ticker: token.symbol,
           projectName: token.name,
           chain: token.chainId,
+          imageUrl: token.logo,
         }),
       });
       const json = await res.json().catch(() => ({}));
@@ -350,6 +351,7 @@ export function TableRow({
       }
       setWhatsNewResult({
         summary: String(json.summary || ""),
+        paragraphs: Array.isArray(json.paragraphs) ? json.paragraphs : undefined,
         tweets: Array.isArray(json.tweets) ? json.tweets : [],
         metadata: json.metadata,
       });
@@ -487,7 +489,7 @@ export function TableRow({
 
       {/* AI Report */}
       <div
-        className={`sm:sticky sm:left-100 relative h-auto min-h-12.75 w-full sm:z-10 flex items-center justify-center px-3 py-1 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
+        className={`sm:sticky sm:left-100 relative h-auto min-h-[4.75rem] w-full sm:z-10 flex items-center justify-center px-3 py-1 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
       >
         <div className="flex flex-col items-center justify-center gap-0.5">
           {isGenerating && countdown !== null ? (
@@ -630,6 +632,7 @@ export function TableRow({
         loading={whatsNewLoading}
         error={whatsNewError}
         result={whatsNewResult}
+        imageUrl={token?.logo}
       />
     </>
   );

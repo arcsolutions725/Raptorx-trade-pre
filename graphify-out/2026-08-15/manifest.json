@@ -110,8 +110,8 @@
     "semantic_hash": ""
   },
   "src/app/(rexscreener)/_components/rexchat/ChatInterface.tsx": {
-    "mtime": 1786855624.3857503,
-    "ast_hash": "bf0dd749bb501f041d2e978f8c653135",
+    "mtime": 1786841617.5109875,
+    "ast_hash": "ec945827ec8c5a7a983fd0fb6c617722",
     "semantic_hash": ""
   },
   "src/app/(rexscreener)/_components/rexchat/ChatSidebar.tsx": {
@@ -170,8 +170,8 @@
     "semantic_hash": "fcf56348f0bbf8e5e2adf68d16d13a97"
   },
   "src/app/(rexscreener)/_components/trendingtable/tablecontent/DexscreenerView.tsx": {
-    "mtime": 1786855613.547914,
-    "ast_hash": "df8d2e2e10632f23dc9303f77b2dbe6e",
+    "mtime": 1786841617.5169876,
+    "ast_hash": "5d3bd5c11214224ebe7a072b188a94f5",
     "semantic_hash": ""
   },
   "src/app/(rexscreener)/_components/trendingtable/tablecontent/ExplorerModal.tsx": {
@@ -185,8 +185,8 @@
     "semantic_hash": "98824b9d3f3850ae46d02e91c71f4390"
   },
   "src/app/(rexscreener)/_components/trendingtable/tablecontent/TableRow.tsx": {
-    "mtime": 1786855611.6847703,
-    "ast_hash": "4dd7264d09a4cc25f23293f47019df45",
+    "mtime": 1786842092.5241296,
+    "ast_hash": "2ccbbb6c477be05297890957edaf65f9",
     "semantic_hash": ""
   },
   "src/app/(rexscreener)/_components/trendingtable/tablecontent/Token24hSparkline.tsx": {
@@ -2230,8 +2230,8 @@
     "semantic_hash": "e8e7bd5b9b73347feed02252c92e8df0"
   },
   "src/lib/api/tweet.ts": {
-    "mtime": 1786847441.9758372,
-    "ast_hash": "197621cde98691878dbfc619216ab54b",
+    "mtime": 1786844937.0851762,
+    "ast_hash": "ffa34046e05bd888937554cbcefa5f1e",
     "semantic_hash": ""
   },
   "src/lib/auth/internalGoldenReportsAdmin.ts": {
@@ -3395,23 +3395,23 @@
     "semantic_hash": ""
   },
   "src/app/api/whats-new/route.ts": {
-    "mtime": 1786855632.02234,
-    "ast_hash": "b483fafe22d192ee11a5ae3b3b360189",
+    "mtime": 1786842582.1322274,
+    "ast_hash": "f76b6f6961f2cbea8eed360a6f2e0a29",
     "semantic_hash": ""
   },
   "src/components/ui/modal/WhatsNewModal.tsx": {
-    "mtime": 1786856242.4680867,
-    "ast_hash": "7a444e5c3b4b479eb73106fb32f28c42",
+    "mtime": 1786841617.5179877,
+    "ast_hash": "6d843215d71dfce21be9cad1decb1773",
     "semantic_hash": ""
   },
   "src/hooks/useWhatsNew.ts": {
-    "mtime": 1786855610.1816545,
-    "ast_hash": "481a8171250bc51d51e9aa54001fb817",
+    "mtime": 1786841617.5119877,
+    "ast_hash": "24b113f9b7935e2abec6344cf8744dab",
     "semantic_hash": ""
   },
   "src/lib/api/tweetQuality.ts": {
-    "mtime": 1786847438.1126006,
-    "ast_hash": "1c5b691add28873340997af94b30a198",
+    "mtime": 1786844934.2300084,
+    "ast_hash": "1235dce66e2aac5efd0f2222a4c95270",
     "semantic_hash": ""
   },
   "# RaptorX Dual-Rail Launchpad Blueprint.md": {
@@ -3442,116 +3442,6 @@
   "src/lib/solanaTrendingQuality.ts": {
     "mtime": 1786842075.8474512,
     "ast_hash": "1023f48f87ccf0d3b1d356a29849c16e",
-    "semantic_hash": ""
-  },
-  "public/images/what'snew/Browser Logo.png": {
-    "mtime": 1786840927.062841,
-    "ast_hash": "aac26ffee68a25b27292c51e9a3c7cd8",
-    "semantic_hash": ""
-  },
-  "public/images/what'snew/Green Check mark Logo.png": {
-    "mtime": 1786840927.067843,
-    "ast_hash": "0ed894a28dcd97632be912717b3d081a",
-    "semantic_hash": ""
-  },
-  "public/images/what'snew/Hand Emoji.png": {
-    "mtime": 1786840927.07835,
-    "ast_hash": "f7f4f664dba5a0d28cd7087a9c2119a6",
-    "semantic_hash": ""
-  },
-  "public/images/what'snew/Heart Button Logo.png": {
-    "mtime": 1786840927.082855,
-    "ast_hash": "4afe9a40d5a2812cf1991c3ad6d3f56c",
-    "semantic_hash": ""
-  },
-  "public/images/what'snew/Orange Color Link Logo.png": {
-    "mtime": 1786840927.088857,
-    "ast_hash": "f0a14f0df9bbf4aa1f430f524095e32a",
-    "semantic_hash": ""
-  },
-  "public/images/what'snew/Orange Rex Logo.png": {
-    "mtime": 1786840927.101867,
-    "ast_hash": "44283db9910e3c03e402dea8eba3f6d3",
-    "semantic_hash": ""
-  },
-  "public/images/what'snew/Red Cross Logo.png": {
-    "mtime": 1786840927.10987,
-    "ast_hash": "bb2bfa3dbbd285ffcd33237c3b88c2cf",
-    "semantic_hash": ""
-  },
-  "public/images/what'snew/Reddit Logo.png": {
-    "mtime": 1786840927.115376,
-    "ast_hash": "f40295709d843a96fd1fd6ea5385656b",
-    "semantic_hash": ""
-  },
-  "public/images/what'snew/Rex Main Logo.png": {
-    "mtime": 1786840927.127884,
-    "ast_hash": "44283db9910e3c03e402dea8eba3f6d3",
-    "semantic_hash": ""
-  },
-  "public/images/what'snew/Rex Twitter Logo.png": {
-    "mtime": 1786840927.132388,
-    "ast_hash": "20c7896bc545d2f00b4bc2c2044e1ec2",
-    "semantic_hash": ""
-  },
-  "public/images/what'snew/Telegram Logo.png": {
-    "mtime": 1786840927.13639,
-    "ast_hash": "09896bf224a8e22fa87c32efc5c525f9",
-    "semantic_hash": ""
-  },
-  "public/images/what'snew/X Logo.png": {
-    "mtime": 1786840927.194358,
-    "ast_hash": "00699d6eca0f8b505fbd66cae8b3abd9",
-    "semantic_hash": ""
-  },
-  "public/images/whats-new-rex.png": {
-    "mtime": 1786854227.1684983,
-    "ast_hash": "44283db9910e3c03e402dea8eba3f6d3",
-    "semantic_hash": ""
-  },
-  "public/images/whats-new/browser.png": {
-    "mtime": 1786855553.1312597,
-    "ast_hash": "aac26ffee68a25b27292c51e9a3c7cd8",
-    "semantic_hash": ""
-  },
-  "public/images/whats-new/check.png": {
-    "mtime": 1786855553.1422603,
-    "ast_hash": "0ed894a28dcd97632be912717b3d081a",
-    "semantic_hash": ""
-  },
-  "public/images/whats-new/cross.png": {
-    "mtime": 1786855553.1442606,
-    "ast_hash": "bb2bfa3dbbd285ffcd33237c3b88c2cf",
-    "semantic_hash": ""
-  },
-  "public/images/whats-new/hand.png": {
-    "mtime": 1786855553.147261,
-    "ast_hash": "f7f4f664dba5a0d28cd7087a9c2119a6",
-    "semantic_hash": ""
-  },
-  "public/images/whats-new/link.png": {
-    "mtime": 1786855553.150261,
-    "ast_hash": "f0a14f0df9bbf4aa1f430f524095e32a",
-    "semantic_hash": ""
-  },
-  "public/images/whats-new/reddit.png": {
-    "mtime": 1786855553.1412604,
-    "ast_hash": "f40295709d843a96fd1fd6ea5385656b",
-    "semantic_hash": ""
-  },
-  "public/images/whats-new/rex-twitter.png": {
-    "mtime": 1786855553.1482608,
-    "ast_hash": "20c7896bc545d2f00b4bc2c2044e1ec2",
-    "semantic_hash": ""
-  },
-  "public/images/whats-new/telegram.png": {
-    "mtime": 1786855553.1332598,
-    "ast_hash": "09896bf224a8e22fa87c32efc5c525f9",
-    "semantic_hash": ""
-  },
-  "public/images/whats-new/x.png": {
-    "mtime": 1786855553.13626,
-    "ast_hash": "00699d6eca0f8b505fbd66cae8b3abd9",
     "semantic_hash": ""
   }
 }

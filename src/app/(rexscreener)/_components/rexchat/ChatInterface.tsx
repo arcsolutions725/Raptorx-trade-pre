@@ -620,6 +620,7 @@ export default function ChatInterface({
         ticker,
         projectName: reportData?.projectName || undefined,
         chain: reportData?.chain || undefined,
+        imageUrl: dexData?.info?.imageUrl,
       });
     } catch {
       // error is already stored on the hook
@@ -1488,6 +1489,7 @@ export default function ChatInterface({
       error={whatsNewError}
       result={whatsNewResult}
       fallbackLinks={projectLinks}
+      imageUrl={logo}
     />
   </>
   );

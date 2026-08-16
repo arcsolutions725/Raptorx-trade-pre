@@ -48,7 +48,10 @@ async function loadLatestTweetsContext(
       tweetsResult.success && Array.isArray(tweetsResult.data)
         ? tweetsResult.data
         : [];
-    const top = selectTopQualityTweets(raw, 5).map(toWhatsNewTweet);
+    const top = selectTopQualityTweets(raw, 5, {
+      ticker,
+      projectName,
+    }).map(toWhatsNewTweet);
     if (!top.length) {
       return "No high-quality recent tweets were found for this project.";
     }
@@ -93,6 +96,7 @@ ${tweetsContext}
 
 Latest-developments instructions:
 - Ground your answer in the tweets above.
+- Discuss only ${ticker || "this asset"} itself (its price, news, and developments). Ignore tweets about other tokens that only mention it as a chain or quote.
 - Summarize what is new in one clear paragraph, then optionally cite 2–5 notable tweets with @handles.
 - Do not invent tweets, partnerships, or prices that are not supported by the tweets or the technical report.
 `;
@@ -120,7 +124,7 @@ Latest-developments instructions:
       - Always end with a short "Sources:" section with 2-6 links when available.
       ${
         wantsLatest
-          ? `- The user asked about latest developments / what's new: prioritize the live tweet block when present.`
+          ? `- The user asked about latest developments / what's new: prioritize the live tweet block when present, and only discuss ${ticker || "this asset"} itself.`
           : ""
       }
     `;

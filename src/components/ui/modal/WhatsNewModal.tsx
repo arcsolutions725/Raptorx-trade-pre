@@ -2,13 +2,16 @@
 
 import { useEffect, useCallback } from "react";
 import { createPortal } from "react-dom";
-import { X, ExternalLink, Heart, Repeat2, Eye } from "lucide-react";
+import Image from "next/image";
+import { X, Repeat2, Eye, BadgeCheck } from "lucide-react";
 import type { WhatsNewTweet } from "@/lib/api/tweetQuality";
 import type { ProjectSocialLinks } from "@/lib/api/projectSocials";
-import { ProjectSocialLinks as SocialLinks } from "@/components/ui/ProjectSocialLinks";
+
+export type WhatsNewParagraph = { title: string; body: string };
 
 export type WhatsNewResult = {
   summary: string;
+  paragraphs?: WhatsNewParagraph[];
   tweets: WhatsNewTweet[];
   metadata?: {
     contractAddress: string;
@@ -16,6 +19,7 @@ export type WhatsNewResult = {
     projectName?: string | null;
     generatedAt?: string;
     links?: ProjectSocialLinks;
+    imageUrl?: string | null;
   };
 };
 
@@ -26,7 +30,46 @@ type Props = {
   error?: string | null;
   result: WhatsNewResult | null;
   fallbackLinks?: ProjectSocialLinks | null;
+  imageUrl?: string | null;
 };
+
+const GOLD = "#FFD700";
+
+/** Icons from `public/images/what'snew` (spaces + apostrophe encoded). */
+const wn = (file: string) => encodeURI(`/images/what'snew/${file}`);
+
+const ICONS = {
+  browser: wn("Browser Logo.png"),
+  telegram: wn("Telegram Logo.png"),
+  x: wn("X Logo.png"),
+  reddit: wn("Reddit Logo.png"),
+  check: wn("Green Check mark Logo.png"),
+  cross: wn("Red Cross Logo.png"),
+  hand: wn("Hand Emoji.png"),
+  heart: wn("Heart Button Logo.png"),
+  link: wn("Orange Color Link Logo.png"),
+  rexTwitter: wn("Rex Twitter Logo.png"),
+  rex: wn("Orange Rex Logo.png"),
+};
+
+const SOCIAL_SLOTS: {
+  key: keyof ProjectSocialLinks;
+  label: string;
+  icon: string;
+}[] = [
+  { key: "website", label: "Website", icon: ICONS.browser },
+  { key: "telegram", label: "Telegram", icon: ICONS.telegram },
+  { key: "twitter", label: "X", icon: ICONS.x },
+  { key: "reddit", label: "Reddit", icon: ICONS.reddit },
+];
+
+function WhatsNewHeading({ className }: { className?: string }) {
+  return (
+    <span className={className}>
+      What&apos;s <span className="text-[#FFD700]">New</span>
+    </span>
+  );
+}
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -66,6 +109,62 @@ function formatTweetAge(createdAt: string): string {
   return years === 1 ? "1 yr ago" : `${years} yrs ago`;
 }
 
+function paragraphsFromResult(result: WhatsNewResult): WhatsNewParagraph[] {
+  if (result.paragraphs?.length) return result.paragraphs;
+  const text = (result.summary || "").trim();
+  if (!text) return [];
+  return [{ title: "What's happening", body: text }];
+}
+
+function SocialStatusBar({ links }: { links?: ProjectSocialLinks | null }) {
+  return (
+    <div className="flex items-center justify-center gap-3">
+      {SOCIAL_SLOTS.map((slot) => {
+        const href = links?.[slot.key];
+        const present = Boolean(href);
+        const inner = (
+          <span className="relative inline-flex h-8 w-8 items-center justify-center">
+            <Image
+              src={slot.icon}
+              alt={slot.label}
+              width={32}
+              height={32}
+              className={`h-8 w-8 object-contain ${present ? "" : "opacity-55"}`}
+            />
+            <Image
+              src={present ? ICONS.check : ICONS.cross}
+              alt={present ? "Available" : "Missing"}
+              width={14}
+              height={14}
+              className="absolute -right-1 -top-1 h-3.5 w-3.5 object-contain"
+            />
+          </span>
+        );
+        if (!href) {
+          return (
+            <span key={slot.key} title={`${slot.label} not listed`}>
+              {inner}
+            </span>
+          );
+        }
+        return (
+          <a
+            key={slot.key}
+            href={href}
+            target="_blank"
+            rel="noopener noreferrer"
+            title={slot.label}
+            aria-label={slot.label}
+            className="rounded-md transition hover:opacity-90"
+          >
+            {inner}
+          </a>
+        );
+      })}
+    </div>
+  );
+}
+
 export function WhatsNewModal({
   open,
   onClose,
@@ -73,6 +172,7 @@ export function WhatsNewModal({
   error = null,
   result,
   fallbackLinks = null,
+  imageUrl = null,
 }: Props) {
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -94,10 +194,11 @@ export function WhatsNewModal({
 
   if (!open || typeof document === "undefined") return null;
 
-  const title =
-    result?.metadata?.projectName ||
-    result?.metadata?.ticker ||
-    "What's New";
+  const projectName = result?.metadata?.projectName || "";
+  const ticker = result?.metadata?.ticker || "";
+  const logoSrc = result?.metadata?.imageUrl || imageUrl || "";
+  const links = result?.metadata?.links || fallbackLinks || undefined;
+  const paragraphs = result ? paragraphsFromResult(result) : [];
 
   return createPortal(
     <div
@@ -112,40 +213,93 @@ export function WhatsNewModal({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative z-10 flex max-h-[min(88dvh,720px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#121212] shadow-2xl shadow-black/60">
-        <div className="flex items-start justify-between gap-3 border-b border-white/10 px-4 py-3">
-          <div className="min-w-0">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-[#dc143c]">
-              What&apos;s New
-            </div>
-            <div className="truncate text-sm font-bold text-white">
-              {loading ? "Fetching latest chatter…" : title}
-              {result?.metadata?.ticker ? (
-                <span className="ml-1.5 font-semibold text-white/50">
-                  ${result.metadata.ticker}
-                </span>
-              ) : null}
-            </div>
-            <SocialLinks
-              links={result?.metadata?.links || fallbackLinks || undefined}
-              className="mt-1.5"
-            />
+      <div className="relative z-10 flex max-h-[min(88dvh,760px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#121212] shadow-2xl shadow-black/60">
+        {loading ? (
+          <div className="relative flex items-center justify-center border-b border-white/10 px-4 py-3.5">
+            <h2 className="text-[17px] font-semibold text-white">
+              <WhatsNewHeading />
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
+              aria-label="Close What's New"
+            >
+              <X className="h-5 w-5" />
+            </button>
           </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
-            aria-label="Close What's New"
-          >
-            <X className="h-5 w-5" />
-          </button>
-        </div>
+        ) : result ? (
+          <div className="border-b border-white/10 px-4 py-3">
+            <div className="flex items-start gap-2.5">
+              {logoSrc ? (
+                <Image
+                  src={logoSrc}
+                  alt=""
+                  width={32}
+                  height={32}
+                  className="mt-0.5 h-8 w-8 shrink-0 rounded-md object-cover"
+                />
+              ) : (
+                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/10 text-xs font-bold text-white/70">
+                  {(ticker || projectName || "?").slice(0, 1).toUpperCase()}
+                </div>
+              )}
+              <div className="min-w-0 flex-1 pt-0.5 text-center">
+                <div className="truncate text-[15px] font-bold leading-tight">
+                  <span className="text-white">
+                    {projectName || ticker || "What's New"}
+                  </span>
+                  {ticker ? (
+                    <span className="ml-1.5 font-semibold" style={{ color: GOLD }}>
+                      ${ticker}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="mt-2">
+                  <SocialStatusBar links={links} />
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={onClose}
+                className="shrink-0 rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
+                aria-label="Close What's New"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="relative flex items-center justify-center border-b border-white/10 px-4 py-3.5">
+            <h2 className="text-[17px] font-semibold text-white">
+              <WhatsNewHeading />
+            </h2>
+            <button
+              type="button"
+              onClick={onClose}
+              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
+              aria-label="Close What's New"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+        )}
 
         <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
           {loading ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-16 text-white/60">
-              <div className="h-8 w-8 animate-spin rounded-full border-2 border-[#dc143c] border-t-transparent" />
-              <p className="text-sm">Pulling top tweets & summarizing…</p>
+            <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 py-10">
+              <Image
+                src={ICONS.rex}
+                alt="Rex reviewing the market"
+                width={88}
+                height={94}
+                className="whats-new-mascot-bounce h-auto w-[72px] object-contain"
+                priority
+              />
+              <p className="text-center text-[15px] font-semibold text-[#FFD700]">
+                We&apos;re digging into what the market is saying
+                <span className="whats-new-ellipsis" aria-hidden />
+              </p>
             </div>
           ) : error ? (
             <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
@@ -153,54 +307,89 @@ export function WhatsNewModal({
             </div>
           ) : result ? (
             <div className="flex flex-col gap-5">
-              <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">
-                  Interpretation
-                </h3>
-                <p className="text-[14px] leading-relaxed text-white/90">
-                  {result.summary}
-                </p>
+              <section className="flex flex-col gap-3.5">
+                {paragraphs.map((p, i) => (
+                  <div key={`${p.title}-${i}`} className="flex items-start gap-2">
+                    <Image
+                      src={ICONS.hand}
+                      alt=""
+                      width={22}
+                      height={18}
+                      className="mt-0.5 h-[18px] w-[22px] shrink-0 object-contain"
+                    />
+                    <p className="min-w-0 text-[13.5px] leading-relaxed text-white">
+                      <span className="font-bold" style={{ color: GOLD }}>
+                        {p.title.replace(/\.*$/, ".")}
+                      </span>
+                      <span className="text-white"> {p.body}</span>
+                    </p>
+                  </div>
+                ))}
               </section>
 
-              <section>
-                <h3 className="mb-2 text-xs font-semibold uppercase tracking-wide text-white/45">
-                  {result.tweets.length > 0
-                    ? `Top ${result.tweets.length} tweets`
-                    : "Top tweets"}
-                </h3>
+              <section className="flex flex-col items-center gap-2 pt-1">
+                <div className="flex items-center justify-center gap-2">
+                  <Image
+                    src={ICONS.rexTwitter}
+                    alt=""
+                    width={40}
+                    height={40}
+                    className="h-10 w-10 object-contain"
+                  />
+                  <h3 className="text-[15px] font-bold">
+                    <span style={{ color: GOLD }}>Top</span>{" "}
+                    <span className="text-white">Tweets</span>
+                  </h3>
+                </div>
                 {result.tweets.length === 0 ? (
                   <p className="text-sm text-white/50">
                     No recent tweets found for this ticker right now.
                   </p>
                 ) : (
-                  <ul className="flex flex-col gap-3">
+                  <ul className="mt-1 flex w-full flex-col gap-3">
                     {result.tweets.map((t) => {
                       const tweetAge = formatTweetAge(t.createdAt);
+                      const avatar = t.tweeter.publicImageUrl;
                       return (
                         <li
                           key={t.id || t.url || t.text.slice(0, 24)}
                           className="rounded-xl border border-white/10 bg-black/40 px-3 py-3"
                         >
                           <div className="mb-1.5 flex items-start justify-between gap-2">
-                            <div className="min-w-0">
-                              <div className="truncate text-sm font-semibold text-white">
-                                {t.tweeter.name}
-                                {t.tweeter.isBlueVerified ? (
-                                  <span className="ml-1 text-[10px] text-sky-400">
-                                    ✓
-                                  </span>
-                                ) : null}
-                              </div>
-                              <div className="truncate text-xs text-white/45">
-                                @{t.tweeter.username}
-                                {t.tweeter.followers > 0
-                                  ? ` · ${formatCount(t.tweeter.followers)} followers`
-                                  : ""}
+                            <div className="flex min-w-0 items-start gap-2">
+                              {avatar ? (
+                                <Image
+                                  src={avatar}
+                                  alt=""
+                                  width={36}
+                                  height={36}
+                                  className="h-9 w-9 shrink-0 rounded-full object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white/70">
+                                  {(t.tweeter.name || "?").slice(0, 1).toUpperCase()}
+                                </div>
+                              )}
+                              <div className="min-w-0">
+                                <div className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-white">
+                                  <span className="truncate">{t.tweeter.name}</span>
+                                  {t.tweeter.isBlueVerified ? (
+                                    <BadgeCheck className="h-3.5 w-3.5 shrink-0 fill-sky-400 text-white" />
+                                  ) : null}
+                                  {t.tweeter.followers > 0 ? (
+                                    <span className="shrink-0 text-[11px] font-medium text-[#FFD700]">
+                                      {formatCount(t.tweeter.followers)} followers
+                                    </span>
+                                  ) : null}
+                                </div>
+                                <div className="truncate text-xs text-white/45">
+                                  @{t.tweeter.username}
+                                </div>
                               </div>
                             </div>
                             <div className="flex shrink-0 items-center gap-1 pt-0.5">
                               {tweetAge ? (
-                                <span className="whitespace-nowrap text-[11px] text-white/45">
+                                <span className="whitespace-nowrap text-[11px] font-medium text-[#FFD700]">
                                   {tweetAge}
                                 </span>
                               ) : null}
@@ -209,29 +398,41 @@ export function WhatsNewModal({
                                   href={t.url}
                                   target="_blank"
                                   rel="noopener noreferrer"
-                                  className="rounded-md p-1 text-[#dc143c] hover:bg-white/5"
+                                  className="rounded-md p-0.5 hover:bg-white/5"
                                   aria-label="Open tweet"
                                 >
-                                  <ExternalLink className="h-3.5 w-3.5" />
+                                  <Image
+                                    src={ICONS.link}
+                                    alt=""
+                                    width={14}
+                                    height={14}
+                                    className="h-3.5 w-3.5 object-contain"
+                                  />
                                 </a>
                               ) : null}
                             </div>
                           </div>
-                          <p className="whitespace-pre-wrap text-[13px] leading-snug text-white/85">
+                          <p className="whitespace-pre-wrap text-[13px] leading-snug text-white">
                             {t.text}
                           </p>
-                          <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-white/40">
-                            <span className="inline-flex items-center gap-1">
-                              <Heart className="h-3 w-3" />
+                          <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-white/45">
+                            <span className="inline-flex items-center gap-1 font-medium text-red-500">
+                              <Image
+                                src={ICONS.heart}
+                                alt=""
+                                width={14}
+                                height={14}
+                                className="h-3.5 w-3.5 object-contain"
+                              />
                               {formatCount(t.likeCount)}
                             </span>
                             <span className="inline-flex items-center gap-1">
-                              <Repeat2 className="h-3 w-3" />
+                              <Repeat2 className="h-3.5 w-3.5" />
                               {formatCount(t.retweetCount)}
                             </span>
                             {t.viewCount > 0 ? (
                               <span className="inline-flex items-center gap-1">
-                                <Eye className="h-3 w-3" />
+                                <Eye className="h-3.5 w-3.5" />
                                 {formatCount(t.viewCount)}
                               </span>
                             ) : null}

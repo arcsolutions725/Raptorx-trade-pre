@@ -76,6 +76,25 @@ function sanitizeTicker(ticker: string): string {
   return ticker.replace(/^\$+/, "").replace(/[^\w]/g, "").slice(0, 32);
 }
 
+/** Native / quote assets whose cashtag is used by every other token on that chain. */
+const BASE_QUOTE_ASSETS = new Set([
+  "SOL",
+  "WSOL",
+  "ETH",
+  "WETH",
+  "BTC",
+  "BNB",
+  "WBNB",
+  "USDC",
+  "USDT",
+  "DAI",
+  "MON",
+]);
+
+function isBaseQuoteAsset(symbol: string): boolean {
+  return BASE_QUOTE_ASSETS.has(symbol.toUpperCase());
+}
+
 function buildTweetSearchQueries(
   ticker: string,
   projectName?: string,
@@ -85,21 +104,42 @@ function buildTweetSearchQueries(
   const name = (projectName || "").trim();
   const queries: string[] = [];
 
-  if (symbol) {
-    queries.push(`$${symbol} lang:en`);
-    queries.push(`(#${symbol} OR $${symbol}) lang:en`);
-  }
+  if (!symbol) return [];
 
-  const nameLooksUseful =
-    name.length >= 3 &&
-    name.toLowerCase() !== symbol.toLowerCase() &&
-    !/^0x[a-f0-9]{8,}$/i.test(name);
-  if (nameLooksUseful) {
-    queries.push(`"${name.replace(/"/g, "")}" lang:en`);
+  const spamExcl = `-launchpad -presale -listing -BEP20 -"fair launch" -"new gem" -"${symbol}-SOL" -"${symbol}-BEP20" -"${symbol}-ETH"`;
+
+  if (symbol === "USDC") {
+    queries.push(
+      `$USDC (circle OR peg OR reserves OR depeg OR "usd coin" OR attestation) ${spamExcl} lang:en`,
+    );
+  } else if (symbol === "USDT") {
+    queries.push(
+      `$USDT (tether OR peg OR reserves OR depeg OR attestation) ${spamExcl} lang:en`,
+    );
+  } else if (isBaseQuoteAsset(symbol)) {
+    queries.push(
+      `$${symbol} (price OR etf OR staking OR staked OR validator OR chart OR tvl OR "market cap") ${spamExcl} -launched -launching lang:en`,
+    );
+    if (symbol === "SOL" || symbol === "WSOL") {
+      queries.push(`("Solana" (price OR etf OR staking OR ETF)) lang:en`);
+    }
+  } else {
+    queries.push(`$${symbol} ${spamExcl} lang:en`);
+
+    const nameLooksUseful =
+      name.length >= 5 &&
+      name.toLowerCase() !== symbol.toLowerCase() &&
+      !/^0x[a-f0-9]{8,}$/i.test(name) &&
+      !/^wrapped\s+/i.test(name);
+    if (nameLooksUseful) {
+      queries.push(
+        `"${name.replace(/"/g, "")}" $${symbol} ${spamExcl} lang:en`,
+      );
+    }
   }
 
   const ca = (contractAddress || "").trim();
-  if (ca.length >= 32 && ca.length <= 64) {
+  if (ca.length >= 32 && ca.length <= 64 && !isBaseQuoteAsset(symbol)) {
     queries.push(`${ca} lang:en`);
   }
 
@@ -299,10 +339,10 @@ export async function getTweetsSearch(
         continue;
       }
       if (result.tweets.length) collected.push(result.tweets);
-      if (mergeTweets(collected).length >= 5) break;
+      if (mergeTweets(collected).length >= Math.min(topN, 20)) break;
     }
 
-    if (mergeTweets(collected).length < 5 && !/timed out/i.test(String(lastError || ""))) {
+    if (mergeTweets(collected).length < 8 && !/timed out/i.test(String(lastError || ""))) {
       const topResult = await searchTweetsOnce(queries[0], "Top");
       if (topResult.success && topResult.tweets.length) {
         collected.push(topResult.tweets);
