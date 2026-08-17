@@ -118,7 +118,7 @@ function paragraphsFromResult(result: WhatsNewResult): WhatsNewParagraph[] {
 
 function SocialStatusBar({ links }: { links?: ProjectSocialLinks | null }) {
   return (
-    <div className="flex items-center justify-center gap-5">
+    <div className="flex items-center justify-center gap-[10px]">
       {SOCIAL_SLOTS.map((slot) => {
         const href = links?.[slot.key];
         const present = Boolean(href);
@@ -142,7 +142,7 @@ function SocialStatusBar({ links }: { links?: ProjectSocialLinks | null }) {
         );
         if (!href) {
           return (
-            <span key={slot.key} title={`${slot.label} not listed`} className="p-1.5">
+            <span key={slot.key} title={`${slot.label} not listed`}>
               {inner}
             </span>
           );
@@ -155,7 +155,7 @@ function SocialStatusBar({ links }: { links?: ProjectSocialLinks | null }) {
             rel="noopener noreferrer"
             title={slot.label}
             aria-label={slot.label}
-            className="rounded-md p-1.5 transition hover:opacity-90"
+            className="rounded-md transition hover:opacity-90"
           >
             {inner}
           </a>
@@ -229,22 +229,22 @@ export function WhatsNewModal({
             </button>
           </div>
         ) : result ? (
-          <div className="border-b border-white/10">
-            <div className="flex items-stretch gap-3">
+          <div className="border-b border-white/10 px-3.5 py-3">
+            <div className="flex items-center gap-3">
               {logoSrc ? (
                 <Image
                   src={logoSrc}
                   alt=""
-                  width={96}
-                  height={96}
-                  className="h-full w-24 shrink-0 self-stretch rounded-tl-2xl object-cover"
+                  width={90}
+                  height={90}
+                  className="h-[90px] w-[90px] shrink-0 rounded-full object-cover"
                 />
               ) : (
-                <div className="flex w-24 shrink-0 items-center justify-center self-stretch rounded-tl-2xl bg-white/10 text-2xl font-bold text-white/70">
+                <div className="flex h-[90px] w-[90px] shrink-0 items-center justify-center rounded-full bg-white/10 text-2xl font-bold text-white/70">
                   {(ticker || projectName || "?").slice(0, 1).toUpperCase()}
                 </div>
               )}
-              <div className="min-w-0 flex-1 py-3 text-center">
+              <div className="min-w-0 flex-1 text-center">
                 <div className="whats-new-title truncate leading-tight">
                   <span className="text-white">
                     {projectName || ticker || "What's New"}
@@ -262,7 +262,7 @@ export function WhatsNewModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="mr-2 mt-2 h-fit shrink-0 rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
+                className="self-start shrink-0 rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
                 aria-label="Close What's New"
               >
                 <X className="h-5 w-5" />
@@ -327,7 +327,7 @@ export function WhatsNewModal({
                 ))}
               </section>
 
-              <section className="flex flex-col items-center gap-2 pt-1">
+              <section className="flex flex-col items-center gap-2" style={{ paddingTop: '30px' }}>
                 <div className="relative flex w-full items-center justify-center py-1">
                   <Image
                     src={ICONS.rexTwitter}
