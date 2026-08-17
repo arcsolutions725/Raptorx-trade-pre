@@ -195,9 +195,9 @@
     "semantic_hash": "50cae3a4d315bd6ff6727df1b0b7881e"
   },
   "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx": {
-    "mtime": 1783978243.1862636,
-    "ast_hash": "68d291db5ca1a2a96d2979cb37ef5c34",
-    "semantic_hash": "68d291db5ca1a2a96d2979cb37ef5c34"
+    "mtime": 1786941812.9772265,
+    "ast_hash": "0e8eec1506ec0e4d11d35e6cedee9150",
+    "semantic_hash": ""
   },
   "src/app/(rexscreener)/layout.tsx": {
     "mtime": 1783203165.9076302,
@@ -3400,8 +3400,8 @@
     "semantic_hash": ""
   },
   "src/components/ui/modal/WhatsNewModal.tsx": {
-    "mtime": 1786930229.938004,
-    "ast_hash": "7556af72c19e4854d012eb31e6fafe8a",
+    "mtime": 1786936308.6641119,
+    "ast_hash": "d5bf1f1df1d7d0b38957a73a2c168e7a",
     "semantic_hash": ""
   },
   "src/hooks/useWhatsNew.ts": {

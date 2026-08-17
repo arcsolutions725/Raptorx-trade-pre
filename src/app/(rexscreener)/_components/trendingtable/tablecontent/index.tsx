@@ -467,6 +467,15 @@ export function TrendingTableContent({
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [goldenReportsOnly, setGoldenReportsOnly] = useState(false);
   const [pumpReportsOnly, setPumpReportsOnly] = useState(false);
+  const [reportListsPrefetchReady, setReportListsPrefetchReady] =
+    useState(false);
+
+  // Warm Golden/Pump lists after the main table starts, so a later tab click
+  // is usually a cache hit. Clicking the tab still fetches immediately.
+  useEffect(() => {
+    const t = window.setTimeout(() => setReportListsPrefetchReady(true), 800);
+    return () => window.clearTimeout(t);
+  }, []);
 
   const queryClient = useQueryClient();
   const prevScreenerChainRef = useRef(screenerChain);
@@ -530,7 +539,7 @@ export function TrendingTableContent({
         registryCount?: number;
       }>;
     },
-    enabled: goldenReportsOnly,
+    enabled: goldenReportsOnly || reportListsPrefetchReady,
     staleTime: 5 * 60_000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
@@ -559,7 +568,7 @@ export function TrendingTableContent({
         registryCount?: number;
       }>;
     },
-    enabled: pumpReportsOnly,
+    enabled: pumpReportsOnly || reportListsPrefetchReady,
     staleTime: 5 * 60_000,
     refetchOnMount: false,
     refetchOnWindowFocus: false,
@@ -678,7 +687,7 @@ export function TrendingTableContent({
         ages?: Record<string, number | undefined>;
       }>;
     },
-    enabled: goldenReportsOnly && goldenBaseItems.length > 0,
+    enabled: goldenBaseItems.length > 0,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,
@@ -705,7 +714,7 @@ export function TrendingTableContent({
         ages?: Record<string, number | undefined>;
       }>;
     },
-    enabled: pumpReportsOnly && pumpBaseItems.length > 0,
+    enabled: pumpBaseItems.length > 0,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
     placeholderData: keepPreviousData,

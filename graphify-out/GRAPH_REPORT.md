@@ -1,16 +1,16 @@
-# Graph Report - RaptorXchange  (2026-08-16)
+# Graph Report - RaptorXchange  (2026-08-17)
 
 ## Corpus Check
-- 587 files · ~3,364,611 words
+- 587 files · ~3,364,658 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
-- 3297 nodes · 7278 edges · 291 communities (186 shown, 105 thin omitted)
+- 3297 nodes · 7278 edges · 292 communities (187 shown, 105 thin omitted)
 - Extraction: 99% EXTRACTED · 1% INFERRED · 0% AMBIGUOUS · INFERRED: 52 edges (avg confidence: 0.71)
 - Token cost: 0 input · 0 output
 
 ## Graph Freshness
-- Built from commit: `7e50f3af`
+- Built from commit: `0f1be63b`
 - Run `git rev-parse HEAD` and compare to check if the graph is stale.
 - Run `graphify update .` after code changes (no API cost).
 
@@ -144,6 +144,7 @@
 - useLimitlessOrder.ts
 - roundOpen.ts
 - geoblock/route.ts
+- PolymarketInfoModal.tsx
 - ChartView.tsx
 - myriad/markets/route.ts
 - sportsTags.ts
@@ -161,6 +162,7 @@
 - fills/route.ts
 - tag-groups/route.ts
 - wallet-balance/route.ts
+- ai
 - solanaTrendingQuality.ts
 - rehype-raw
 - limitless/[event]/layout.tsx
@@ -199,7 +201,6 @@
 - kalshi-typescript
 - @lifi/sdk
 - @lifi/widget
-- lucide-react
 - marked
 - @moonpay/moonpay-react
 - @mysten/dapp-kit
@@ -292,7 +293,7 @@
 ## Import Cycles
 - None detected.
 
-## Communities (291 total, 105 thin omitted)
+## Communities (292 total, 105 thin omitted)
 
 ### Community 0 - "shared/ProbabilityChart.tsx"
 Cohesion: 0.06
@@ -303,8 +304,8 @@ Cohesion: 0.08
 Nodes (44): CryptoSwapPanel(), resolveSwapChainFromPayload(), GenerateRexscreenerReport(), User, ChatSidebar(), ChatSidebarProps, RexChat(), RexChatProps (+36 more)
 
 ### Community 2 - "KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx"
-Cohesion: 0.07
-Nodes (48): BuySellWidget(), BuySellWidgetProps, BuySellModal(), BuySellModalProps, BuySellWidget(), BuySellWidgetProps, LimitlessMarketOption, LimitlessVenue (+40 more)
+Cohesion: 0.06
+Nodes (50): BuySellWidget(), BuySellWidgetProps, BuySellModal(), BuySellModalProps, BuySellWidget(), BuySellWidgetProps, LimitlessMarketOption, LimitlessVenue (+42 more)
 
 ### Community 3 - "trending/route.ts"
 Cohesion: 0.09
@@ -343,8 +344,8 @@ Cohesion: 0.12
 Nodes (35): RexScreenerChainPage(), RexScreenerTokenPage(), browserPathMatchesTarget(), PrivyUserWithEmail, RexScreenerShellProvider(), RexScreenerTableContext, RexScreenerTableContextValue, RexScreenerTableOutlet() (+27 more)
 
 ### Community 12 - "approvals.ts"
-Cohesion: 0.06
-Nodes (39): DepositWithdrawModalProps, KalshiWithdrawAsset, MyriadWithdrawAsset, PlatformTab, QUERY_REFETCH_INTERVALS, QUERY_STALE_TIMES, CTF_CONTRACT_ADDRESS, CTF_EXCHANGE_ADDRESS (+31 more)
+Cohesion: 0.07
+Nodes (37): DepositWithdrawModalProps, KalshiWithdrawAsset, MyriadWithdrawAsset, PlatformTab, QUERY_REFETCH_INTERVALS, QUERY_STALE_TIMES, CTF_CONTRACT_ADDRESS, CTF_EXCHANGE_ADDRESS (+29 more)
 
 ### Community 13 - "useWallet"
 Cohesion: 0.13
@@ -560,7 +561,7 @@ Nodes (12): buildLinePath(), ChartDataPoint, clamp(), CupHandleTimeline(), forma
 
 ### Community 67 - "dependencies"
 Cohesion: 0.12
-Nodes (17): ai, ethers, @heliofi/checkout-react, dependencies, ai, ethers, @heliofi/checkout-react, @phantom/browser-sdk (+9 more)
+Nodes (17): ethers, @heliofi/checkout-react, lucide-react, dependencies, ethers, @heliofi/checkout-react, lucide-react, @phantom/browser-sdk (+9 more)
 
 ### Community 68 - "manifest.json"
 Cohesion: 0.12
@@ -635,8 +636,8 @@ Cohesion: 0.32
 Nodes (9): POST(), requireUserId(), attachReferralOnce(), generateUniqueReferralCode(), generateUniqueUsername(), generateUsername(), GET(), POST() (+1 more)
 
 ### Community 87 - "parseMyriadModalApi.ts"
-Cohesion: 0.05
-Nodes (68): formatDate(), formatKalshiDate(), formatKalshiFillPrice(), formatKalshiFillTime(), formatPrice(), formatSize(), MarketInfoModal(), MarketInfoModalProps (+60 more)
+Cohesion: 0.08
+Nodes (48): formatDate(), formatKalshiDate(), formatKalshiFillPrice(), formatKalshiFillTime(), formatPrice(), formatSize(), MarketInfoModal(), MarketInfoModalProps (+40 more)
 
 ### Community 88 - "marketDocument.ts"
 Cohesion: 0.27
@@ -786,6 +787,10 @@ Nodes (6): 8.1 Fee definition, 8.2 Approved split, 8.3 Volume economics, 8.4 Ass
 Cohesion: 0.43
 Nodes (5): GET(), KalshiGeoblockResponse, isKalshiRestrictedCountry(), KALSHI_RESTRICTED_COUNTRY_CODES, US_SANCTIONS_COUNTRY_CODES
 
+### Community 130 - "PolymarketInfoModal.tsx"
+Cohesion: 0.13
+Nodes (20): formatDate(), formatPrice(), formatSize(), PolymarketInfoModal(), PolymarketInfoModalProps, OrderParams, useClobOrder(), marketTitleCache (+12 more)
+
 ### Community 131 - "ChartView.tsx"
 Cohesion: 0.33
 Nodes (4): ChartViewProps, PriceChartWidget(), PriceChartWidgetProps, Window
@@ -882,7 +887,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.040) - this node is a cross-community bridge._
 - **Why does `useReportGenStatus()` connect `screenerRowMerge.ts` to `AIGeneratedMarketsReport.tsx`, `useMyriadAmmTrade.ts`, `predictFunRedeem.ts`, `usePhantomConnect`, `RexMarketsCardView.tsx`, `predictfun/parsePriceChart.ts`, `_components/generatereport/index.tsx`, `runKeeper.ts`, `generate-report/route.ts`, `useGenerateRexReport.ts`, `SwapWidget.tsx`?**
   _High betweenness centrality (0.031) - this node is a cross-community bridge._
-- **Why does `showErrorNotification()` connect `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx` to `polymarket/orderbook/route.ts`, `myriad/markets/route.ts`, `HolderAvatar.tsx`, `goldenReportTeamUpdate.ts`, `AccountModal.tsx`, `PredictFunMarketInfoPanel.tsx`, `generate-report/route.ts`, `parseMyriadModalApi.ts`?**
+- **Why does `showErrorNotification()` connect `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx` to `PolymarketInfoModal.tsx`, `polymarket/orderbook/route.ts`, `myriad/markets/route.ts`, `HolderAvatar.tsx`, `goldenReportTeamUpdate.ts`, `AccountModal.tsx`, `PredictFunMarketInfoPanel.tsx`, `generate-report/route.ts`, `parseMyriadModalApi.ts`?**
   _High betweenness centrality (0.028) - this node is a cross-community bridge._
 - **What connects `__filename`, `__dirname`, `compat` to the rest of the system?**
   _816 weakly-connected nodes found - possible documentation gaps or missing edges._
@@ -891,4 +896,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `useMyriadAmmTrade.ts` be split into smaller, more focused modules?**
   _Cohesion score 0.08182349503214495 - nodes in this community are weakly interconnected._
 - **Should `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.06887366818873668 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06491228070175438 - nodes in this community are weakly interconnected._

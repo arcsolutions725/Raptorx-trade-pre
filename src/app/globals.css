@@ -807,3 +807,10 @@ a.chakra-link.custom-fcnbia {
   animation: whatsNewEllipsis 1.4s steps(1, end) infinite;
 }
 
+/* PPT / report title face — overrides global Aptos * { font-family !important } */
+.whats-new-title,
+.whats-new-title * {
+  font-family: var(--font-georgia) !important;
+  font-weight: 700 !important;
+}
+

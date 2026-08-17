@@ -1187,8 +1187,8 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "package_dependencies_ai",
-      "community": 67,
-      "community_name": "dependencies",
+      "community": 148,
+      "community_name": "ai",
       "norm_label": "ai"
     },
     {
@@ -1198,8 +1198,8 @@
       "source_location": "L62",
       "_origin": "ast",
       "id": "ai",
-      "community": 67,
-      "community_name": "dependencies",
+      "community": 148,
+      "community_name": "ai",
       "norm_label": "ai"
     },
     {
@@ -1363,8 +1363,8 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "package_dependencies_lucide_react",
-      "community": 191,
-      "community_name": "lucide-react",
+      "community": 67,
+      "community_name": "dependencies",
       "norm_label": "lucide-react"
     },
     {
@@ -1374,8 +1374,8 @@
       "source_location": "L70",
       "_origin": "ast",
       "id": "lucide_react",
-      "community": 191,
-      "community_name": "lucide-react",
+      "community": 67,
+      "community_name": "dependencies",
       "norm_label": "lucide-react"
     },
     {
@@ -17258,8 +17258,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_components_ui_modal_polymarketinfomodal",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "polymarketinfomodal.tsx"
     },
     {
@@ -17269,8 +17269,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_components_ui_modal_polymarketinfomodal_polymarketinfomodalprops",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "polymarketinfomodalprops"
     },
     {
@@ -17280,8 +17280,8 @@
       "source_location": "L27",
       "_origin": "ast",
       "id": "src_components_ui_modal_polymarketinfomodal_formatdate",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "formatdate()"
     },
     {
@@ -17291,8 +17291,8 @@
       "source_location": "L37",
       "_origin": "ast",
       "id": "src_components_ui_modal_polymarketinfomodal_formatprice",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "formatprice()"
     },
     {
@@ -17302,8 +17302,8 @@
       "source_location": "L41",
       "_origin": "ast",
       "id": "src_components_ui_modal_polymarketinfomodal_formatsize",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "formatsize()"
     },
     {
@@ -17313,8 +17313,8 @@
       "source_location": "L45",
       "_origin": "ast",
       "id": "src_components_ui_modal_polymarketinfomodal_polymarketinfomodal",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "polymarketinfomodal()"
     },
     {
@@ -18204,8 +18204,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_usecloborder",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "usecloborder.ts"
     },
     {
@@ -18215,8 +18215,8 @@
       "source_location": "L6",
       "_origin": "ast",
       "id": "src_hooks_usecloborder_orderparams",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "orderparams"
     },
     {
@@ -18226,8 +18226,8 @@
       "source_location": "L15",
       "_origin": "ast",
       "id": "src_hooks_usecloborder_usecloborder",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "usecloborder()"
     },
     {
@@ -19854,8 +19854,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_usemarkettitle",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "usemarkettitle.ts"
     },
     {
@@ -19865,8 +19865,8 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "src_hooks_usemarkettitle_markettitlecache",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "markettitlecache"
     },
     {
@@ -19876,8 +19876,8 @@
       "source_location": "L7",
       "_origin": "ast",
       "id": "src_hooks_usemarkettitle_usemarkettitle",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "usemarkettitle()"
     },
     {
@@ -19887,8 +19887,8 @@
       "source_location": "L56",
       "_origin": "ast",
       "id": "src_hooks_usemarkettitle_usemarkettitles",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "usemarkettitles()"
     },
     {
@@ -20701,8 +20701,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_usepolymarkettradessync",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "usepolymarkettradessync.ts"
     },
     {
@@ -20712,8 +20712,8 @@
       "source_location": "L11",
       "_origin": "ast",
       "id": "src_hooks_usepolymarkettradessync_usepolymarkettradessync",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "usepolymarkettradessync()"
     },
     {
@@ -21537,8 +21537,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_useredeemposition",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "useredeemposition.ts"
     },
     {
@@ -21548,8 +21548,8 @@
       "source_location": "L5",
       "_origin": "ast",
       "id": "src_hooks_useredeemposition_useredeemposition",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "useredeemposition()"
     },
     {
@@ -21878,8 +21878,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_usesolanabalance",
-      "community": 12,
-      "community_name": "approvals.ts",
+      "community": 2,
+      "community_name": "KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx",
       "norm_label": "usesolanabalance.ts"
     },
     {
@@ -21889,8 +21889,8 @@
       "source_location": "L16",
       "_origin": "ast",
       "id": "src_hooks_usesolanabalance_solanabalanceparams",
-      "community": 12,
-      "community_name": "approvals.ts",
+      "community": 2,
+      "community_name": "KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx",
       "norm_label": "solanabalanceparams"
     },
     {
@@ -21900,8 +21900,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_hooks_usesolanabalance_solanabalanceresult",
-      "community": 12,
-      "community_name": "approvals.ts",
+      "community": 2,
+      "community_name": "KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx",
       "norm_label": "solanabalanceresult"
     },
     {
@@ -22142,8 +22142,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_usetrades",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "usetrades.ts"
     },
     {
@@ -22153,8 +22153,8 @@
       "source_location": "L4",
       "_origin": "ast",
       "id": "src_hooks_usetrades_polymarkettrade",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "polymarkettrade"
     },
     {
@@ -22164,8 +22164,8 @@
       "source_location": "L23",
       "_origin": "ast",
       "id": "src_hooks_usetrades_usetrades",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "usetrades()"
     },
     {
@@ -22439,8 +22439,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_hooks_useuserposition",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "useuserposition.ts"
     },
     {
@@ -22450,8 +22450,8 @@
       "source_location": "L3",
       "_origin": "ast",
       "id": "src_hooks_useuserposition_polymarketposition",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "polymarketposition"
     },
     {
@@ -22461,8 +22461,8 @@
       "source_location": "L32",
       "_origin": "ast",
       "id": "src_hooks_useuserposition_useuserpositions",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "useuserpositions()"
     },
     {
@@ -33725,8 +33725,8 @@
       "source_location": "L29",
       "_origin": "ast",
       "id": "src_providers_tradingprovder_tradingcontext",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "tradingcontext"
     },
     {
@@ -34088,8 +34088,8 @@
       "source_location": "L22",
       "_origin": "ast",
       "id": "src_utils_format_formatpercentage",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "formatpercentage()"
     },
     {
@@ -34220,8 +34220,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_utils_polling",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "polling.ts"
     },
     {
@@ -34231,8 +34231,8 @@
       "source_location": "L1",
       "_origin": "ast",
       "id": "src_utils_polling_createpollinginterval",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "createpollinginterval()"
     },
     {
@@ -34352,8 +34352,8 @@
       "source_location": "L40",
       "_origin": "ast",
       "id": "src_utils_redeem_redeemparams",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "redeemparams"
     },
     {
@@ -34363,8 +34363,8 @@
       "source_location": "L47",
       "_origin": "ast",
       "id": "src_utils_redeem_createredeemtx",
-      "community": 87,
-      "community_name": "parseMyriadModalApi.ts",
+      "community": 130,
+      "community_name": "PolymarketInfoModal.tsx",
       "norm_label": "createredeemtx()"
     },
     {
@@ -43329,7 +43329,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx",
-      "source_location": "L1261",
+      "source_location": "L1270",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_index_trendingtablecontent",
@@ -43341,7 +43341,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx",
-      "source_location": "L1003",
+      "source_location": "L1012",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_index_trendingtablecontent",
@@ -43353,7 +43353,7 @@
       "context": "call",
       "confidence": "EXTRACTED",
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx",
-      "source_location": "L1206",
+      "source_location": "L1215",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_index_trendingtablecontent",
@@ -43366,7 +43366,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx",
-      "source_location": "L843",
+      "source_location": "L852",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_index_trendingtablecontent",
@@ -43378,7 +43378,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx",
-      "source_location": "L1703",
+      "source_location": "L1712",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_index_trendingtablecontent",
@@ -43390,7 +43390,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx",
-      "source_location": "L827",
+      "source_location": "L836",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_index_trendingtablecontent",
@@ -43402,7 +43402,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx",
-      "source_location": "L789",
+      "source_location": "L798",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_index_trendingtablecontent",
@@ -43414,7 +43414,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx",
-      "source_location": "L498",
+      "source_location": "L507",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_index_trendingtablecontent",
@@ -43426,7 +43426,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx",
-      "source_location": "L1704",
+      "source_location": "L1713",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_index_trendingtablecontent",
@@ -43438,7 +43438,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx",
-      "source_location": "L627",
+      "source_location": "L636",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_index_trendingtablecontent",
@@ -43450,7 +43450,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx",
-      "source_location": "L1742",
+      "source_location": "L1751",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_index_trendingtablecontent",
@@ -43462,7 +43462,7 @@
       "confidence": "EXTRACTED",
       "confidence_score": 1.0,
       "source_file": "src/app/(rexscreener)/_components/trendingtable/tablecontent/index.tsx",
-      "source_location": "L715",
+      "source_location": "L724",
       "weight": 1.0,
       "_origin": "ast",
       "source": "src_app_rexscreener_components_trendingtable_tablecontent_index_trendingtablecontent",
@@ -120990,5 +120990,5 @@
     }
   ],
   "hyperedges": [],
-  "built_at_commit": "7e50f3af78f613672e48d301dd61ba1bc2b2546e"
+  "built_at_commit": "0f1be63b6f5a8bc3c1060cdcfed43f3e205a8c39"
 }

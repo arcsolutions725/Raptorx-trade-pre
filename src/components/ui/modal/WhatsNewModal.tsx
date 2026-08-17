@@ -216,7 +216,7 @@ export function WhatsNewModal({
       <div className="relative z-10 flex max-h-[min(88dvh,760px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#121212] shadow-2xl shadow-black/60">
         {loading ? (
           <div className="relative flex items-center justify-center border-b border-white/10 px-4 py-3.5">
-            <h2 className="text-[17px] font-semibold text-white">
+            <h2 className="whats-new-title text-[20px] text-white">
               <WhatsNewHeading />
             </h2>
             <button
@@ -230,32 +230,32 @@ export function WhatsNewModal({
           </div>
         ) : result ? (
           <div className="border-b border-white/10 px-4 py-3">
-            <div className="flex items-start gap-2.5">
+            <div className="flex items-start gap-3">
               {logoSrc ? (
                 <Image
                   src={logoSrc}
                   alt=""
-                  width={32}
-                  height={32}
-                  className="mt-0.5 h-8 w-8 shrink-0 rounded-md object-cover"
+                  width={48}
+                  height={48}
+                  className="mt-0.5 h-12 w-12 shrink-0 rounded-lg object-cover"
                 />
               ) : (
-                <div className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-white/10 text-xs font-bold text-white/70">
+                <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/10 text-sm font-bold text-white/70">
                   {(ticker || projectName || "?").slice(0, 1).toUpperCase()}
                 </div>
               )}
               <div className="min-w-0 flex-1 pt-0.5 text-center">
-                <div className="truncate text-[20px] font-bold leading-tight">
+                <div className="whats-new-title truncate text-[20px] leading-tight">
                   <span className="text-white">
                     {projectName || ticker || "What's New"}
                   </span>
                   {ticker ? (
-                    <span className="ml-1.5 font-bold" style={{ color: GOLD }}>
+                    <span className="ml-1.5" style={{ color: GOLD }}>
                       ${ticker}
                     </span>
                   ) : null}
                 </div>
-                <div className="mt-2">
+                <div className="mt-4">
                   <SocialStatusBar links={links} />
                 </div>
               </div>
@@ -271,7 +271,7 @@ export function WhatsNewModal({
           </div>
         ) : (
           <div className="relative flex items-center justify-center border-b border-white/10 px-4 py-3.5">
-            <h2 className="text-[17px] font-semibold text-white">
+            <h2 className="whats-new-title text-[20px] text-white">
               <WhatsNewHeading />
             </h2>
             <button
@@ -296,7 +296,7 @@ export function WhatsNewModal({
                 className="whats-new-mascot-bounce h-auto w-[72px] object-contain"
                 priority
               />
-              <p className="text-center text-[15px] font-semibold text-[#FFD700]">
+              <p className="whats-new-title text-center text-[16px] text-[#FFD700]">
                 We&apos;re digging into what the market is saying
                 <span className="whats-new-ellipsis" aria-hidden />
               </p>
@@ -328,15 +328,15 @@ export function WhatsNewModal({
               </section>
 
               <section className="flex flex-col items-center gap-2 pt-1">
-                <div className="relative flex w-full items-center justify-center">
+                <div className="relative flex w-full items-center justify-center py-1">
                   <Image
                     src={ICONS.rexTwitter}
                     alt=""
-                    width={44}
-                    height={44}
-                    className="absolute left-0 h-11 w-11 object-contain"
+                    width={56}
+                    height={56}
+                    className="absolute left-0 h-14 w-14 object-contain"
                   />
-                  <h3 className="text-[20px] font-bold">
+                  <h3 className="whats-new-title text-[20px]">
                     <span style={{ color: GOLD }}>Top</span>{" "}
                     <span className="text-white">Tweets</span>
                   </h3>
