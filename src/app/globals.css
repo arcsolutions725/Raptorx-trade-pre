@@ -807,10 +807,17 @@ a.chakra-link.custom-fcnbia {
   animation: whatsNewEllipsis 1.4s steps(1, end) infinite;
 }
 
-/* PPT / report title face — overrides global Aptos * { font-family !important } */
+/* What's New: Aptos everywhere (overrides Georgia title face). */
+.whats-new-modal,
+.whats-new-modal * {
+  font-family: aptos, sans-serif !important;
+}
+
 .whats-new-title,
 .whats-new-title * {
-  font-family: var(--font-georgia) !important;
+  font-family: aptos, sans-serif !important;
   font-weight: 700 !important;
+  font-size: 20px !important;
+  line-height: 1.2 !important;
 }
 

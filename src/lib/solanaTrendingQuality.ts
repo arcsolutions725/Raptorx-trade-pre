@@ -1,7 +1,6 @@
 /**
- * Drop Solana impersonators (fake stocks / brands / AI names) from the
- * default RexScreener trending table. Search is left alone so users can
- * still look a ticker up on purpose.
+ * Drop impersonators and dust listings from the default RexScreener trending
+ * table (all chains). Search is left alone so users can still look a ticker up.
  */
 
 const BRAND_TICKERS = new Set([
@@ -10,6 +9,8 @@ const BRAND_TICKERS = new Set([
   "ADBE",
   "AMD",
   "AMZN",
+  "ANTHROPIC",
+  "ANTHROPICAI",
   "AVGO",
   "BA",
   "BABA",
@@ -22,6 +23,7 @@ const BRAND_TICKERS = new Set([
   "GME",
   "GOOG",
   "GOOGL",
+  "GOOGLE",
   "HOOD",
   "IBM",
   "INTC",
@@ -65,7 +67,10 @@ const BRAND_TICKERS = new Set([
 ]);
 
 const BRAND_NAME_RE =
-  /\b(nvidia|robinhood|sandisk(?:\s+corporation)?|tesla(?:\s+inc)?|apple\s+inc|microsoft|amazon(?:\.com)?|alphabet\s+inc|meta\s+platforms|openai|chatgpt|claude\s+ai|jupiter\s+lend\s+usdc|jupiter\s+lend\s+usdt)\b/i;
+  /\b(nvidia|robinhood|sandisk(?:\s+corporation)?|tesla(?:\s+inc)?|apple\s+inc|microsoft|amazon(?:\.com)?|alphabet\s+inc|meta\s+platforms|openai|chatgpt|claude(?:\s+ai)?|anthropic(?:\s*ai)?|google(?:\s+llc)?|jupiter\s+lend\s+usdc|jupiter\s+lend\s+usdt)\b/i;
+
+/** Dust / broken-price rows (e.g. $0.03 mcap) do not belong on Market Overview. */
+const MIN_TRENDING_MARKET_CAP_USD = 1_000;
 
 function normalizeTicker(raw?: string | null): string {
   return String(raw || "")
@@ -100,6 +105,7 @@ export function passesSolanaLiquiditySanity(token: {
   const mc = Number(token.marketCap);
   const liq = Number(token.liquidityUsd);
   if (!Number.isFinite(mc) || !(mc > 0)) return true;
+  if (mc < MIN_TRENDING_MARKET_CAP_USD) return false;
   const liquidity = Number.isFinite(liq) ? liq : 0;
   if (mc >= 1e12 && liquidity < 5000) return false;
   if (mc >= 1e9 && liquidity < 200 && mc / Math.max(liquidity, 1e-12) > 5e7) {
@@ -116,8 +122,6 @@ export function shouldKeepSolanaTrendingToken(token: {
   marketCap?: number | null;
   liquidityUsd?: number | null;
 }): boolean {
-  const chain = String(token.chainId || "solana").toLowerCase();
-  if (chain && chain !== "solana") return true;
   if (isSolanaBrandImpersonator(token)) return false;
   return passesSolanaLiquiditySanity(token);
 }

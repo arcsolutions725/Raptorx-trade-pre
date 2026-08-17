@@ -129,7 +129,6 @@
   "127": "useLimitlessOrder.ts",
   "128": "roundOpen.ts",
   "129": "geoblock/route.ts",
-  "130": "PolymarketInfoModal.tsx",
   "131": "ChartView.tsx",
   "132": "myriad/markets/route.ts",
   "133": "sportsTags.ts",
@@ -147,7 +146,6 @@
   "145": "fills/route.ts",
   "146": "tag-groups/route.ts",
   "147": "wallet-balance/route.ts",
-  "148": "ai",
   "149": "solanaTrendingQuality.ts",
   "150": "rehype-raw",
   "151": "limitless/[event]/layout.tsx",
@@ -289,6 +287,5 @@
   "291": "recharts",
   "292": "sharp",
   "293": "@tiptap/extension-placeholder",
-  "294": "referral/route.ts",
   "295": "bs58"
 }

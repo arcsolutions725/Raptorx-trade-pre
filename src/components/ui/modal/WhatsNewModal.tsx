@@ -118,7 +118,7 @@ function paragraphsFromResult(result: WhatsNewResult): WhatsNewParagraph[] {
 
 function SocialStatusBar({ links }: { links?: ProjectSocialLinks | null }) {
   return (
-    <div className="flex items-center justify-center gap-2">
+    <div className="flex items-center justify-center gap-5">
       {SOCIAL_SLOTS.map((slot) => {
         const href = links?.[slot.key];
         const present = Boolean(href);
@@ -142,7 +142,7 @@ function SocialStatusBar({ links }: { links?: ProjectSocialLinks | null }) {
         );
         if (!href) {
           return (
-            <span key={slot.key} title={`${slot.label} not listed`}>
+            <span key={slot.key} title={`${slot.label} not listed`} className="p-1.5">
               {inner}
             </span>
           );
@@ -155,7 +155,7 @@ function SocialStatusBar({ links }: { links?: ProjectSocialLinks | null }) {
             rel="noopener noreferrer"
             title={slot.label}
             aria-label={slot.label}
-            className="rounded-md transition hover:opacity-90"
+            className="rounded-md p-1.5 transition hover:opacity-90"
           >
             {inner}
           </a>
@@ -213,10 +213,10 @@ export function WhatsNewModal({
         aria-label="Close"
         onClick={onClose}
       />
-      <div className="relative z-10 flex max-h-[min(88dvh,760px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#121212] shadow-2xl shadow-black/60">
+      <div className="whats-new-modal relative z-10 flex max-h-[min(88dvh,760px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#121212] shadow-2xl shadow-black/60">
         {loading ? (
           <div className="relative flex items-center justify-center border-b border-white/10 px-4 py-3.5">
-            <h2 className="whats-new-title text-[20px] text-white">
+            <h2 className="whats-new-title text-white">
               <WhatsNewHeading />
             </h2>
             <button
@@ -229,23 +229,23 @@ export function WhatsNewModal({
             </button>
           </div>
         ) : result ? (
-          <div className="border-b border-white/10 px-4 py-3">
-            <div className="flex items-start gap-3">
+          <div className="border-b border-white/10">
+            <div className="flex items-stretch gap-3">
               {logoSrc ? (
                 <Image
                   src={logoSrc}
                   alt=""
-                  width={48}
-                  height={48}
-                  className="mt-0.5 h-12 w-12 shrink-0 rounded-lg object-cover"
+                  width={96}
+                  height={96}
+                  className="h-full w-24 shrink-0 self-stretch rounded-tl-2xl object-cover"
                 />
               ) : (
-                <div className="mt-0.5 flex h-12 w-12 shrink-0 items-center justify-center rounded-lg bg-white/10 text-sm font-bold text-white/70">
+                <div className="flex w-24 shrink-0 items-center justify-center self-stretch rounded-tl-2xl bg-white/10 text-2xl font-bold text-white/70">
                   {(ticker || projectName || "?").slice(0, 1).toUpperCase()}
                 </div>
               )}
-              <div className="min-w-0 flex-1 pt-0.5 text-center">
-                <div className="whats-new-title truncate text-[20px] leading-tight">
+              <div className="min-w-0 flex-1 py-3 text-center">
+                <div className="whats-new-title truncate leading-tight">
                   <span className="text-white">
                     {projectName || ticker || "What's New"}
                   </span>
@@ -262,7 +262,7 @@ export function WhatsNewModal({
               <button
                 type="button"
                 onClick={onClose}
-                className="shrink-0 rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
+                className="mr-2 mt-2 h-fit shrink-0 rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
                 aria-label="Close What's New"
               >
                 <X className="h-5 w-5" />
@@ -271,7 +271,7 @@ export function WhatsNewModal({
           </div>
         ) : (
           <div className="relative flex items-center justify-center border-b border-white/10 px-4 py-3.5">
-            <h2 className="whats-new-title text-[20px] text-white">
+            <h2 className="whats-new-title text-white">
               <WhatsNewHeading />
             </h2>
             <button
@@ -296,7 +296,7 @@ export function WhatsNewModal({
                 className="whats-new-mascot-bounce h-auto w-[72px] object-contain"
                 priority
               />
-              <p className="whats-new-title text-center text-[16px] text-[#FFD700]">
+              <p className="text-center text-[16px] font-bold text-[#FFD700]">
                 We&apos;re digging into what the market is saying
                 <span className="whats-new-ellipsis" aria-hidden />
               </p>
@@ -336,7 +336,7 @@ export function WhatsNewModal({
                     height={56}
                     className="absolute left-0 h-14 w-14 object-contain"
                   />
-                  <h3 className="whats-new-title text-[20px]">
+                  <h3 className="whats-new-title">
                     <span style={{ color: GOLD }}>Top</span>{" "}
                     <span className="text-white">Tweets</span>
                   </h3>

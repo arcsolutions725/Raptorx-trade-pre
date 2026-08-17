@@ -810,8 +810,8 @@
     "semantic_hash": "d43e7a90d0ea2c9de09395b6fbbc26f4"
   },
   "src/app/api/trending/route.ts": {
-    "mtime": 1786930407.5112836,
-    "ast_hash": "0f4902e3634280f969efa65b68e6faa6",
+    "mtime": 1786945892.865154,
+    "ast_hash": "1df583192dd1892315c21a7049cd69c9",
     "semantic_hash": ""
   },
   "src/app/api/trending/sparklines/route.ts": {
@@ -3400,8 +3400,8 @@
     "semantic_hash": ""
   },
   "src/components/ui/modal/WhatsNewModal.tsx": {
-    "mtime": 1786936308.6641119,
-    "ast_hash": "d5bf1f1df1d7d0b38957a73a2c168e7a",
+    "mtime": 1786946599.8359191,
+    "ast_hash": "108d9f9014bc3c56be97d4d2b6855b5f",
     "semantic_hash": ""
   },
   "src/hooks/useWhatsNew.ts": {
@@ -3440,8 +3440,8 @@
     "semantic_hash": ""
   },
   "src/lib/solanaTrendingQuality.ts": {
-    "mtime": 1786842075.8474512,
-    "ast_hash": "1023f48f87ccf0d3b1d356a29849c16e",
+    "mtime": 1786945793.660629,
+    "ast_hash": "2fea21cbcb0ac924cb0595ae688665dd",
     "semantic_hash": ""
   },
   "public/images/what'snew/Browser Logo.png": {

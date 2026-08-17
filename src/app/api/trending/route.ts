@@ -660,12 +660,14 @@ async function loadSolanaVerifiedPageFromJupiter(opts: {
       )
     : withPricePct;
 
-  const live = await applyLiveMarketData(
-    dedupeByAddress(enriched),
-    "solana",
-    sort_by,
-    sort_type
-  );
+  const live = (
+    await applyLiveMarketData(
+      dedupeByAddress(enriched),
+      "solana",
+      sort_by,
+      sort_type
+    )
+  ).filter(shouldKeepSolanaTrendingToken);
 
   return {
     finalItems: live,
@@ -1832,8 +1834,8 @@ async function fetchChainTokens(opts: {
 
     const collected: any[] = [];
     let birdeyeOffset = offset;
-    const batchLimit = Math.min(BIRDEYE_V3_LIST_MAX, limit);
-    const maxBatches = 5;
+    const batchLimit = BIRDEYE_V3_LIST_MAX;
+    const maxBatches = 8;
     let batches = 0;
 
     while (batches < maxBatches && collected.length < limit) {
@@ -1863,12 +1865,11 @@ async function fetchChainTokens(opts: {
           )
         : normalized;
 
-      // Apply market cap filter for BNB tokens (remove tokens with mc = 0 or null)
+      // Drop dust mcaps and brand impersonators on every chain (search is unfiltered).
       const marketCapFiltered = filterValidMarketCap(filtered, chain);
-      const qualityFiltered =
-        chain === "solana"
-          ? marketCapFiltered.filter(shouldKeepSolanaTrendingToken)
-          : marketCapFiltered;
+      const qualityFiltered = marketCapFiltered.filter(
+        shouldKeepSolanaTrendingToken
+      );
 
       collected.push(...qualityFiltered);
 
@@ -1889,12 +1890,13 @@ async function fetchChainTokens(opts: {
       ? await enrichWithCreation(withPricePct, chain, apiKey, creation_concurrency)
       : withPricePct;
 
-    return await applyLiveMarketData(
+    const live = await applyLiveMarketData(
       dedupeByAddress(enriched),
       chain,
       sort_by,
       sort_type
     );
+    return live.filter(shouldKeepSolanaTrendingToken);
   } catch (error) {
     console.error(`Error fetching ${chain} tokens:`, error);
     return [];
@@ -2091,10 +2093,9 @@ export async function POST(request: NextRequest) {
     verifiedTotal = undefined;
   }
 
-  // Over-fetch when we drop rows after Birdeye (verified list and/or Solana fakes)
-  // so the page still fills to `limit`.
-  const needQualityFilter = chain === "solana";
-  const needPostFilterPagination = verified_only || needQualityFilter;
+  // Always over-fetch: we drop dust mcaps and impersonators after Birdeye
+  // (and optionally a verified-list intersection) so the page still fills.
+  const needPostFilterPagination = true;
   const needVerifiedTotal = verified_only && force_full_scan;
 
   let upstreamTotal: number | undefined;
@@ -2152,11 +2153,11 @@ export async function POST(request: NextRequest) {
           )
         : normalized;
 
-    // Apply market cap filter for BNB tokens (remove tokens with mc = 0 or null)
+    // Drop dust mcaps and brand impersonators on every chain.
     const afterMarketCapFilter = filterValidMarketCap(afterVerified, chain);
-    const afterQuality = needQualityFilter
-      ? afterMarketCapFilter.filter(shouldKeepSolanaTrendingToken)
-      : afterMarketCapFilter;
+    const afterQuality = afterMarketCapFilter.filter(
+      shouldKeepSolanaTrendingToken
+    );
 
     // Optimized de-duplication using Set for O(1) lookups
     const seenAddresses = new Set(
@@ -2207,12 +2208,14 @@ export async function POST(request: NextRequest) {
       )
     : pageWithPricePct;
 
-  const finalItems = await applyLiveMarketData(
-    dedupeByAddress(enriched),
-    chain,
-    sort_by,
-    sort_type
-  );
+  const finalItems = (
+    await applyLiveMarketData(
+      dedupeByAddress(enriched),
+      chain,
+      sort_by,
+      sort_type
+    )
+  ).filter(shouldKeepSolanaTrendingToken);
 
   // Totals semantics:
   // - verifiedTotalFiltered: exact count of Birdeye + verified intersection if we exhausted upstream (or forced full scan).
