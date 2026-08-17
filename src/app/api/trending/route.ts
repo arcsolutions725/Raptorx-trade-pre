@@ -194,26 +194,11 @@ function passesSearchLiquiditySanity(t: any): boolean {
   return true;
 }
 
-function shouldKeepTickerSearchRow(row: any, chainFetch: string): boolean {
-  const chain = String(chainFetch || "solana").toLowerCase();
-  if (chain === "solana") {
-    // Solana search must only return Birdeye-verified rows.
-    return row?.verified === true;
-  }
-  if (chain === "all") {
-    // When searching all chains, enforce verified only for Solana rows.
-    const rowChain = String(row?.chainId ?? "").toLowerCase();
-    if (rowChain === "solana") return row?.verified === true;
-  }
-  // EVM chains: do not apply external trust/scam lists in ticker search.
-  return true;
-}
-
-function applyTickerSearchResultFilter(rows: any[], chainFetch: string): any[] {
+function applyTickerSearchResultFilter(rows: any[]): any[] {
   if (!rows.length) return [];
-  const sane = rows.filter(passesSearchLiquiditySanity);
-  if (!sane.length) return [];
-  return sane.filter((row) => shouldKeepTickerSearchRow(row, chainFetch));
+  // Search must include unverified memecoins (LOOKSMAX, etc.). Only drop
+  // absurd FDV / no-liquidity impersonators — not Jupiter/Birdeye verified-only.
+  return rows.filter(passesSearchLiquiditySanity);
 }
 
 function filterValidMarketCap(tokens: any[], chain: string): any[] {
@@ -1163,7 +1148,7 @@ async function collectTickerSearchPage(opts: {
       startOffset: cursor,
       takeCount: TRENDING_SEARCH_FETCH_CHUNK,
       sort_by: opts.sort_by ?? "marketcap",
-      verifiedOnly: true,
+      verifiedOnly: false,
     });
     if (!rows.length) {
       exhausted = true;
@@ -1174,7 +1159,7 @@ async function collectTickerSearchPage(opts: {
     let normalized = opts.normalizeRows(rows);
     normalized = dedupeByAddress(normalized);
     normalized = sortRowsByMarketCapThenLiquidity(normalized);
-    const finalized = applyTickerSearchResultFilter(normalized, opts.chainFetch);
+    const finalized = applyTickerSearchResultFilter(normalized);
 
     for (const it of finalized) {
       const k = tokenAddressLookupKey(

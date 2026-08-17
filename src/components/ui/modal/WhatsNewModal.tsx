@@ -118,25 +118,25 @@ function paragraphsFromResult(result: WhatsNewResult): WhatsNewParagraph[] {
 
 function SocialStatusBar({ links }: { links?: ProjectSocialLinks | null }) {
   return (
-    <div className="flex items-center justify-center gap-3">
+    <div className="flex items-center justify-center gap-2">
       {SOCIAL_SLOTS.map((slot) => {
         const href = links?.[slot.key];
         const present = Boolean(href);
         const inner = (
-          <span className="relative inline-flex h-8 w-8 items-center justify-center">
+          <span className="relative inline-flex h-6 w-6 items-center justify-center">
             <Image
               src={slot.icon}
               alt={slot.label}
-              width={32}
-              height={32}
-              className={`h-8 w-8 object-contain ${present ? "" : "opacity-55"}`}
+              width={24}
+              height={24}
+              className={`h-6 w-6 object-contain ${present ? "" : "opacity-55"}`}
             />
             <Image
               src={present ? ICONS.check : ICONS.cross}
               alt={present ? "Available" : "Missing"}
-              width={14}
-              height={14}
-              className="absolute -right-1 -top-1 h-3.5 w-3.5 object-contain"
+              width={12}
+              height={12}
+              className="absolute -right-1 -top-1 h-3 w-3 object-contain"
             />
           </span>
         );
@@ -245,12 +245,12 @@ export function WhatsNewModal({
                 </div>
               )}
               <div className="min-w-0 flex-1 pt-0.5 text-center">
-                <div className="truncate text-[15px] font-bold leading-tight">
+                <div className="truncate text-[20px] font-bold leading-tight">
                   <span className="text-white">
                     {projectName || ticker || "What's New"}
                   </span>
                   {ticker ? (
-                    <span className="ml-1.5 font-semibold" style={{ color: GOLD }}>
+                    <span className="ml-1.5 font-bold" style={{ color: GOLD }}>
                       ${ticker}
                     </span>
                   ) : null}
@@ -328,15 +328,15 @@ export function WhatsNewModal({
               </section>
 
               <section className="flex flex-col items-center gap-2 pt-1">
-                <div className="flex items-center justify-center gap-2">
+                <div className="relative flex w-full items-center justify-center">
                   <Image
                     src={ICONS.rexTwitter}
                     alt=""
-                    width={40}
-                    height={40}
-                    className="h-10 w-10 object-contain"
+                    width={44}
+                    height={44}
+                    className="absolute left-0 h-11 w-11 object-contain"
                   />
-                  <h3 className="text-[15px] font-bold">
+                  <h3 className="text-[20px] font-bold">
                     <span style={{ color: GOLD }}>Top</span>{" "}
                     <span className="text-white">Tweets</span>
                   </h3>
@@ -404,9 +404,9 @@ export function WhatsNewModal({
                                   <Image
                                     src={ICONS.link}
                                     alt=""
-                                    width={14}
-                                    height={14}
-                                    className="h-3.5 w-3.5 object-contain"
+                                    width={22}
+                                    height={22}
+                                    className="h-[22px] w-[22px] object-contain"
                                   />
                                 </a>
                               ) : null}

@@ -810,8 +810,8 @@
     "semantic_hash": "d43e7a90d0ea2c9de09395b6fbbc26f4"
   },
   "src/app/api/trending/route.ts": {
-    "mtime": 1786842103.0289457,
-    "ast_hash": "a00f47fe650235baf042afd6846d2607",
+    "mtime": 1786930407.5112836,
+    "ast_hash": "0f4902e3634280f969efa65b68e6faa6",
     "semantic_hash": ""
   },
   "src/app/api/trending/sparklines/route.ts": {
@@ -2230,8 +2230,8 @@
     "semantic_hash": "e8e7bd5b9b73347feed02252c92e8df0"
   },
   "src/lib/api/tweet.ts": {
-    "mtime": 1786847441.9758372,
-    "ast_hash": "197621cde98691878dbfc619216ab54b",
+    "mtime": 1786866505.0629554,
+    "ast_hash": "375024c2116938e6f0042ee85f52e0f1",
     "semantic_hash": ""
   },
   "src/lib/auth/internalGoldenReportsAdmin.ts": {
@@ -3395,13 +3395,13 @@
     "semantic_hash": ""
   },
   "src/app/api/whats-new/route.ts": {
-    "mtime": 1786855632.02234,
-    "ast_hash": "b483fafe22d192ee11a5ae3b3b360189",
+    "mtime": 1786866510.3845606,
+    "ast_hash": "1e26a56e545dcbc034ea419a873dc75c",
     "semantic_hash": ""
   },
   "src/components/ui/modal/WhatsNewModal.tsx": {
-    "mtime": 1786856242.4680867,
-    "ast_hash": "7a444e5c3b4b479eb73106fb32f28c42",
+    "mtime": 1786930229.938004,
+    "ast_hash": "7556af72c19e4854d012eb31e6fafe8a",
     "semantic_hash": ""
   },
   "src/hooks/useWhatsNew.ts": {

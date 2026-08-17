@@ -110,28 +110,13 @@ export async function POST(req: NextRequest) {
       );
     } catch (tweetErr: any) {
       console.error("whats-new: tweet fetch failed:", tweetErr?.message || tweetErr);
-      const meta = await metaPromise;
-      return NextResponse.json({
-        ok: true,
-        summary:
-          "Tweet search timed out. Please try What's New again in a moment.",
-        paragraphs: [
-          {
-            title: "What's happening",
-            body: "Tweet search timed out. Please try What's New again in a moment.",
-          },
-        ],
-        tweets: [],
-        tweetsFetched: 0,
-        metadata: {
-          contractAddress,
-          ticker,
-          projectName: projectName || null,
-          generatedAt: new Date().toISOString(),
-          links: meta.links,
-          imageUrl: meta.imageUrl || fallbackImageUrl || null,
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "Couldn't load What's New right now. Please try again.",
         },
-      });
+        { status: 503 },
+      );
     }
 
     if (!tweetsResult.success && !(tweetsResult.data && tweetsResult.data.length)) {
@@ -139,27 +124,16 @@ export async function POST(req: NextRequest) {
         typeof tweetsResult.error === "string"
           ? tweetsResult.error
           : tweetsResult.error?.message || "Tweet search is temporarily unavailable.";
-      const meta = await metaPromise;
-      return NextResponse.json({
-        ok: true,
-        summary: `${detail} Try What's New again in a moment.`,
-        paragraphs: [
-          {
-            title: "What's happening",
-            body: `${detail} Try What's New again in a moment.`,
-          },
-        ],
-        tweets: [],
-        tweetsFetched: 0,
-        metadata: {
-          contractAddress,
-          ticker,
-          projectName: projectName || null,
-          generatedAt: new Date().toISOString(),
-          links: meta.links,
-          imageUrl: meta.imageUrl || fallbackImageUrl || null,
+      console.error("whats-new: tweet search failed:", detail);
+      return NextResponse.json(
+        {
+          ok: false,
+          error: /timed out/i.test(detail)
+            ? "Tweet search timed out. Please try again."
+            : "Couldn't load recent tweets right now. Please try again.",
         },
-      });
+        { status: 503 },
+      );
     }
 
     const raw = Array.isArray(tweetsResult.data) ? tweetsResult.data : [];

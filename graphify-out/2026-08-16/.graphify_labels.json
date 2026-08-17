@@ -285,6 +285,7 @@
   "283": "config/index.ts",
   "284": "client.ts",
   "285": "vercel.json",
+  "286": "chats/[id]/route.ts",
   "287": "instrumentation-client.ts",
   "288": "agent.ts",
   "289": "tailwind.config.ts",
@@ -292,5 +293,7 @@
   "291": "recharts",
   "292": "sharp",
   "293": "@tiptap/extension-placeholder",
-  "295": "bs58"
+  "294": "referral/route.ts",
+  "295": "bs58",
+  "296": "volume/route.ts"
 }

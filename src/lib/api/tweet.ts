@@ -223,7 +223,15 @@ function tweetFetchErrorMessage(err: unknown): string {
   if (/fetch failed|ETIMEDOUT|ENOTFOUND|UND_ERR|AbortError|timeout/i.test(raw)) {
     return "Tweet search timed out. Please try again.";
   }
-  return raw;
+  // twitterapi.io billing / auth — never leak "Credits is not enough. Please recharge"
+  if (
+    /credit|recharge|quota|insufficient|unauthorized|forbidden|api.?key|payment|balance/i.test(
+      raw,
+    )
+  ) {
+    return "Tweet search is temporarily unavailable.";
+  }
+  return "Tweet search is temporarily unavailable.";
 }
 
 async function searchTweetsOnce(
@@ -256,6 +264,11 @@ async function searchTweetsOnce(
           .json()
           .catch(() => ({ message: `HTTP ${response.status}` }));
         lastError = errorData?.message || errorData;
+        console.error(
+          "tweet search HTTP",
+          response.status,
+          typeof lastError === "string" ? lastError : JSON.stringify(lastError),
+        );
         if (response.status >= 500 && attempt < TWEET_FETCH_ATTEMPTS) {
           await new Promise((r) => setTimeout(r, 300 * attempt));
           continue;
