@@ -285,9 +285,9 @@ export function WhatsNewModal({
           </div>
         )}
 
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4">
+        <div className="min-h-0 flex-1 overflow-y-auto py-4">
           {loading ? (
-            <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 py-10">
+            <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 px-4 py-10">
               <Image
                 src={ICONS.rex}
                 alt="Rex reviewing the market"
@@ -302,12 +302,12 @@ export function WhatsNewModal({
               </p>
             </div>
           ) : error ? (
-            <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
+            <div className="mx-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
               {error}
             </div>
           ) : result ? (
-            <div className="flex flex-col gap-5">
-              <section className="flex flex-col gap-3.5">
+            <div className="flex flex-col">
+              <section className="flex flex-col gap-3.5 px-4">
                 {paragraphs.map((p, i) => (
                   <div key={`${p.title}-${i}`} className="flex items-start gap-2">
                     <Image
@@ -327,7 +327,9 @@ export function WhatsNewModal({
                 ))}
               </section>
 
-              <section className="mt-6 flex flex-col items-center gap-2 border-t border-white/15 pt-6">
+              <div className="mt-6 border-t border-white/15" />
+
+              <section className="flex flex-col items-center gap-2 px-4 pt-6">
                 <div className="relative flex w-full items-center justify-center py-1">
                   <Image
                     src={ICONS.rexTwitter}
