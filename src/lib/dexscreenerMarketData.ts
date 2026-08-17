@@ -43,6 +43,9 @@ export type DexMarketRow = {
   usdPrice?: number;
   pairAddress?: string;
   quoteSymbol?: string;
+  /** DexScreener's CDN-hosted token image. Used to replace slow/dead logo URLs
+   *  (many Birdeye logos point at ipfs.io, which hangs and renders as a "?"). */
+  logo?: string;
 };
 
 type Entry = { at: number; row: DexMarketRow | null };
@@ -166,6 +169,10 @@ async function fetchBatchInto(slug: string, addresses: string[]): Promise<void> 
         typeof p?.quoteToken?.symbol === "string"
           ? p.quoteToken.symbol
           : undefined,
+      logo:
+        typeof p?.info?.imageUrl === "string" && p.info.imageUrl
+          ? p.info.imageUrl
+          : undefined,
     };
     cache.set(cacheKey(slug, a), { at: now, row });
   }
@@ -258,6 +265,10 @@ export async function applyDexMarketOverlay(
       usdPrice: row.usdPrice ?? it?.usdPrice,
       pairAddress: row.pairAddress ?? it?.pairAddress,
       quoteSymbol: row.quoteSymbol ?? it?.quoteSymbol,
+      // Prefer DexScreener's CDN logo — Birdeye often returns raw ipfs.io URLs
+      // that hang in the browser and render as a "?" placeholder. Keep the
+      // existing logo only when DexScreener has none.
+      logo: row.logo ?? it?.logo,
     };
   });
 }

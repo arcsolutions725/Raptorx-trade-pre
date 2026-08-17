@@ -1,7 +1,7 @@
 # Graph Report - RaptorXchange  (2026-08-17)
 
 ## Corpus Check
-- 587 files · ~3,364,651 words
+- 587 files · ~3,364,653 words
 - Verdict: corpus is large enough that graph structure adds value.
 
 ## Summary
@@ -144,8 +144,8 @@
 - useLimitlessOrder.ts
 - roundOpen.ts
 - geoblock/route.ts
+- ai
 - ChartView.tsx
-- myriad/markets/route.ts
 - sportsTags.ts
 - lib/utils/format.ts
 - polymarket/orderbook/route.ts
@@ -301,8 +301,8 @@ Cohesion: 0.08
 Nodes (44): CryptoSwapPanel(), resolveSwapChainFromPayload(), GenerateRexscreenerReport(), User, ChatSidebar(), ChatSidebarProps, RexChat(), RexChatProps (+36 more)
 
 ### Community 2 - "KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx"
-Cohesion: 0.07
-Nodes (48): BuySellWidget(), BuySellWidgetProps, BuySellModal(), BuySellModalProps, BuySellWidget(), BuySellWidgetProps, LimitlessMarketOption, LimitlessVenue (+40 more)
+Cohesion: 0.06
+Nodes (55): chainLabel(), CHAINS, CuratedReportsDashboard(), Project, ReportType, shorten(), usd(), BuySellWidget() (+47 more)
 
 ### Community 3 - "trending/route.ts"
 Cohesion: 0.09
@@ -385,8 +385,8 @@ Cohesion: 0.11
 Nodes (19): CATEGORY_SKELETON_PILL_WIDTHS, MarketCategory(), MarketCategoryProps, MYRIAD_CATEGORIES, SliderStyle, KalshiCategoriesResponse, useKalshiCategories(), LimitlessCategoriesData (+11 more)
 
 ### Community 23 - "links.ts"
-Cohesion: 0.14
-Nodes (26): requireSignTarget(), createDappKeypair(), DappKeypair, encryptPayload(), AWAITING_SIGNATURE, eachStep(), findPendingSignTarget(), armStoreFallback() (+18 more)
+Cohesion: 0.17
+Nodes (22): createDappKeypair(), DappKeypair, encryptPayload(), armStoreFallback(), dappPublicKey(), Deeplink, navigateAndHang(), openPhantomConnect() (+14 more)
 
 ### Community 24 - "useGenerateRexReport.ts"
 Cohesion: 0.11
@@ -558,7 +558,7 @@ Nodes (12): buildLinePath(), ChartDataPoint, clamp(), CupHandleTimeline(), forma
 
 ### Community 67 - "dependencies"
 Cohesion: 0.12
-Nodes (17): ai, ethers, @heliofi/checkout-react, dependencies, ai, ethers, @heliofi/checkout-react, @phantom/browser-sdk (+9 more)
+Nodes (17): copy-to-clipboard, ethers, @heliofi/checkout-react, dependencies, copy-to-clipboard, ethers, @heliofi/checkout-react, @phantom/browser-sdk (+9 more)
 
 ### Community 68 - "manifest.json"
 Cohesion: 0.12
@@ -732,6 +732,10 @@ Nodes (8): CommentRow(), getTimeAgo(), PredictFunComments(), PredictFunCommentsP
 Cohesion: 0.06
 Nodes (42): CommentItem(), Comments(), CommentsProps, getTimeAgo(), TopHolders(), TopHoldersProps, MyriadActivity(), MyriadTopHolders() (+34 more)
 
+### Community 113 - "politicsTags.ts"
+Cohesion: 0.40
+Nodes (4): requireSignTarget(), AWAITING_SIGNATURE, eachStep(), findPendingSignTarget()
+
 ### Community 114 - "17. RexScreener implementation"
 Cohesion: 0.33
 Nodes (6): 17.1 Event ingestion, 17.2 Suggested database, 17.3 Canonical pricing engine, 17.4 REST and WebSocket, 17.5 Lightweight Charts component, 17. RexScreener implementation
@@ -787,10 +791,6 @@ Nodes (5): GET(), KalshiGeoblockResponse, isKalshiRestrictedCountry(), KALSHI_RE
 ### Community 131 - "ChartView.tsx"
 Cohesion: 0.33
 Nodes (4): ChartViewProps, PriceChartWidget(), PriceChartWidgetProps, Window
-
-### Community 132 - "myriad/markets/route.ts"
-Cohesion: 0.36
-Nodes (7): chainLabel(), CHAINS, CuratedReportsDashboard(), Project, ReportType, shorten(), usd()
 
 ### Community 133 - "sportsTags.ts"
 Cohesion: 0.38
@@ -880,7 +880,7 @@ _Questions this graph is uniquely positioned to answer:_
   _High betweenness centrality (0.040) - this node is a cross-community bridge._
 - **Why does `useReportGenStatus()` connect `screenerRowMerge.ts` to `AIGeneratedMarketsReport.tsx`, `useMyriadAmmTrade.ts`, `predictFunRedeem.ts`, `usePhantomConnect`, `RexMarketsCardView.tsx`, `predictfun/parsePriceChart.ts`, `_components/generatereport/index.tsx`, `runKeeper.ts`, `generate-report/route.ts`, `useGenerateRexReport.ts`, `SwapWidget.tsx`?**
   _High betweenness centrality (0.031) - this node is a cross-community bridge._
-- **Why does `showErrorNotification()` connect `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx` to `polymarket/orderbook/route.ts`, `myriad/markets/route.ts`, `HolderAvatar.tsx`, `goldenReportTeamUpdate.ts`, `AccountModal.tsx`, `PredictFunMarketInfoPanel.tsx`, `generate-report/route.ts`, `parseMyriadModalApi.ts`?**
+- **Why does `showErrorNotification()` connect `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx` to `polymarket/orderbook/route.ts`, `HolderAvatar.tsx`, `goldenReportTeamUpdate.ts`, `AccountModal.tsx`, `PredictFunMarketInfoPanel.tsx`, `generate-report/route.ts`, `parseMyriadModalApi.ts`?**
   _High betweenness centrality (0.028) - this node is a cross-community bridge._
 - **What connects `__filename`, `__dirname`, `compat` to the rest of the system?**
   _816 weakly-connected nodes found - possible documentation gaps or missing edges._
@@ -889,4 +889,4 @@ _Questions this graph is uniquely positioned to answer:_
 - **Should `useMyriadAmmTrade.ts` be split into smaller, more focused modules?**
   _Cohesion score 0.08182349503214495 - nodes in this community are weakly interconnected._
 - **Should `KalshiTradingInterface/components/BuySellWidget/BuySellWidget.tsx` be split into smaller, more focused modules?**
-  _Cohesion score 0.06887366818873668 - nodes in this community are weakly interconnected._
+  _Cohesion score 0.06049382716049383 - nodes in this community are weakly interconnected._

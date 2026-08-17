@@ -3400,8 +3400,8 @@
     "semantic_hash": ""
   },
   "src/components/ui/modal/WhatsNewModal.tsx": {
-    "mtime": 1786951335.792671,
-    "ast_hash": "330a749c8ad894141ee82398c22fbcf4",
+    "mtime": 1786953847.5145981,
+    "ast_hash": "96498b6440155c90233b3288188a16ab",
     "semantic_hash": ""
   },
   "src/hooks/useWhatsNew.ts": {
