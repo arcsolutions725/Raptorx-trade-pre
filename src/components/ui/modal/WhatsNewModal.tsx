@@ -237,10 +237,10 @@ export function WhatsNewModal({
                   alt=""
                   width={90}
                   height={90}
-                  className="h-[90px] w-[90px] shrink-0 rounded-full object-cover"
+                  className="h-[90px] w-[90px] shrink-0 rounded-lg object-cover"
                 />
               ) : (
-                <div className="flex h-[90px] w-[90px] shrink-0 items-center justify-center rounded-full bg-white/10 text-2xl font-bold text-white/70">
+                <div className="flex h-[90px] w-[90px] shrink-0 items-center justify-center rounded-lg bg-white/10 text-2xl font-bold text-white/70">
                   {(ticker || projectName || "?").slice(0, 1).toUpperCase()}
                 </div>
               )}
@@ -327,7 +327,7 @@ export function WhatsNewModal({
                 ))}
               </section>
 
-              <section className="flex flex-col items-center gap-2" style={{ paddingTop: '30px' }}>
+              <section className="mt-6 flex flex-col items-center gap-2 border-t border-white/15 pt-6">
                 <div className="relative flex w-full items-center justify-center py-1">
                   <Image
                     src={ICONS.rexTwitter}
