@@ -177,8 +177,9 @@ export function useTrendingTokens(
           verified_only: isVerified, // <-- driven by search presence
           force_full_scan: forceFullScan,
           ...(customBody ?? {}),
-          // Search returns rows immediately; Age is filled in a follow-up request.
-          include_creation: isSearch ? false : true,
+          // List first; Age is patched in by `/api/trending/ages` so the table
+          // is not blocked on per-token creation lookups (~10s cold).
+          include_creation: false,
           creation_concurrency: 6,
         }),
       });

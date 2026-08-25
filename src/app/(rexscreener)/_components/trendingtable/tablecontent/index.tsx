@@ -827,52 +827,52 @@ export function TrendingTableContent({
 
   const rows = Array.isArray(data) ? data : [];
 
-  const searchAgeItems = useMemo(() => {
-    if (!isSearchMode || goldenReportsOnly || pumpReportsOnly) return [];
+  const pendingAgeItems = useMemo(() => {
+    if (goldenReportsOnly || pumpReportsOnly) return [];
     return rows.filter((t) => !hasUsableTokenCreatedAt(t.createdAt));
-  }, [isSearchMode, goldenReportsOnly, pumpReportsOnly, rows]);
+  }, [goldenReportsOnly, pumpReportsOnly, rows]);
 
-  const searchAgeQueryKey = useMemo(
+  const trendingAgeQueryKey = useMemo(
     () =>
       [
-        "trending-search-ages",
-        searchAgeItems.map((t) => t.tokenAddress ?? "").join("|"),
+        "trending-row-ages",
+        pendingAgeItems.map((t) => t.tokenAddress ?? "").join("|"),
       ] as const,
-    [searchAgeItems],
+    [pendingAgeItems],
   );
 
-  const { data: searchAgesPayload } = useQuery({
-    queryKey: searchAgeQueryKey,
+  const { data: trendingAgesPayload } = useQuery({
+    queryKey: trendingAgeQueryKey,
     queryFn: async () => {
       const res = await fetch("/api/trending/ages", {
         method: "POST",
         headers: { "content-type": "application/json" },
         cache: "no-store",
-        body: JSON.stringify({ items: searchAgeItems }),
+        body: JSON.stringify({ items: pendingAgeItems }),
       });
       if (!res.ok) {
-        throw new Error(`Search ages failed: ${res.statusText}`);
+        throw new Error(`Trending ages failed: ${res.statusText}`);
       }
       return res.json() as Promise<{
         ok?: boolean;
         ages?: Record<string, number | undefined>;
       }>;
     },
-    enabled: searchAgeItems.length > 0,
+    enabled: pendingAgeItems.length > 0,
     staleTime: 5 * 60_000,
     refetchOnWindowFocus: false,
   });
 
-  const rowsWithSearchAges = useMemo(
-    () => mergeScreenerTokenAges(rows, searchAgesPayload?.ages),
-    [rows, searchAgesPayload?.ages],
+  const rowsWithAges = useMemo(
+    () => mergeScreenerTokenAges(rows, trendingAgesPayload?.ages),
+    [rows, trendingAgesPayload?.ages],
   );
 
   const displayRows = goldenReportsOnly
     ? goldenRowsWithRank
     : pumpReportsOnly
       ? pumpRowsWithRank
-      : rowsWithSearchAges;
+      : rowsWithAges;
 
   const { series: sparklineSeries, isFetching: sparklinesFetching } =
     useTrendingSparklines(displayRows);
