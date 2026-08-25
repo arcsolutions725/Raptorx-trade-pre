@@ -826,11 +826,53 @@ export function TrendingTableContent({
   }, [screenerChain, setPageIndex]);
 
   const rows = Array.isArray(data) ? data : [];
+
+  const searchAgeItems = useMemo(() => {
+    if (!isSearchMode || goldenReportsOnly || pumpReportsOnly) return [];
+    return rows.filter((t) => !hasUsableTokenCreatedAt(t.createdAt));
+  }, [isSearchMode, goldenReportsOnly, pumpReportsOnly, rows]);
+
+  const searchAgeQueryKey = useMemo(
+    () =>
+      [
+        "trending-search-ages",
+        searchAgeItems.map((t) => t.tokenAddress ?? "").join("|"),
+      ] as const,
+    [searchAgeItems],
+  );
+
+  const { data: searchAgesPayload } = useQuery({
+    queryKey: searchAgeQueryKey,
+    queryFn: async () => {
+      const res = await fetch("/api/trending/ages", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ items: searchAgeItems }),
+      });
+      if (!res.ok) {
+        throw new Error(`Search ages failed: ${res.statusText}`);
+      }
+      return res.json() as Promise<{
+        ok?: boolean;
+        ages?: Record<string, number | undefined>;
+      }>;
+    },
+    enabled: searchAgeItems.length > 0,
+    staleTime: 5 * 60_000,
+    refetchOnWindowFocus: false,
+  });
+
+  const rowsWithSearchAges = useMemo(
+    () => mergeScreenerTokenAges(rows, searchAgesPayload?.ages),
+    [rows, searchAgesPayload?.ages],
+  );
+
   const displayRows = goldenReportsOnly
     ? goldenRowsWithRank
     : pumpReportsOnly
       ? pumpRowsWithRank
-      : rows;
+      : rowsWithSearchAges;
 
   const { series: sparklineSeries, isFetching: sparklinesFetching } =
     useTrendingSparklines(displayRows);

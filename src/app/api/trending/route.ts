@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
-import { attachCachedCreationAges, enrichWithCreation } from "@/lib/birdeyeTokenCreationInfo";
+import { enrichWithCreation } from "@/lib/birdeyeTokenCreationInfo";
 import { applyDexMarketOverlay } from "@/lib/dexscreenerMarketData";
 import {
   getRobinhoodTokens,
@@ -1051,6 +1051,8 @@ async function fetchBirdeyeSearchWindow(opts: {
   takeCount: number;
   sort_by?: string;
   verifiedOnly?: boolean;
+  /** When set, do not try other sort/search modes. */
+  strategy?: BirdeyeSearchStrategy;
 }): Promise<any[]> {
   const keyword = String(opts.keyword || "").trim();
   if (!keyword || keyword.length < 2) return [];
@@ -1060,7 +1062,7 @@ async function fetchBirdeyeSearchWindow(opts: {
   const out: any[] = [];
   let o = Math.max(0, Math.floor(opts.startOffset));
   const verifiedOnly = opts.verifiedOnly !== false;
-  let strategy: BirdeyeSearchStrategy | null = null;
+  let strategy: BirdeyeSearchStrategy | null = opts.strategy ?? null;
 
   while (out.length < takeCount) {
     const pageLen = Math.min(20, takeCount - out.length);
@@ -1115,20 +1117,30 @@ function chainFromBirdeyeSearchNetwork(net: unknown): string {
   return "solana";
 }
 
-function sortRowsByMarketCapThenLiquidity(rows: any[]): any[] {
-  return [...rows].sort(
-    (a, b) =>
+function preferExactTickerMatch(rows: any[], keyword: string): any[] {
+  const q = keyword.trim().toLowerCase().replace(/^\$/, "");
+  if (!q) return rows;
+  return [...rows].sort((a, b) => {
+    const ae = String(a?.symbol ?? "").toLowerCase() === q ? 0 : 1;
+    const be = String(b?.symbol ?? "").toLowerCase() === q ? 0 : 1;
+    if (ae !== be) return ae - be;
+    return (
       (b.marketCap ?? 0) - (a.marketCap ?? 0) ||
       (b.liquidityUsd ?? 0) - (a.liquidityUsd ?? 0)
-  );
+    );
+  });
 }
 
-/** One extra Birdeye page (20) beyond `limit` is enough now that the filter is lenient. */
-const TRENDING_SEARCH_MAX_LOOPS = 2;
+/** Birdeye caps `/v3/search` at 20 rows. One page is one Uniblock round-trip (~3–7s). */
+const TRENDING_SEARCH_PAGE_SIZE = 20;
 
 /**
- * Pulls enough upstream `v3/search` rows, then filters to liquidity-sane
- * so a full page still has `limit` items when the API interleaves garbage.
+ * Pulls one Birdeye search page per strategy, then filters to liquidity-sane
+ * rows. Market-cap sort is poisoned by fake infinite-FDV tickers; if a
+ * strategy's page is entirely dropped, try the next instead of returning empty.
+ *
+ * Do not fetch a second 20-row page: each Uniblock search is several seconds,
+ * and two sequential pages is what made search sit at ~10s+.
  */
 async function collectTickerSearchPage(opts: {
   keyword: string;
@@ -1139,53 +1151,35 @@ async function collectTickerSearchPage(opts: {
   normalizeRows: (rows: any[]) => any[];
   sort_by?: string;
 }): Promise<{ items: any[]; hasMore: boolean }> {
-  const want = opts.limit + 1;
-  const acc: any[] = [];
-  const seen = new Set<string>();
-  let cursor = opts.birdeyeOffset;
-  let exhausted = false;
-  let loops = 0;
+  const want = Math.min(opts.limit, TRENDING_SEARCH_PAGE_SIZE);
+  const strategies = birdeyeSearchStrategies(opts.sort_by?.trim());
 
-  while (acc.length < want && !exhausted && loops < TRENDING_SEARCH_MAX_LOOPS) {
-    loops++;
-    const takeCount =
-      loops === 1 ? Math.min(40, Math.max(want, 20)) : Math.min(20, want - acc.length);
+  for (const strategy of strategies) {
     const rows = await fetchBirdeyeSearchWindow({
       keyword: opts.keyword,
       chain: opts.chainFetch,
       apiKey: opts.apiKey,
-      startOffset: cursor,
-      takeCount,
-      sort_by: opts.sort_by ?? "marketcap",
+      startOffset: opts.birdeyeOffset,
+      takeCount: TRENDING_SEARCH_PAGE_SIZE,
+      sort_by: opts.sort_by ?? "volume_24h_usd",
       verifiedOnly: false,
+      strategy,
     });
-    if (!rows.length) {
-      exhausted = true;
-      break;
-    }
-    cursor += rows.length;
+    if (!rows.length) continue;
 
     let normalized = opts.normalizeRows(rows);
     normalized = dedupeByAddress(normalized);
-    normalized = sortRowsByMarketCapThenLiquidity(normalized);
     const finalized = applyTickerSearchResultFilter(normalized);
+    if (!finalized.length) continue;
 
-    for (const it of finalized) {
-      const k = tokenAddressLookupKey(
-        String(it.chainId ?? ""),
-        String(it.tokenAddress ?? "")
-      );
-      if (!k || seen.has(k)) continue;
-      seen.add(k);
-      acc.push(it);
-      if (acc.length >= want) break;
-    }
-
-    if (rows.length < takeCount) exhausted = true;
+    const ranked = preferExactTickerMatch(finalized, opts.keyword);
+    return {
+      items: ranked.slice(0, want),
+      hasMore: ranked.length > want || rows.length >= TRENDING_SEARCH_PAGE_SIZE,
+    };
   }
 
-  const hasMore = acc.length > opts.limit;
-  return { items: acc.slice(0, opts.limit), hasMore };
+  return { items: [], hasMore: false };
 }
 
 async function buildSolanaTickerSearchPage(
@@ -1200,7 +1194,7 @@ async function buildSolanaTickerSearchPage(
     birdeyeOffset: offset,
     limit,
     chainFetch: "solana",
-    sort_by: "marketcap",
+    sort_by: "volume_24h_usd",
     normalizeRows: (rows) =>
       rows.map((r) => normalizeTokenlistToken(r, "solana")),
   });
@@ -1218,7 +1212,7 @@ async function buildAllChainsTickerSearchPage(
     birdeyeOffset: offset,
     limit,
     chainFetch: "all",
-    sort_by: "marketcap",
+    sort_by: "volume_24h_usd",
     normalizeRows: (rows) =>
       rows.map((r) =>
         normalizeTokenlistToken(r, chainFromBirdeyeSearchNetwork(r?.network))
@@ -1239,7 +1233,7 @@ async function tickerSearchRowsFromBirdeyeV3Paged(
     birdeyeOffset: offset,
     limit,
     chainFetch: chain,
-    sort_by: "marketcap",
+    sort_by: "volume_24h_usd",
     normalizeRows: (rows) => {
       let normalized = rows.map((t) => normalizeTokenlistToken(t, chain));
       let filtered = filterValidMarketCap(normalized, chain);
@@ -1603,44 +1597,19 @@ async function handleTokenSearch(opts: {
       }
     }
 
-    // Apply sorting by market cap (higher first) then liquidity (higher first)
-    const sortedResults = searchResults.sort((a, b) => {
-      // Primary sort: Market cap (higher first)
-      const aMarketCap = a.marketCap ?? 0;
-      const bMarketCap = b.marketCap ?? 0;
-
-      if (aMarketCap !== bMarketCap) {
-        return bMarketCap - aMarketCap; // Higher market cap first
-      }
-
-      // Secondary sort: Liquidity (higher first)
-      const aLiquidity = a.liquidityUsd ?? 0;
-      const bLiquidity = b.liquidityUsd ?? 0;
-
-      return bLiquidity - aLiquidity; // Higher liquidity first
-    });
-
     const creationChain =
-      sortedResults[0]?.chainId != null
-        ? String(sortedResults[0].chainId)
+      searchResults[0]?.chainId != null
+        ? String(searchResults[0].chainId)
         : chain;
 
-    // Search used to wait on per-token Birdeye creation_info + DexScreener Age
-    // (~25 serial-ish lookups). Attach cached Age only so the keyword result
-    // returns as soon as Birdeye search does.
-    const enrichedResults = await attachCachedCreationAges(
-      sortedResults,
-      creationChain,
-    );
-
     return NextResponse.json({
-      items: enrichedResults,
-      uniqueCount: enrichedResults.length,
+      items: searchResults,
+      uniqueCount: searchResults.length,
       offset,
       limit,
       chain: search_type === "address" ? creationChain : chain,
       upstreamTotal: searchExhausted
-        ? offset + enrichedResults.length
+        ? offset + searchResults.length
         : undefined,
       exhausted: searchExhausted,
       searchQuery: search_query,

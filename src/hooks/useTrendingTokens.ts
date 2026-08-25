@@ -176,10 +176,10 @@ export function useTrendingTokens(
           ui_amount_mode: "scaled",
           verified_only: isVerified, // <-- driven by search presence
           force_full_scan: forceFullScan,
-          // Search skips the slow per-token creation fan-out; trending still fills Age.
-          include_creation: !isSearch,
-          creation_concurrency: 6,
           ...(customBody ?? {}),
+          // Search returns rows immediately; Age is filled in a follow-up request.
+          include_creation: isSearch ? false : true,
+          creation_concurrency: 6,
         }),
       });
       if (!res.ok) throw new Error(`Trending fetch failed: ${res.statusText}`);
