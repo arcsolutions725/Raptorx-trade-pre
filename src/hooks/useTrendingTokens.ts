@@ -147,6 +147,8 @@ export function useTrendingTokens(
 
   const offset = (pageIndex - 1) * pageSize;
 
+  const isSearch = Boolean(customBody?.search_query);
+
   const query = useQuery({
     queryKey: [
       "trending",
@@ -174,8 +176,8 @@ export function useTrendingTokens(
           ui_amount_mode: "scaled",
           verified_only: isVerified, // <-- driven by search presence
           force_full_scan: forceFullScan,
-          // Fill Age via Birdeye token_creation_info when list/overview omit createdAt (common for V3 list + Jupiter catalog).
-          include_creation: true,
+          // Search skips the slow per-token creation fan-out; trending still fills Age.
+          include_creation: !isSearch,
           creation_concurrency: 6,
           ...(customBody ?? {}),
         }),
@@ -188,8 +190,8 @@ export function useTrendingTokens(
     // re-rendered that panel; at 5s it aborted an in-flight follow-up chat (the chat
     // component would unmount/remount mid-stream). 20s keeps the table's Mcap
     // visibly matching the DexScreener chart while leaving the chat undisturbed.
-    staleTime: 15_000,
-    refetchInterval: 20_000,
+    staleTime: isSearch ? 30_000 : 15_000,
+    refetchInterval: isSearch ? false : 20_000,
     // Don't burn requests on a hidden tab.
     refetchIntervalInBackground: false,
     placeholderData: keepPreviousData,

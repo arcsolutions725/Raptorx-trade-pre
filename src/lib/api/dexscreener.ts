@@ -20,128 +20,6 @@ export const DEX_CHAIN_SLUG: Record<string, string> = {
 export const toDexChainSlug = (chain?: string | null): string | undefined =>
   chain ? DEX_CHAIN_SLUG[chain.trim().toLowerCase()] : undefined;
 
-/** DexScreener caps `/tokens/v1/{slug}/{addresses}` at 30 addresses per call. */
-const TOKENS_V1_BATCH = 30;
-const TOKEN_PAIRS_CONCURRENCY = 8;
-const TOKEN_PAIRS_TTL_MS = 60_000;
-
-const tokenPairsCache = new Map<
-  string,
-  { at: number; pairs: DexScreenerPair[] }
->();
-
-function asPairList(data: unknown): DexScreenerPair[] {
-  if (Array.isArray(data)) return data as DexScreenerPair[];
-  if (data && typeof data === "object" && Array.isArray((data as { pairs?: unknown }).pairs)) {
-    return (data as { pairs: DexScreenerPair[] }).pairs;
-  }
-  return [];
-}
-
-async function fetchDexJson(
-  url: string,
-  signal?: AbortSignal,
-): Promise<unknown> {
-  try {
-    const res = await fetch(url, {
-      headers: { accept: "application/json" },
-      cache: "no-store",
-      signal,
-    });
-    if (!res.ok) return null;
-    return await res.json();
-  } catch {
-    return null;
-  }
-}
-
-/**
- * Pair data for a set of token addresses on one DexScreener chain.
- *
- * Prefers the batched `/tokens/v1/{slug}/{addr,addr}` endpoint. For Robinhood
- * that batch started returning empty HTTP 200s (Cloudflare then caches the
- * empty body), while `/token-pairs/v1/{slug}/{addr}` still has the pools.
- * Misses on Robinhood are filled per-token and cached briefly so a 5s price
- * refresh does not re-issue hundreds of lookups.
- */
-export async function fetchDexScreenerPairsForAddresses(
-  slug: string,
-  addresses: string[],
-  signal?: AbortSignal,
-): Promise<DexScreenerPair[]> {
-  const unique = [
-    ...new Set(
-      addresses
-        .map((a) => (typeof a === "string" ? a.trim().toLowerCase() : ""))
-        .filter(Boolean),
-    ),
-  ];
-  if (!unique.length) return [];
-
-  const out: DexScreenerPair[] = [];
-  const haveBase = new Set<string>();
-  const take = (pairs: DexScreenerPair[]) => {
-    for (const p of pairs) {
-      if (p?.chainId !== slug) continue;
-      out.push(p);
-      const base = String(p?.baseToken?.address ?? "").toLowerCase();
-      if (base) haveBase.add(base);
-    }
-  };
-
-  for (let i = 0; i < unique.length; i += TOKENS_V1_BATCH) {
-    const batch = unique.slice(i, i + TOKENS_V1_BATCH);
-    const data = await fetchDexJson(
-      `${DEXSCREENER_BASE}/tokens/v1/${slug}/${batch.join(",")}`,
-      signal,
-    );
-    take(asPairList(data));
-  }
-
-  if (slug !== "robinhood") return out;
-
-  const missing = unique.filter((a) => !haveBase.has(a));
-  if (!missing.length) return out;
-
-  const now = Date.now();
-  const toFetch: string[] = [];
-  for (const a of missing) {
-    const key = `${slug}|${a}`;
-    const hit = tokenPairsCache.get(key);
-    if (hit && now - hit.at < TOKEN_PAIRS_TTL_MS) {
-      take(hit.pairs);
-    } else {
-      toFetch.push(a);
-    }
-  }
-
-  for (let i = 0; i < toFetch.length; i += TOKEN_PAIRS_CONCURRENCY) {
-    const chunk = toFetch.slice(i, i + TOKEN_PAIRS_CONCURRENCY);
-    const lists = await Promise.all(
-      chunk.map(async (a) => {
-        const data = await fetchDexJson(
-          `${DEXSCREENER_BASE}/token-pairs/v1/${slug}/${a}`,
-          signal,
-        );
-        if (data == null) return [];
-        let pairs = asPairList(data).filter((p) => p?.chainId === slug);
-        if (!pairs.length) {
-          const generic = await fetchDexJson(
-            `${DEXSCREENER_BASE}/latest/dex/tokens/${a}`,
-            signal,
-          );
-          pairs = asPairList(generic).filter((p) => p?.chainId === slug);
-        }
-        tokenPairsCache.set(`${slug}|${a}`, { at: Date.now(), pairs });
-        return pairs;
-      }),
-    );
-    for (const pairs of lists) take(pairs);
-  }
-
-  return out;
-}
-
 export interface DexScreenerPair {
   chainId: string;
   dexId: string;
@@ -197,14 +75,28 @@ export async function getDexscreenerData(
     // per pool, the row's Mcap and the embedded chart would then be reading different
     // pools. `tokens/v1/{slug}` is the same endpoint the table's overlay uses.
     const slug = toDexChainSlug(chain);
-    const addr = contractAddress.trim().toLowerCase();
-    const pairs: DexScreenerPair[] = slug
-      ? await fetchDexScreenerPairsForAddresses(slug, [addr])
-      : asPairList(
-          await fetchDexJson(
-            `${DEXSCREENER_BASE}/latest/dex/tokens/${encodeURIComponent(addr)}`,
-          ),
-        );
+    const addr = encodeURIComponent(contractAddress);
+    const url = slug
+      ? `${DEXSCREENER_BASE}/tokens/v1/${slug}/${addr}`
+      : `${DEXSCREENER_BASE}/latest/dex/tokens/${addr}`;
+
+    const response = await fetch(url);
+
+    if (!response.ok) {
+      console.error(
+        "DexScreener API Error:",
+        response.status,
+        response.statusText
+      );
+      return { error: `Failed to fetch DexScreener data: ${response.status}` };
+    }
+
+    // `tokens/v1` returns a bare array of pairs; `latest/dex/tokens` wraps them.
+    const data: DexScreenerTokenProfile | DexScreenerPair[] =
+      await response.json();
+    const pairs: DexScreenerPair[] = Array.isArray(data)
+      ? data
+      : (data?.pairs ?? []);
 
     if (!pairs.length) {
       return { error: "No DexScreener data found" };

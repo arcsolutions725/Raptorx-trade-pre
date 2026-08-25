@@ -2,7 +2,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { unstable_cache } from "next/cache";
-import { enrichWithCreation } from "@/lib/birdeyeTokenCreationInfo";
+import { attachCachedCreationAges, enrichWithCreation } from "@/lib/birdeyeTokenCreationInfo";
 import { applyDexMarketOverlay } from "@/lib/dexscreenerMarketData";
 import {
   getRobinhoodTokens,
@@ -966,34 +966,14 @@ function extractBirdeyeSearchTokenRows(json: any): any[] {
   return out;
 }
 
-/**
- * Fuzzy token search by name/symbol via Uniblock → Birdeye v3/search.
- * Tries multiple sort/search modes — some keywords (e.g. "core") return empty for marketcap-only.
- */
-async function fetchBirdeyeSearchTokenResults(opts: {
-  keyword: string;
-  chain: string;
-  apiKey: string;
-  limit?: number;
-  offset?: number;
-  sort_by?: string;
-  /** Birdeye `verify_token=true` (Solana + `chain=all`) + post-filters for EVM. */
-  verifiedOnly?: boolean;
-}): Promise<any[]> {
-  const keyword = String(opts.keyword || "").trim();
-  if (!keyword || keyword.length < 2) return [];
+type BirdeyeSearchStrategy = {
+  sort_by: string;
+  search_by: string;
+  search_mode: string;
+};
 
-  const chainQ = birdeyeSearchChainQuery(opts.chain);
-  const verifiedOnly = opts.verifiedOnly !== false;
-  const lim = Math.min(Math.max(1, Math.floor(opts.limit ?? 20)), 20);
-  const off = Math.max(0, Math.floor(opts.offset ?? 0));
-
-  const hintSort = opts.sort_by?.trim();
-  const strategies: Array<{
-    sort_by: string;
-    search_by: string;
-    search_mode: string;
-  }> = [
+function birdeyeSearchStrategies(hintSort?: string): BirdeyeSearchStrategy[] {
+  const strategies: BirdeyeSearchStrategy[] = [
     ...(hintSort
       ? [{ sort_by: hintSort, search_by: "combination", search_mode: "fuzzy" }]
       : []),
@@ -1001,66 +981,67 @@ async function fetchBirdeyeSearchTokenResults(opts: {
     { sort_by: "marketcap", search_by: "symbol", search_mode: "exact" },
     { sort_by: "volume_24h_usd", search_by: "name", search_mode: "fuzzy" },
   ];
-
-  const seenStrategies = new Set<string>();
-  const dedupedStrategies = strategies.filter((s) => {
+  const seen = new Set<string>();
+  return strategies.filter((s) => {
     const k = `${s.sort_by}|${s.search_by}|${s.search_mode}`;
-    if (seenStrategies.has(k)) return false;
-    seenStrategies.add(k);
+    if (seen.has(k)) return false;
+    seen.add(k);
     return true;
   });
+}
 
+async function birdeyeSearchPage(opts: {
+  keyword: string;
+  chain: string;
+  apiKey: string;
+  limit: number;
+  offset: number;
+  strategy: BirdeyeSearchStrategy;
+  verifiedOnly: boolean;
+}): Promise<any[]> {
+  const chainQ = birdeyeSearchChainQuery(opts.chain);
   const xChain = chainQ === "all" ? "solana" : chainQ;
+  const url = new URL(BIRDEYE_V3_SEARCH);
+  url.searchParams.set("keyword", opts.keyword);
+  url.searchParams.set("chain", chainQ);
+  url.searchParams.set("target", "token");
+  url.searchParams.set("search_mode", opts.strategy.search_mode);
+  url.searchParams.set("search_by", opts.strategy.search_by);
+  url.searchParams.set("sort_by", opts.strategy.sort_by);
+  url.searchParams.set("sort_type", "desc");
+  url.searchParams.set("limit", String(opts.limit));
+  url.searchParams.set("offset", String(opts.offset));
+  if (chainQ === "solana" || chainQ === "all") {
+    url.searchParams.set("ui_amount_mode", "scaled");
+  }
+  if (opts.verifiedOnly && (chainQ === "solana" || chainQ === "all")) {
+    url.searchParams.set("verify_token", "true");
+  }
 
-  for (const strat of dedupedStrategies) {
-    const searchBy = strat.search_by;
-    const searchMode = strat.search_mode;
-    const sortBy = strat.sort_by;
-    const url = new URL(BIRDEYE_V3_SEARCH);
-    url.searchParams.set("keyword", keyword);
-    url.searchParams.set("chain", chainQ);
-    url.searchParams.set("target", "token");
-    url.searchParams.set("search_mode", searchMode);
-    url.searchParams.set("search_by", searchBy);
-    url.searchParams.set("sort_by", sortBy);
-    url.searchParams.set("sort_type", "desc");
-    url.searchParams.set("limit", String(lim));
-    url.searchParams.set("offset", String(off));
-    if (chainQ === "solana" || chainQ === "all") {
-      url.searchParams.set("ui_amount_mode", "scaled");
-    }
-    if (verifiedOnly && (chainQ === "solana" || chainQ === "all")) {
-      url.searchParams.set("verify_token", "true");
-    }
-
-    try {
-      const headers: Record<string, string> = {
+  try {
+    const res = await fetch(url.toString(), {
+      method: "GET",
+      headers: {
         accept: "application/json",
         "x-api-key": opts.apiKey,
         "x-chain": xChain,
-      };
-
-      const res = await fetch(url.toString(), {
-        method: "GET",
-        headers,
-        cache: "no-store",
-      });
-      if (!res.ok) continue;
-      const json = (await res.json()) as any;
-      if (json?.success === false) continue;
-      const rows = extractBirdeyeSearchTokenRows(json);
-      if (rows.length) return rows;
-    } catch (e) {
-      console.warn("Birdeye v3 search error:", e);
-    }
+      },
+      cache: "no-store",
+    });
+    if (!res.ok) return [];
+    const json = (await res.json()) as any;
+    if (json?.success === false) return [];
+    return extractBirdeyeSearchTokenRows(json);
+  } catch (e) {
+    console.warn("Birdeye v3 search error:", e);
+    return [];
   }
-
-  return [];
 }
 
 /**
  * Fetches up to `takeCount` v3/search rows starting at Birdeye `startOffset`.
- * API caps limit at 20 per request — uses sequential chunk(s), typically 1–2 calls for 25 rows.
+ * API caps limit at 20 per request. Pins the first strategy that returns rows
+ * so later pages do not re-run the 4-strategy waterfall (that was ~15s).
  */
 async function fetchBirdeyeSearchWindow(opts: {
   keyword: string;
@@ -1071,25 +1052,48 @@ async function fetchBirdeyeSearchWindow(opts: {
   sort_by?: string;
   verifiedOnly?: boolean;
 }): Promise<any[]> {
+  const keyword = String(opts.keyword || "").trim();
+  if (!keyword || keyword.length < 2) return [];
+
   const takeCount = Math.max(0, Math.floor(opts.takeCount));
   if (takeCount === 0) return [];
   const out: any[] = [];
   let o = Math.max(0, Math.floor(opts.startOffset));
-  const sortBy = opts.sort_by || "marketcap";
   const verifiedOnly = opts.verifiedOnly !== false;
+  let strategy: BirdeyeSearchStrategy | null = null;
 
   while (out.length < takeCount) {
-    const need = takeCount - out.length;
-    const pageLen = Math.min(20, need);
-    const batch = await fetchBirdeyeSearchTokenResults({
-      keyword: opts.keyword,
-      chain: opts.chain,
-      apiKey: opts.apiKey,
-      limit: pageLen,
-      offset: o,
-      sort_by: sortBy,
-      verifiedOnly,
-    });
+    const pageLen = Math.min(20, takeCount - out.length);
+    let batch: any[] = [];
+
+    if (!strategy) {
+      for (const strat of birdeyeSearchStrategies(opts.sort_by?.trim())) {
+        batch = await birdeyeSearchPage({
+          keyword,
+          chain: opts.chain,
+          apiKey: opts.apiKey,
+          limit: pageLen,
+          offset: o,
+          strategy: strat,
+          verifiedOnly,
+        });
+        if (batch.length) {
+          strategy = strat;
+          break;
+        }
+      }
+    } else {
+      batch = await birdeyeSearchPage({
+        keyword,
+        chain: opts.chain,
+        apiKey: opts.apiKey,
+        limit: pageLen,
+        offset: o,
+        strategy,
+        verifiedOnly,
+      });
+    }
+
     if (!batch.length) break;
     for (const r of batch) {
       if (out.length >= takeCount) break;
@@ -1119,10 +1123,11 @@ function sortRowsByMarketCapThenLiquidity(rows: any[]): any[] {
   );
 }
 
-const TRENDING_SEARCH_FETCH_CHUNK = 60;
+/** One extra Birdeye page (20) beyond `limit` is enough now that the filter is lenient. */
+const TRENDING_SEARCH_MAX_LOOPS = 2;
 
 /**
- * Pulls enough upstream `v3/search` rows, then filters to trusted + liquidity-sane
+ * Pulls enough upstream `v3/search` rows, then filters to liquidity-sane
  * so a full page still has `limit` items when the API interleaves garbage.
  */
 async function collectTickerSearchPage(opts: {
@@ -1141,14 +1146,16 @@ async function collectTickerSearchPage(opts: {
   let exhausted = false;
   let loops = 0;
 
-  while (acc.length < want && !exhausted && loops < 16) {
+  while (acc.length < want && !exhausted && loops < TRENDING_SEARCH_MAX_LOOPS) {
     loops++;
+    const takeCount =
+      loops === 1 ? Math.min(40, Math.max(want, 20)) : Math.min(20, want - acc.length);
     const rows = await fetchBirdeyeSearchWindow({
       keyword: opts.keyword,
       chain: opts.chainFetch,
       apiKey: opts.apiKey,
       startOffset: cursor,
-      takeCount: TRENDING_SEARCH_FETCH_CHUNK,
+      takeCount,
       sort_by: opts.sort_by ?? "marketcap",
       verifiedOnly: false,
     });
@@ -1174,7 +1181,7 @@ async function collectTickerSearchPage(opts: {
       if (acc.length >= want) break;
     }
 
-    if (rows.length < TRENDING_SEARCH_FETCH_CHUNK) exhausted = true;
+    if (rows.length < takeCount) exhausted = true;
   }
 
   const hasMore = acc.length > opts.limit;
@@ -1460,8 +1467,6 @@ async function handleTokenSearch(opts: {
     apiKey,
     limit,
     offset,
-    include_creation,
-    creation_concurrency,
   } = opts;
 
   try {
@@ -1489,7 +1494,7 @@ async function handleTokenSearch(opts: {
       const q = search_query.trim();
       const isEvm = /^0x[a-fA-F0-9]{40}$/.test(q);
 
-      let targetChain: string;
+      let targetChain: string = chain;
       let tokenData: any | null = null;
 
       if (chain !== "all") {
@@ -1497,15 +1502,17 @@ async function handleTokenSearch(opts: {
         tokenData = await fetchBirdeyeTokenOverview(q, targetChain, apiKey);
       } else if (isEvm) {
         // Try EVM chains in order — previously only BSC, which mis-resolved Base contracts.
-        targetChain = "bsc";
         const evmCandidates = ["ethereum", "bsc", "base", "monad"] as const;
-        for (const c of evmCandidates) {
-          const data = await fetchBirdeyeTokenOverview(q, c, apiKey);
-          if (data) {
-            tokenData = data;
-            targetChain = c;
-            break;
-          }
+        const hits = await Promise.all(
+          evmCandidates.map(async (c) => {
+            const data = await fetchBirdeyeTokenOverview(q, c, apiKey);
+            return data ? { data, chain: c } : null;
+          }),
+        );
+        const hit = hits.find(Boolean);
+        if (hit) {
+          tokenData = hit.data;
+          targetChain = hit.chain;
         }
         // Robinhood Chain is not on Birdeye — try DexScreener before giving up.
         if (!tokenData) {
@@ -1618,14 +1625,13 @@ async function handleTokenSearch(opts: {
         ? String(sortedResults[0].chainId)
         : chain;
 
-    const enrichedResults = include_creation
-      ? await enrichWithCreation(
-          sortedResults,
-          creationChain,
-          apiKey,
-          creation_concurrency
-        )
-      : sortedResults;
+    // Search used to wait on per-token Birdeye creation_info + DexScreener Age
+    // (~25 serial-ish lookups). Attach cached Age only so the keyword result
+    // returns as soon as Birdeye search does.
+    const enrichedResults = await attachCachedCreationAges(
+      sortedResults,
+      creationChain,
+    );
 
     return NextResponse.json({
       items: enrichedResults,

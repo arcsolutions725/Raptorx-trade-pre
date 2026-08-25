@@ -312,6 +312,41 @@ function hasUsableCreatedAt(item: any): boolean {
   );
 }
 
+/**
+ * Fill Age from our DB (and any timestamp already on the row). No Birdeye or
+ * DexScreener calls — used by search so the keyword lookup is not blocked on
+ * per-token creation fan-out.
+ */
+export async function attachCachedCreationAges(
+  items: any[],
+  chain: string,
+): Promise<any[]> {
+  if (!items.length) return items;
+  const dbRecs = await readAgeRecordsFromDb(
+    items
+      .map((it) => ({ chain, address: it?.tokenAddress as string }))
+      .filter((t) => t.address),
+  );
+  return items.map((it) => {
+    const addr = it?.tokenAddress as string | undefined;
+    if (addr) {
+      const rec = dbRecs.get(ageKey(chain, addr));
+      if (
+        rec &&
+        typeof rec.createdAtUnix === "number" &&
+        hasUsableCreatedAt({ createdAt: rec.createdAtUnix })
+      ) {
+        return { ...it, createdAt: rec.createdAtUnix };
+      }
+    }
+    if (hasUsableCreatedAt(it)) {
+      const n = normalizeEpochToSeconds(it?.createdAt);
+      return typeof n === "number" ? { ...it, createdAt: n } : it;
+    }
+    return it;
+  });
+}
+
 async function enrichDexscreenerWhereMissing(
   items: any[],
   concurrency: number,
@@ -370,29 +405,12 @@ export async function enrichWithCreation(
   if (!items.length) return items;
 
   // 1. Serve Age from our own DB first — no external call for tokens we already know.
+  const withDb = await attachCachedCreationAges(items, chain);
   const dbRecs = await readAgeRecordsFromDb(
     items
       .map((it) => ({ chain, address: it?.tokenAddress as string }))
       .filter((t) => t.address),
   );
-  const withDb = items.map((it) => {
-    const addr = it?.tokenAddress as string | undefined;
-    if (addr) {
-      const rec = dbRecs.get(ageKey(chain, addr));
-      if (
-        rec &&
-        typeof rec.createdAtUnix === "number" &&
-        hasUsableCreatedAt({ createdAt: rec.createdAtUnix })
-      ) {
-        return { ...it, createdAt: rec.createdAtUnix };
-      }
-    }
-    if (hasUsableCreatedAt(it)) {
-      const n = normalizeEpochToSeconds(it?.createdAt);
-      return typeof n === "number" ? { ...it, createdAt: n } : it;
-    }
-    return it;
-  });
 
   // 2. Fall back to the external lookup only for tokens still missing Age AND not
   //    covered by a fresh DB record (found, or recently checked-unknown).

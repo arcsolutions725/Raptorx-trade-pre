@@ -10,7 +10,6 @@
  * free from DexScreener's `pairCreatedAt` (no Birdeye needed).
  */
 import { unstable_cache } from "next/cache";
-import { fetchDexScreenerPairsForAddresses } from "@/lib/api/dexscreener";
 
 const DS = "https://api.dexscreener.com";
 const GT = "https://api.geckoterminal.com/api/v2";
@@ -23,10 +22,8 @@ const LIFI_ROBINHOOD_CHAIN_ID = 4663;
  * missing from both Li.Fi and GeckoTerminal.
  */
 const QUOTE_TOKEN_ADDRESSES = [
-  // DexScreener `/token-pairs/v1` is case-sensitive; checksummed WETH can
-  // return an empty (and Cloudflare-cached) body.
-  "0x0bd7d308f8e1639fab988df18a8011f41eacad73", // WETH
-  "0x5fc5360d0400a0fd4f2af552add042d716f1d168", // USDG
+  "0x0Bd7D308f8E1639FAb988df18A8011f41EAcAD73", // WETH
+  "0x5fc5360D0400a0Fd4f2af552ADD042D716F1d168", // USDG
 ];
 
 const num = (v: unknown): number | undefined => {
@@ -47,7 +44,7 @@ async function getJson(url: string): Promise<any> {
 /** Discover Robinhood token addresses. */
 async function discoverAddresses(): Promise<string[]> {
   // Lowercased for dedup — sources disagree on address casing (Li.Fi checksums,
-  // GeckoTerminal lowercases). DexScreener `/token-pairs/v1` is case-sensitive.
+  // GeckoTerminal lowercases). DexScreener lookups are case-insensitive.
   const set = new Set<string>();
   const add = (a: unknown) => {
     // Skip the native-token placeholder (no DexScreener pair).
@@ -128,15 +125,22 @@ async function discoverAddresses(): Promise<string[]> {
 }
 
 /**
- * Fetch full pair data for a set of token addresses.
- *
- * Batched `/tokens/v1/{chain}/{addresses}` is the cheap path, but DexScreener
- * has been returning empty HTTP 200s for Robinhood batches (Cloudflare caches
- * them). `fetchDexScreenerPairsForAddresses` fills those misses from
- * `/token-pairs/v1`.
+ * Fetch full pair data for a set of token addresses (up to 30 per call).
+ * Uses the CHAIN-SCOPED endpoint `/tokens/v1/{chain}/{addresses}` — the generic
+ * `/latest/dex/tokens/{addresses}` endpoint caps its response at ~30 pairs across
+ * ALL chains and silently drops tokens (e.g. $CASHCAT).
  */
 async function fetchPairs(addresses: string[]): Promise<any[]> {
-  return fetchDexScreenerPairsForAddresses(CHAIN, addresses);
+  const out: any[] = [];
+  for (let i = 0; i < addresses.length; i += 30) {
+    const batch = addresses.slice(i, i + 30);
+    const j = await getJson(`${DS}/tokens/v1/${CHAIN}/${batch.join(",")}`);
+    const pairs = Array.isArray(j) ? j : (j?.pairs ?? []);
+    for (const p of pairs) {
+      if (p?.chainId === CHAIN) out.push(p);
+    }
+  }
+  return out;
 }
 
 function mapPairToToken(p: any) {
@@ -144,7 +148,7 @@ function mapPairToToken(p: any) {
   const created = num(p?.pairCreatedAt);
   return {
     chainId: CHAIN,
-    tokenAddress: typeof b.address === "string" ? b.address.toLowerCase() : b.address,
+    tokenAddress: b.address,
     name: b.name ?? undefined,
     symbol: b.symbol ?? undefined,
     uniqueName: null,
@@ -184,7 +188,7 @@ function mapPairToToken(p: any) {
 export async function getRobinhoodTokenByAddress(
   address: string,
 ): Promise<any | null> {
-  const addr = address.trim().toLowerCase();
+  const addr = address.trim();
   if (!addr) return null;
   // DexScreener returns every pair the address appears in — keep only the ones
   // where it is the *base* token, else we'd map a row for its quote token.
@@ -212,7 +216,10 @@ export async function searchRobinhoodTokens(query: string): Promise<any[]> {
   const q = query.trim().replace(/^\$/, "").toLowerCase();
   if (!q) return [];
 
-  const all = await getRobinhoodTokens();
+  const [all, ds] = await Promise.all([
+    getRobinhoodTokens(),
+    getJson(`${DS}/latest/dex/search?q=${encodeURIComponent(q)}`),
+  ]);
   const matchesQ = (t: any) =>
     String(t?.symbol ?? "").toLowerCase().includes(q) ||
     String(t?.name ?? "").toLowerCase().includes(q);
@@ -220,8 +227,6 @@ export async function searchRobinhoodTokens(query: string): Promise<any[]> {
   const seen = new Set(
     matches.map((t) => String(t.tokenAddress).toLowerCase()),
   );
-
-  const ds = await getJson(`${DS}/latest/dex/search?q=${encodeURIComponent(q)}`);
   const extra = new Map<string, any>();
   for (const p of ds?.pairs ?? []) {
     if (p?.chainId !== CHAIN) continue;
@@ -256,21 +261,20 @@ export async function searchRobinhoodTokens(query: string): Promise<any[]> {
  */
 const getRobinhoodAddresses = unstable_cache(
   discoverAddresses,
-  ["robinhood-addresses-v3"],
+  ["robinhood-addresses-v2"],
   { revalidate: 300, tags: ["robinhood-tokens"] },
 );
 
 async function buildRobinhoodTokens(): Promise<any[]> {
   const addrs = await getRobinhoodAddresses();
   if (!addrs.length) return [];
+  // Cheap-ish: ~1 chain-scoped DexScreener call per 30 tokens. This is what
+  // makes a short price TTL affordable.
   const pairs = await fetchPairs(addrs);
   // One row per token — keep the deepest-liquidity pair.
   const byToken = new Map<string, any>();
   for (const p of pairs) {
-    const a =
-      typeof p?.baseToken?.address === "string"
-        ? p.baseToken.address.toLowerCase()
-        : "";
+    const a = p?.baseToken?.address;
     if (!a) continue;
     const prev = byToken.get(a);
     if (!prev || (num(p?.liquidity?.usd) ?? 0) > (num(prev?.liquidity?.usd) ?? 0)) {
@@ -287,9 +291,8 @@ async function buildRobinhoodTokens(): Promise<any[]> {
  *
  * In-memory TTL (not Next `unstable_cache`) so expired reads *wait* for a fresh
  * DexScreener fetch instead of serving SWR-stale snapshots. That was the main
- * reason the table Mcap lagged the live DexScreener chart by 1–2%+. Address
- * discovery is cached separately; pair payloads from the per-token fallback
- * are cached ~60s so a 5s price refresh does not re-hammer DexScreener.
+ * reason the table Mcap lagged the live DexScreener chart by 1–2%+. Affordable
+ * because address discovery is cached separately — a rebuild is ~2 API calls.
  */
 const PRICE_TTL_MS = 5_000;
 let priceCache: { at: number; data: any[] } | null = null;

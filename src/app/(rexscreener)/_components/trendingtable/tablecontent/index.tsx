@@ -46,15 +46,6 @@ import {
 } from "@/utils/tokenAge";
 import { applyScreenerRowRichCache } from "@/utils/screenerRowMerge";
 
-function matchesTableSearch(token: TrendingToken, raw: string): boolean {
-  const q = raw.trim().toLowerCase().replace(/^\$/, "");
-  if (!q) return true;
-  const fields = [token.symbol, token.name, token.uniqueName, token.tokenAddress];
-  return fields.some(
-    (v) => typeof v === "string" && v.toLowerCase().includes(q),
-  );
-}
-
 /* ============================ Styled, Up-Opening Select ============================ */
 
 type RowsPerPageSelectProps = {
@@ -467,7 +458,12 @@ export function TrendingTableContent({
   const [pumpReportsInfoOpen, setPumpReportsInfoOpen] = useState(false);
   const lastPumpTapClientXRef = useRef<number | null>(null);
 
+  // Search state
   const [searchQuery, setSearchQuery] = useState<string>("");
+  const [searchType, setSearchType] = useState<"ticker" | "address" | null>(
+    null
+  );
+  const [isSearchMode, setIsSearchMode] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [goldenReportsOnly, setGoldenReportsOnly] = useState(false);
   const [pumpReportsOnly, setPumpReportsOnly] = useState(false);
@@ -509,7 +505,15 @@ export function TrendingTableContent({
     jupVerifiedTotal,
     upstreamTotal,
   } = useTrendingTokens(
-    { chain: screenerChain },
+    isSearchMode && searchQuery && searchType
+      ? {
+          search_query: searchQuery,
+          search_type: searchType,
+          chain: screenerChain,
+        }
+      : {
+          chain: screenerChain,
+        },
     { enabled: !goldenReportsOnly && !pumpReportsOnly },
   );
 
@@ -822,23 +826,11 @@ export function TrendingTableContent({
   }, [screenerChain, setPageIndex]);
 
   const rows = Array.isArray(data) ? data : [];
-  const displayRows = useMemo(() => {
-    const source = goldenReportsOnly
-      ? goldenRowsWithRank
-      : pumpReportsOnly
-        ? pumpRowsWithRank
-        : rows;
-    const q = searchQuery.trim();
-    if (!q) return source;
-    return source.filter((t) => matchesTableSearch(t, q));
-  }, [
-    goldenReportsOnly,
-    pumpReportsOnly,
-    goldenRowsWithRank,
-    pumpRowsWithRank,
-    rows,
-    searchQuery,
-  ]);
+  const displayRows = goldenReportsOnly
+    ? goldenRowsWithRank
+    : pumpReportsOnly
+      ? pumpRowsWithRank
+      : rows;
 
   const { series: sparklineSeries, isFetching: sparklinesFetching } =
     useTrendingSparklines(displayRows);
@@ -939,7 +931,7 @@ export function TrendingTableContent({
     if (!addr) return;
 
     captureListState();
-    handleClearSearch();
+    handleClearSearch({ keepPage: true });
     onTokenSelect?.(t, addr, true);
   };
 
@@ -950,8 +942,20 @@ export function TrendingTableContent({
     restoreListState();
   };
 
-  const handleClearSearch = () => {
+  const handleSearch = (query: string, type: "ticker" | "address") => {
+    setGoldenReportsOnly(false);
+    setPumpReportsOnly(false);
+    setSearchQuery(query);
+    setSearchType(type);
+    setIsSearchMode(true);
+    setPageIndex(1);
+  };
+
+  const handleClearSearch = (opts?: { keepPage?: boolean }) => {
     setSearchQuery("");
+    setSearchType(null);
+    setIsSearchMode(false);
+    if (!opts?.keepPage) setPageIndex(1); // <-- only reset when not told to keep
   };
 
   const toggleGoldenReports = useCallback(() => {
@@ -959,6 +963,9 @@ export function TrendingTableContent({
       const turningOn = !prev;
       if (turningOn) {
         setPumpReportsOnly(false);
+        setSearchQuery("");
+        setSearchType(null);
+        setIsSearchMode(false);
         void queryClient.invalidateQueries({
           queryKey: ["golden-screener-tokens"],
         });
@@ -976,6 +983,9 @@ export function TrendingTableContent({
       const turningOn = !prev;
       if (turningOn) {
         setGoldenReportsOnly(false);
+        setSearchQuery("");
+        setSearchType(null);
+        setIsSearchMode(false);
         void queryClient.invalidateQueries({
           queryKey: ["pump-screener-tokens"],
         });
@@ -1329,8 +1339,7 @@ export function TrendingTableContent({
           <div className="w-full sm:flex-1 flex justify-center sm:justify-end">
             <div className="w-full max-w-full sm:max-w-75">
               <TokenSearchBar
-                value={searchQuery}
-                onQueryChange={setSearchQuery}
+                onSearch={handleSearch}
                 onClear={handleClearSearch}
                 className="w-full"
               />
@@ -1374,10 +1383,11 @@ export function TrendingTableContent({
           >
             <div className="flex-1 min-w-0">
               <TokenSearchBar
-                value={searchQuery}
-                onQueryChange={setSearchQuery}
+                onSearch={(query, type) => {
+                  handleSearch(query, type);
+                  setMobileSearchOpen(false);
+                }}
                 onClear={handleClearSearch}
-                autoFocus
                 className="w-full"
               />
             </div>
@@ -1640,11 +1650,7 @@ export function TrendingTableContent({
                 !isLoading &&
                 !isError &&
                 displayRows.length === 0 && (
-                  <div className="p-4 text-white/70">
-                    {searchQuery.trim()
-                      ? "No matching tokens on this page."
-                      : "No data found."}
-                  </div>
+                  <div className="p-4 text-white/70">No data found.</div>
                 )}
 
               {goldenReportsOnly &&
@@ -1680,26 +1686,6 @@ export function TrendingTableContent({
                   <div className="p-4 text-white/70">
                     No Pump Report projects yet.
                   </div>
-                )}
-
-              {goldenReportsOnly &&
-                !goldenTableStillLoading &&
-                !goldenScreenerError &&
-                !goldenMetadataGap &&
-                goldenRegistryCount > 0 &&
-                displayRows.length === 0 &&
-                searchQuery.trim() && (
-                  <div className="p-4 text-white/70">No matching tokens.</div>
-                )}
-
-              {pumpReportsOnly &&
-                !pumpTableStillLoading &&
-                !pumpScreenerError &&
-                !pumpMetadataGap &&
-                pumpRegistryCount > 0 &&
-                displayRows.length === 0 &&
-                searchQuery.trim() && (
-                  <div className="p-4 text-white/70">No matching tokens.</div>
                 )}
 
               {pumpReportsOnly && pumpMetadataGap && (
