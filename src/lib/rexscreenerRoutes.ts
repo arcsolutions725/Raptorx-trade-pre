@@ -26,8 +26,8 @@ export function slugToChain(slug: string): Chain | null {
   return k as Chain;
 }
 
-/** RexScreener default landing: Solana trending (`/` redirects here). */
-export const REX_SCREENER_ALL_HREF = "/solana";
+/** RexScreener default landing: Base trending (`/` redirects here). */
+export const REX_SCREENER_ALL_HREF = "/base";
 
 /** Map `Chain` → single URL segment (`all` uses {@link REX_SCREENER_ALL_HREF}, not a chain slug). */
 export function chainToSlug(chain: Chain): string | null {
@@ -172,7 +172,7 @@ export function parseRexScreenerPath(pathname: string): {
   }
   const first = parts[0]!.toLowerCase();
   if (first === "rexscreener" && parts.length === 1) {
-    return { routeChain: "solana", routeTokenSlug: null };
+    return { routeChain: "base", routeTokenSlug: null };
   }
   if (!isScreenerChainSlug(first)) {
     return { routeChain: "all", routeTokenSlug: null };

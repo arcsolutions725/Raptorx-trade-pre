@@ -4,10 +4,10 @@ import type { NextRequest } from "next/server";
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
   if (pathname === "/") {
-    return NextResponse.redirect(new URL("/solana", request.url));
+    return NextResponse.redirect(new URL("/base", request.url));
   }
   if (pathname === "/screener" || pathname === "/rexscreener") {
-    return NextResponse.redirect(new URL("/solana", request.url));
+    return NextResponse.redirect(new URL("/base", request.url));
   }
   return NextResponse.next();
 }

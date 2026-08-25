@@ -21,10 +21,8 @@
  * drift away from the chart. An expired read here *waits* for a fresh value.
  */
 
-import { DEX_CHAIN_SLUG } from "@/lib/api/dexscreener";
+import { DEX_CHAIN_SLUG, fetchDexScreenerPairsForAddresses } from "@/lib/api/dexscreener";
 import { getLiveQuotePerBase } from "@/lib/livePoolPrice";
-
-const DS = "https://api.dexscreener.com";
 
 /** DexScreener caps the chain-scoped endpoint at 30 addresses per call. */
 const BATCH_SIZE = 30;
@@ -43,9 +41,12 @@ export type DexMarketRow = {
   usdPrice?: number;
   pairAddress?: string;
   quoteSymbol?: string;
-  /** DexScreener's CDN-hosted token image. Used to replace slow/dead logo URLs
-   *  (many Birdeye logos point at ipfs.io, which hangs and renders as a "?"). */
+  name?: string;
+  symbol?: string;
   logo?: string;
+  liquidityUsd?: number;
+  volume24h?: number;
+  priceChange24h?: number;
 };
 
 type Entry = { at: number; row: DexMarketRow | null };
@@ -71,18 +72,14 @@ function prune(now: number) {
 
 async function fetchBatchInto(slug: string, addresses: string[]): Promise<void> {
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
+  // Robinhood may have to fill a dropped `/tokens/v1` batch via per-token
+  // `/token-pairs/v1` calls. Give that path room; other chains stay snappy.
+  const timeoutMs = slug === "robinhood" ? 12_000 : FETCH_TIMEOUT_MS;
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
 
   let pairs: any[] = [];
   try {
-    const res = await fetch(`${DS}/tokens/v1/${slug}/${addresses.join(",")}`, {
-      headers: { accept: "application/json" },
-      cache: "no-store",
-      signal: ctrl.signal,
-    });
-    if (!res.ok) throw new Error(`dexscreener ${res.status}`);
-    const j = await res.json();
-    pairs = Array.isArray(j) ? j : (j?.pairs ?? []);
+    pairs = await fetchDexScreenerPairsForAddresses(slug, addresses, ctrl.signal);
   } catch {
     // Cache the miss: a transient DexScreener failure must not turn every
     // subsequent request into another slow, timing-out call. These rows fall back
@@ -169,10 +166,18 @@ async function fetchBatchInto(slug: string, addresses: string[]): Promise<void> 
         typeof p?.quoteToken?.symbol === "string"
           ? p.quoteToken.symbol
           : undefined,
-      logo:
-        typeof p?.info?.imageUrl === "string" && p.info.imageUrl
-          ? p.info.imageUrl
+      name:
+        typeof p?.baseToken?.name === "string" ? p.baseToken.name : undefined,
+      symbol:
+        typeof p?.baseToken?.symbol === "string"
+          ? p.baseToken.symbol
           : undefined,
+      logo:
+        typeof p?.info?.imageUrl === "string" ? p.info.imageUrl : undefined,
+      liquidityUsd: num(p?.liquidity?.usd),
+      volume24h: num(p?.volume?.h24),
+      priceChange24h:
+        typeof p?.priceChange?.h24 === "number" ? p.priceChange.h24 : num(p?.priceChange?.h24),
     };
     cache.set(cacheKey(slug, a), { at: now, row });
   }
@@ -239,10 +244,12 @@ export async function getDexMarketData(
 /**
  * Overlay live DexScreener market data onto screener rows.
  *
- * Only market cap and price are replaced — the numbers rendered beside the chart.
- * Volume and liquidity stay on Birdeye's aggregate figures, which span every pool
- * rather than just the deepest one. `pairAddress` is passed through so the chart
- * embed opens the exact pair these numbers came from.
+ * Market cap and price are replaced so they match the embedded chart.
+ * Name/symbol/logo/volume/liquidity/24h % are filled only when the row is
+ * missing them (Robinhood stubs after a dropped DexScreener batch). Volume and
+ * liquidity already present stay on Birdeye's aggregate figures. `pairAddress`
+ * is passed through so the chart embed opens the exact pair these numbers came
+ * from.
  */
 export async function applyDexMarketOverlay(
   items: any[],
@@ -259,16 +266,27 @@ export async function applyDexMarketOverlay(
   return items.map((it) => {
     const row = byAddress.get(String(it?.tokenAddress ?? "").toLowerCase());
     if (!row) return it;
+    const hasVol =
+      it?.totalVolume?.["24h"] != null || it?.totalVolume?.h24 != null;
+    const hasPct = it?.pricePercentChange?.["24h"] != null;
     return {
       ...it,
       marketCap: row.marketCap ?? it?.marketCap,
       usdPrice: row.usdPrice ?? it?.usdPrice,
       pairAddress: row.pairAddress ?? it?.pairAddress,
       quoteSymbol: row.quoteSymbol ?? it?.quoteSymbol,
-      // Prefer DexScreener's CDN logo — Birdeye often returns raw ipfs.io URLs
-      // that hang in the browser and render as a "?" placeholder. Keep the
-      // existing logo only when DexScreener has none.
-      logo: row.logo ?? it?.logo,
+      name: it?.name || row.name,
+      symbol: it?.symbol || row.symbol,
+      logo: it?.logo || row.logo,
+      liquidityUsd: it?.liquidityUsd ?? row.liquidityUsd,
+      totalVolume:
+        hasVol || row.volume24h == null
+          ? it?.totalVolume
+          : { ...(it?.totalVolume ?? {}), "24h": row.volume24h },
+      pricePercentChange:
+        hasPct || row.priceChange24h == null
+          ? it?.pricePercentChange
+          : { ...(it?.pricePercentChange ?? {}), "24h": row.priceChange24h },
     };
   });
 }

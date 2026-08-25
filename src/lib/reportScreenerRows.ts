@@ -353,7 +353,7 @@ async function buildReportScreenerTokenRows(
 const buildReportScreenerTokenRowsCached = unstable_cache(
   async (isGolden: boolean, includeAge: boolean) =>
     buildReportScreenerTokenRows(isGolden, { includeAge }),
-  ["report-screener-rows-v1"],
+  ["report-screener-rows-v2"],
   { revalidate: 60, tags: [REPORT_SCREENER_ROWS_TAG] },
 );
 

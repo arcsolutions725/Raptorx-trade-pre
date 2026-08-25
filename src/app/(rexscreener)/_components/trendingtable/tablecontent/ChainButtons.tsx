@@ -58,12 +58,12 @@ export function ChainButtons({
     });
   }, []);
 
-  // Solana, Ethereum, Base, BNB, Monad only — "all" remains a valid route but has no tab
+  // Base, Robinhood, Ethereum, Solana, BNB, Monad — "all" remains a valid route but has no tab
   const chains: Exclude<Chain, "all">[] = [
-    "solana",
+    "base",
     "robinhood",
     "ethereum",
-    "base",
+    "solana",
     "bsc",
     "monad",
   ];
@@ -213,9 +213,9 @@ export function ChainButtons({
           ref={(el) => {
             buttonRefs.current[0] = el;
           }}
-          onClick={() => onChainChange("solana")}
+          onClick={() => onChainChange("base")}
           className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
-            isActive("solana")
+            isActive("base")
               ? "text-white font-semibold"
               : "text-white hover:text-white/90"
           }`}
@@ -224,16 +224,16 @@ export function ChainButtons({
             height: "40px",
             borderRadius: "12px",
           }}
-          title="Solana"
+          title="Base"
         >
           <Image
-            src="/images/solana.png"
-            alt="Solana"
+            src="/images/base.png"
+            alt="Base"
             width={20}
             height={20}
             className="w-5 h-5 shrink-0 object-contain"
           />
-          <span className="font-normal text-[14px]">Solana</span>
+          <span className="font-normal text-[14px]">Base</span>
         </button>
         <button
           ref={(el) => {
@@ -291,9 +291,9 @@ export function ChainButtons({
           ref={(el) => {
             buttonRefs.current[3] = el;
           }}
-          onClick={() => onChainChange("base")}
+          onClick={() => onChainChange("solana")}
           className={`relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center gap-2 shrink-0 ${
-            isActive("base")
+            isActive("solana")
               ? "text-white font-semibold"
               : "text-white hover:text-white/90"
           }`}
@@ -302,16 +302,16 @@ export function ChainButtons({
             height: "40px",
             borderRadius: "12px",
           }}
-          title="Base"
+          title="Solana"
         >
           <Image
-            src="/images/base.png"
-            alt="Base"
+            src="/images/solana.png"
+            alt="Solana"
             width={20}
             height={20}
             className="w-5 h-5 shrink-0 object-contain"
           />
-          <span className="font-normal text-[14px]">Base</span>
+          <span className="font-normal text-[14px]">Solana</span>
         </button>
         <button
           ref={(el) => {

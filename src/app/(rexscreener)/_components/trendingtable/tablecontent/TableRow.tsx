@@ -449,7 +449,7 @@ export function TableRow({
             <span className="font-normal leading-tight truncate">
               {displaySymbol
                 ? `${displaySymbol}/${baseCurrency}`
-                : baseCurrency}
+                : displayName}
             </span>
             <span className="text-[#ffc000] font-normal leading-tight truncate">
               {displayName}
