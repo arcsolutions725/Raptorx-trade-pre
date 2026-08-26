@@ -62,6 +62,55 @@ export function mergeRichScreenerRow(
   };
 }
 
+function hideBirdeyeMarketFields<
+  T extends {
+    marketCap?: number;
+    usdPrice?: number;
+    pairAddress?: string;
+  },
+>(row: T): T {
+  // pairAddress means this row is already Dex-sourced (overlay or Robinhood).
+  if (row.pairAddress) return row;
+  return { ...row, marketCap: undefined, usdPrice: undefined };
+}
+
+/**
+ * Overlay Dex mcap/price/pair from `/api/trending/market`.
+ * Until the overlay is ready, Birdeye mcap/price are stripped so the table
+ * never flashes numbers that disagree with the DexScreener chart.
+ */
+export function mergeScreenerTokenMarket<
+  T extends {
+    tokenAddress?: string;
+    marketCap?: number;
+    usdPrice?: number;
+    pairAddress?: string;
+    quoteSymbol?: string;
+  },
+>(rows: T[], overlay: T[] | undefined, overlayReady = false): T[] {
+  if (!overlayReady) return rows.map(hideBirdeyeMarketFields);
+  if (!overlay?.length) return rows.map(hideBirdeyeMarketFields);
+
+  const byAddr = new Map<string, T>();
+  for (const it of overlay) {
+    const k = String(it?.tokenAddress ?? "").toLowerCase();
+    if (k) byAddr.set(k, it);
+  }
+  if (!byAddr.size) return rows.map(hideBirdeyeMarketFields);
+
+  return rows.map((row) => {
+    const o = byAddr.get(String(row.tokenAddress ?? "").toLowerCase());
+    if (!o) return hideBirdeyeMarketFields(row);
+    return {
+      ...row,
+      marketCap: o.marketCap,
+      usdPrice: o.usdPrice,
+      pairAddress: o.pairAddress ?? row.pairAddress,
+      quoteSymbol: o.quoteSymbol ?? row.quoteSymbol,
+    };
+  });
+}
+
 export function applyScreenerRowRichCache(
   incoming: TrendingToken[],
   cache: Map<string, TrendingToken>,

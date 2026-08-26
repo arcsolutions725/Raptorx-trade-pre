@@ -177,8 +177,8 @@ export function useTrendingTokens(
           verified_only: isVerified, // <-- driven by search presence
           force_full_scan: forceFullScan,
           ...(customBody ?? {}),
-          // List first; Age is patched in by `/api/trending/ages` so the table
-          // is not blocked on per-token creation lookups (~10s cold).
+          // List first; Age and Dex mcap/price are patched after paint so the
+          // table is not blocked on creation lookups or live pool RPC (~10s cold).
           include_creation: false,
           creation_concurrency: 6,
         }),

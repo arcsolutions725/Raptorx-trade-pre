@@ -5,9 +5,9 @@
  * Golden/Pump Reports lists + their sparklines. Meant to be called by a Vercel
  * cron every minute. Reads/caches only — no DB writes.
  *
- * The expensive cold costs are (a) per-token creation-timestamp enrichment and
- * (b) per-token sparkline history — both cached by the underlying routes. Keeping
- * them warm turns chain/report clicks into fast cached reads instead of ~5-25s.
+ * The expensive cold cost is the Birdeye token list (cached 20s). Age and Dex
+ * mcap overlay are follow-up requests after the table paints. Keeping the list
+ * warm turns first load / chain clicks into fast cached reads.
  */
 import { NextRequest, NextResponse } from "next/server";
 
@@ -29,7 +29,7 @@ function defaultBody(chain: string, offset = 0) {
     min_liquidity: 100,
     ui_amount_mode: "scaled",
     verified_only: false,
-    include_creation: true,
+    include_creation: false,
     creation_concurrency: 6,
   };
 }
@@ -57,8 +57,7 @@ async function warmSparklines(origin: string, tokens: { chain: string; address: 
 async function warmChain(origin: string, chain: string) {
   const t0 = Date.now();
   try {
-    // Warm the first N pages sequentially (populates the per-offset list cache and
-    // the immutable per-token creation cache for the top ~100 tokens).
+    // Warm the first N pages sequentially (populates the per-offset list cache).
     let firstPageItems: any[] = [];
     const statuses: number[] = [];
     for (const offset of PAGE_OFFSETS) {

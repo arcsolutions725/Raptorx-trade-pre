@@ -44,7 +44,10 @@ import {
   hasUsableTokenCreatedAt,
   mergeScreenerTokenAges,
 } from "@/utils/tokenAge";
-import { applyScreenerRowRichCache } from "@/utils/screenerRowMerge";
+import {
+  applyScreenerRowRichCache,
+  mergeScreenerTokenMarket,
+} from "@/utils/screenerRowMerge";
 
 /* ============================ Styled, Up-Opening Select ============================ */
 
@@ -457,6 +460,8 @@ export function TrendingTableContent({
   const pumpReportsTooltipId = useId().replace(/:/g, "");
   const [pumpReportsInfoOpen, setPumpReportsInfoOpen] = useState(false);
   const lastPumpTapClientXRef = useRef<number | null>(null);
+  const [pendingChartToken, setPendingChartToken] =
+    useState<TrendingToken | null>(null);
 
   // Search state
   const [searchQuery, setSearchQuery] = useState<string>("");
@@ -827,10 +832,65 @@ export function TrendingTableContent({
 
   const rows = Array.isArray(data) ? data : [];
 
+  const trendingMarketQueryKey = useMemo(
+    () =>
+      [
+        "trending-row-market",
+        screenerChain,
+        rows.map((t) => t.tokenAddress ?? "").join("|"),
+      ] as const,
+    [screenerChain, rows],
+  );
+
+  const {
+    data: trendingMarketPayload,
+    isFetched: trendingMarketFetched,
+    isError: trendingMarketError,
+  } = useQuery({
+    queryKey: trendingMarketQueryKey,
+    queryFn: async () => {
+      const res = await fetch("/api/trending/market", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        cache: "no-store",
+        body: JSON.stringify({ chain: screenerChain, items: rows }),
+      });
+      if (!res.ok) {
+        throw new Error(`Trending market overlay failed: ${res.statusText}`);
+      }
+      return res.json() as Promise<{
+        ok?: boolean;
+        items?: TrendingToken[];
+      }>;
+    },
+    enabled: rows.length > 0 && !goldenReportsOnly && !pumpReportsOnly,
+    staleTime: 15_000,
+    refetchInterval: 20_000,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
+  });
+
+  const marketOverlayReady =
+    goldenReportsOnly ||
+    pumpReportsOnly ||
+    rows.length === 0 ||
+    trendingMarketFetched ||
+    trendingMarketError;
+
+  const rowsWithMarket = useMemo(
+    () =>
+      mergeScreenerTokenMarket(
+        rows,
+        trendingMarketPayload?.items,
+        marketOverlayReady,
+      ),
+    [rows, trendingMarketPayload?.items, marketOverlayReady],
+  );
+
   const pendingAgeItems = useMemo(() => {
     if (goldenReportsOnly || pumpReportsOnly) return [];
-    return rows.filter((t) => !hasUsableTokenCreatedAt(t.createdAt));
-  }, [goldenReportsOnly, pumpReportsOnly, rows]);
+    return rowsWithMarket.filter((t) => !hasUsableTokenCreatedAt(t.createdAt));
+  }, [goldenReportsOnly, pumpReportsOnly, rowsWithMarket]);
 
   const trendingAgeQueryKey = useMemo(
     () =>
@@ -864,8 +924,8 @@ export function TrendingTableContent({
   });
 
   const rowsWithAges = useMemo(
-    () => mergeScreenerTokenAges(rows, trendingAgesPayload?.ages),
-    [rows, trendingAgesPayload?.ages],
+    () => mergeScreenerTokenAges(rowsWithMarket, trendingAgesPayload?.ages),
+    [rowsWithMarket, trendingAgesPayload?.ages],
   );
 
   const displayRows = goldenReportsOnly
@@ -972,10 +1032,45 @@ export function TrendingTableContent({
     const addr = t?.tokenAddress || "";
     if (!addr) return;
 
+    // Wait for the Dex pair so the embed matches the row's Mcap, instead of
+    // opening on the token address (wrong chart) or Birdeye numbers.
+    if (!t.pairAddress && !goldenReportsOnly && !pumpReportsOnly && !marketOverlayReady) {
+      setPendingChartToken(t);
+      return;
+    }
+
     captureListState();
     handleClearSearch({ keepPage: true });
     onTokenSelect?.(t, addr, true);
   };
+
+  useEffect(() => {
+    if (!pendingChartToken?.tokenAddress) return;
+    const key = String(pendingChartToken.tokenAddress).toLowerCase();
+    const updated =
+      rowsWithAges.find(
+        (r) => String(r.tokenAddress ?? "").toLowerCase() === key,
+      ) ?? pendingChartToken;
+
+    if (updated.pairAddress) {
+      setPendingChartToken(null);
+      captureListState();
+      handleClearSearch({ keepPage: true });
+      onTokenSelect?.(updated, updated.tokenAddress || "", true);
+      return;
+    }
+
+    if (marketOverlayReady) {
+      setPendingChartToken(null);
+      captureListState();
+      handleClearSearch({ keepPage: true });
+      onTokenSelect?.(updated, updated.tokenAddress || "", true);
+    }
+  }, [pendingChartToken, rowsWithAges, marketOverlayReady, onTokenSelect]);
+
+  useEffect(() => {
+    setPendingChartToken(null);
+  }, [screenerChain, goldenReportsOnly, pumpReportsOnly]);
 
   const handleBackFromChart = () => {
     onTokenSelect?.(null, null, false);
@@ -1539,6 +1634,15 @@ export function TrendingTableContent({
           !pumpReportsOnly &&
           !deepLinkBlocksTrendingLoaders && <PageLoaderOverlay />}
 
+        {pendingChartToken && (
+          <div className="absolute inset-0 z-[19] flex items-center justify-center bg-black/50">
+            <div className="flex items-center text-[#FFC000]">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3" />
+              <span>Loading chart…</span>
+            </div>
+          </div>
+        )}
+
         {deepLinkTableOverlay !== null && !suppressDeepLinkTableOverlay && (
           <div className="absolute inset-0 z-[18] flex items-center justify-center bg-black/50">
             {deepLinkTableOverlay === "loading" && (
@@ -1791,6 +1895,12 @@ export function TrendingTableContent({
                         ageLoading={
                           (goldenAgesLoading || pumpAgesLoading) &&
                           !hasUsableTokenCreatedAt(t.createdAt)
+                        }
+                        marketLoading={
+                          !goldenReportsOnly &&
+                          !pumpReportsOnly &&
+                          !marketOverlayReady &&
+                          !t.pairAddress
                         }
                       />
                     );

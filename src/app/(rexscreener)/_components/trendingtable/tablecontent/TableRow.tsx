@@ -138,6 +138,8 @@ type Props = {
   usePumpGenerateArt?: boolean;
   /** Golden/Pump: age enrichment still in flight and row has no `createdAt` yet */
   ageLoading?: boolean;
+  /** Dex mcap/price overlay still in flight — don't flash Birdeye numbers */
+  marketLoading?: boolean;
 };
 
 export function TableRow({
@@ -155,6 +157,7 @@ export function TableRow({
   useGoldenGenerateArt: _useGoldenGenerateArt = false,
   usePumpGenerateArt: _usePumpGenerateArt = false,
   ageLoading = false,
+  marketLoading = false,
 }: Props) {
   const { isGenerating, startedAt } = useReportGenStatus(token?.tokenAddress);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -557,10 +560,16 @@ export function TableRow({
         className={`sm:sticky sm:left-135 min-h-[4.75rem] sm:z-10 flex w-full min-w-0 items-center px-3 py-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
       >
         <div className="min-w-0 w-full overflow-hidden">
-          <ValueWithDayChange
-            valueLabel={formatUsd(mcap)}
-            changePct={priceChange24h}
-          />
+          {marketLoading ? (
+            <div className="flex w-full items-center justify-center" role="status" aria-label="Loading market cap">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-[#FFC000]" />
+            </div>
+          ) : (
+            <ValueWithDayChange
+              valueLabel={formatUsd(mcap)}
+              changePct={priceChange24h}
+            />
+          )}
         </div>
       </div>
 
@@ -592,10 +601,16 @@ export function TableRow({
         className={`flex min-h-[4.75rem] w-full min-w-0 items-center px-3 py-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
       >
         <div className="min-w-0 w-full overflow-hidden">
-          <ValueWithDayChange
-            valueLabel={formatUsd(price)}
-            changePct={priceChange24h}
-          />
+          {marketLoading ? (
+            <div className="flex w-full items-center justify-center" role="status" aria-label="Loading price">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-[#FFC000]" />
+            </div>
+          ) : (
+            <ValueWithDayChange
+              valueLabel={formatUsd(price)}
+              changePct={priceChange24h}
+            />
+          )}
         </div>
       </div>
 

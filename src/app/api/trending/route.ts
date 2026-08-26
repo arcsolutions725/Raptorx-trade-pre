@@ -646,11 +646,9 @@ async function loadSolanaVerifiedPageFromJupiter(opts: {
   sortTrendingRowsForV3(sorted, sortV3, sort_type);
 
   const pageItems = sorted.slice(offset, offset + limit);
-  const withPricePct = await enrichTokenlistPricePercent24h(
-    pageItems,
-    "solana",
-    apiKey
-  );
+  const withPricePct = include_creation
+    ? await enrichTokenlistPricePercent24h(pageItems, "solana", apiKey)
+    : pageItems;
   const enriched = include_creation
     ? await enrichWithCreation(
         withPricePct,
@@ -660,14 +658,12 @@ async function loadSolanaVerifiedPageFromJupiter(opts: {
       )
     : withPricePct;
 
-  const live = (
-    await applyLiveMarketData(
-      dedupeByAddress(enriched),
-      "solana",
-      sort_by,
-      sort_type
-    )
-  ).filter(shouldKeepSolanaTrendingToken);
+  const deduped = dedupeByAddress(enriched);
+  const live = include_creation
+    ? (
+        await applyLiveMarketData(deduped, "solana", sort_by, sort_type)
+      ).filter(shouldKeepSolanaTrendingToken)
+    : deduped.filter(shouldKeepSolanaTrendingToken);
 
   return {
     finalItems: live,
@@ -805,12 +801,9 @@ async function fetchBirdeyeTokenlistUncached(opts: {
  * transient 429 isn't pinned for the whole TTL). apiKey is read from env inside
  * the cached fn so it never becomes part of the cache key.
  *
- * Safe to serve stale-while-revalidate because this list no longer decides what
- * the table *renders*: market cap and price are overlaid from DexScreener per
- * request (`applyLiveMarketData`). What's cached here is discovery — which tokens
- * exist, their ordering, volume and liquidity — where a few seconds of drift is
- * invisible. Do not move Mcap or price back onto this path; SWR staleness here is
- * what previously made the Mcap column disagree with the DexScreener chart.
+ * Safe to serve stale-while-revalidate because this list is discovery only:
+ * which tokens exist, their ordering, volume and liquidity. Market cap and
+ * price are patched from DexScreener after the table paints (`/api/trending/market`).
  */
 const fetchBirdeyeTokenlistCached = unstable_cache(
   async (
@@ -1810,7 +1803,7 @@ async function fetchChainTokens(opts: {
     const collected: any[] = [];
     let birdeyeOffset = offset;
     const batchLimit = BIRDEYE_V3_LIST_MAX;
-    const maxBatches = 8;
+    const maxBatches = include_creation ? 8 : 2;
     let batches = 0;
 
     while (batches < maxBatches && collected.length < limit) {
@@ -1856,21 +1849,17 @@ async function fetchChainTokens(opts: {
 
     // Enrich with creation info
     const pageItems = collected.slice(0, limit);
-    const withPricePct = await enrichTokenlistPricePercent24h(
-      pageItems,
-      chain,
-      apiKey
-    );
+    const withPricePct = include_creation
+      ? await enrichTokenlistPricePercent24h(pageItems, chain, apiKey)
+      : pageItems;
     const enriched = include_creation
       ? await enrichWithCreation(withPricePct, chain, apiKey, creation_concurrency)
       : withPricePct;
 
-    const live = await applyLiveMarketData(
-      dedupeByAddress(enriched),
-      chain,
-      sort_by,
-      sort_type
-    );
+    const deduped = dedupeByAddress(enriched);
+    const live = include_creation
+      ? await applyLiveMarketData(deduped, chain, sort_by, sort_type)
+      : deduped;
     return live.filter(shouldKeepSolanaTrendingToken);
   } catch (error) {
     console.error(`Error fetching ${chain} tokens:`, error);
@@ -2079,7 +2068,7 @@ export async function POST(request: NextRequest) {
   // Walk Birdeye pages until we have enough FILTERED items to satisfy offset+limit,
   // or until exhausted (or keep going if force_full_scan is true).
   let birdeyeOffset = 0;
-  const maxBatches = needVerifiedTotal ? 9999 : 40; // safety valves
+  const maxBatches = needVerifiedTotal ? 9999 : include_creation ? 40 : 2;
   let batches = 0;
   let exhausted = false;
   const targetListLen = offset + limit;
@@ -2167,11 +2156,9 @@ export async function POST(request: NextRequest) {
   // Slice the filtered collection for this page
   const pageItems = collected.slice(offset, offset + limit);
 
-  const pageWithPricePct = await enrichTokenlistPricePercent24h(
-    pageItems,
-    chain,
-    apiKey
-  );
+  const pageWithPricePct = include_creation
+    ? await enrichTokenlistPricePercent24h(pageItems, chain, apiKey)
+    : pageItems;
 
   // Optional: Creation enrichment on the page slice only
   const enriched = include_creation
@@ -2183,13 +2170,11 @@ export async function POST(request: NextRequest) {
       )
     : pageWithPricePct;
 
+  const deduped = dedupeByAddress(enriched);
   const finalItems = (
-    await applyLiveMarketData(
-      dedupeByAddress(enriched),
-      chain,
-      sort_by,
-      sort_type
-    )
+    include_creation
+      ? await applyLiveMarketData(deduped, chain, sort_by, sort_type)
+      : deduped
   ).filter(shouldKeepSolanaTrendingToken);
 
   // Totals semantics:

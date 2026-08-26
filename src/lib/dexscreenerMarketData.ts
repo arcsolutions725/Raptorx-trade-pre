@@ -66,7 +66,11 @@ function prune(now: number) {
   }
 }
 
-async function fetchBatchInto(slug: string, addresses: string[]): Promise<void> {
+async function fetchBatchInto(
+  slug: string,
+  addresses: string[],
+  livePool: boolean,
+): Promise<void> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), FETCH_TIMEOUT_MS);
 
@@ -120,10 +124,12 @@ async function fetchBatchInto(slug: string, addresses: string[]): Promise<void> 
     if (pair && base) liveEntries.push({ pair, base });
   }
   let liveQpb = new Map<string, number>();
-  try {
-    liveQpb = await getLiveQuotePerBase(slug, liveEntries);
-  } catch {
-    liveQpb = new Map();
+  if (livePool) {
+    try {
+      liveQpb = await getLiveQuotePerBase(slug, liveEntries);
+    } catch {
+      liveQpb = new Map();
+    }
   }
 
   const now = Date.now();
@@ -178,7 +184,8 @@ async function fetchBatchInto(slug: string, addresses: string[]): Promise<void> 
  */
 export async function getDexMarketData(
   chain: string,
-  addresses: string[]
+  addresses: string[],
+  opts?: { livePool?: boolean },
 ): Promise<Map<string, DexMarketRow>> {
   const out = new Map<string, DexMarketRow>();
   const slug = DEX_CHAIN_SLUG[String(chain || "").toLowerCase()];
@@ -192,6 +199,8 @@ export async function getDexMarketData(
     )
   );
   if (!uniq.length) return out;
+
+  const livePool = opts?.livePool !== false;
 
   const now = Date.now();
   const waits: Promise<void>[] = [];
@@ -211,7 +220,7 @@ export async function getDexMarketData(
 
   for (let i = 0; i < need.length; i += BATCH_SIZE) {
     const batch = need.slice(i, i + BATCH_SIZE);
-    const p = fetchBatchInto(slug, batch).finally(() => {
+    const p = fetchBatchInto(slug, batch, livePool).finally(() => {
       for (const a of batch) inflight.delete(cacheKey(slug, a));
     });
     for (const a of batch) inflight.set(cacheKey(slug, a), p);
@@ -239,23 +248,31 @@ export async function getDexMarketData(
  */
 export async function applyDexMarketOverlay(
   items: any[],
-  chain: string
+  chain: string,
+  opts?: { livePool?: boolean; dexOnly?: boolean },
 ): Promise<any[]> {
   if (!items.length) return items;
 
   const byAddress = await getDexMarketData(
     chain,
-    items.map((it) => String(it?.tokenAddress ?? ""))
+    items.map((it) => String(it?.tokenAddress ?? "")),
+    opts,
   );
-  if (!byAddress.size) return items;
+  const dexOnly = Boolean(opts?.dexOnly);
+  if (!byAddress.size && !dexOnly) return items;
 
   return items.map((it) => {
     const row = byAddress.get(String(it?.tokenAddress ?? "").toLowerCase());
-    if (!row) return it;
+    if (!row) {
+      // Already Dex-sourced (e.g. Robinhood). Keep those numbers.
+      if (it?.pairAddress) return it;
+      if (!dexOnly) return it;
+      return { ...it, marketCap: undefined, usdPrice: undefined };
+    }
     return {
       ...it,
-      marketCap: row.marketCap ?? it?.marketCap,
-      usdPrice: row.usdPrice ?? it?.usdPrice,
+      marketCap: dexOnly ? row.marketCap : (row.marketCap ?? it?.marketCap),
+      usdPrice: dexOnly ? row.usdPrice : (row.usdPrice ?? it?.usdPrice),
       pairAddress: row.pairAddress ?? it?.pairAddress,
       quoteSymbol: row.quoteSymbol ?? it?.quoteSymbol,
     };
