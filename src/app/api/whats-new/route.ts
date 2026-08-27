@@ -155,6 +155,7 @@ export async function POST(req: NextRequest) {
       const prompt = `You are a markets social analyst. Write 3 to 5 mini-paragraphs about $${ticker} itself — its own price action, news, and developments.
 - Use only tweets that are about $${ticker} as the subject asset
 - Ignore tweets about other tokens that merely mention $${ticker} as a chain, quote, or launch venue
+- Ignore airdrop tweets entirely; do not mention airdrops in the briefing
 - Interpret sentiment and notable claims (without inventing facts)
 - Flag hype, caution, or disagreement if present
 - Do not list tweets one-by-one; synthesize them

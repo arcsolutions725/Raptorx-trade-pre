@@ -3,6 +3,9 @@ import type { TweetData } from "@/lib/api/tweet";
 const SCAM_RE =
   /\b(dm\s*me|guaranteed\s+\d|100x|1000x|airdrop\s*claim|send\s+(sol|eth|bnb)|double\s+your|free\s+mint|seed\s*phrase|connect\s+wallet\s+to\s+claim|giveaway\s+bot)\b/i;
 
+/** Any airdrop mention — scam claim links dominate What's New if these stay. */
+const AIRDROP_RE = /air[\s-]?drop/i;
+
 const BASE_QUOTE_ASSETS = new Set([
   "SOL",
   "WSOL",
@@ -113,7 +116,12 @@ export function isOnTopicForAsset(
     BASE_ASSET_TOPIC_RE.test(text);
   if (!mentionsSubject(text, symbol, projectName) && !namedSolana) return false;
   if (hasHyphenatedTicker(text, symbol)) return false;
-  if (LISTING_SPAM_RE.test(text) || MEME_LAUNCH_RE.test(text) || SCAM_RE.test(text)) {
+  if (
+    LISTING_SPAM_RE.test(text) ||
+    MEME_LAUNCH_RE.test(text) ||
+    SCAM_RE.test(text) ||
+    AIRDROP_RE.test(text)
+  ) {
     return false;
   }
   if (
@@ -184,7 +192,8 @@ function qualityScore(t: TweetData): number {
   const replyPenalty = t.isReply ? 0.55 : 1;
   const autoPenalty = t.tweeter?.isAutomated ? 0.15 : 1;
   const sensitivePenalty = t.tweeter?.possiblySensitive ? 0.35 : 1;
-  const scamPenalty = SCAM_RE.test(t.text || "") ? 0.08 : 1;
+  const text = t.text || "";
+  const scamPenalty = SCAM_RE.test(text) || AIRDROP_RE.test(text) ? 0.08 : 1;
   return (
     engagementScore(t) *
     followerWeight *
@@ -200,7 +209,7 @@ function qualityScore(t: TweetData): number {
 export function isHighQualityTweetCandidate(t: TweetData): boolean {
   const text = (t.text || "").trim();
   if (text.length < 20) return false;
-  if (SCAM_RE.test(text)) return false;
+  if (SCAM_RE.test(text) || AIRDROP_RE.test(text)) return false;
   if (t.tweeter?.isAutomated) return false;
   if (t.tweeter?.possiblySensitive) return false;
 
@@ -221,10 +230,12 @@ export function selectTopQualityTweets(
   asset?: TweetAssetContext,
 ): TweetData[] {
   const pool = Array.isArray(tweets) ? tweets : [];
+  // Hard drop: never show airdrop tweets, even if that leaves the list empty.
+  const noAirdrop = pool.filter((t) => !AIRDROP_RE.test(t.text || ""));
   const ticker = asset?.ticker?.trim();
   const onTopic = ticker
-    ? pool.filter((t) => isOnTopicForAsset(t, ticker, asset?.projectName))
-    : pool;
+    ? noAirdrop.filter((t) => isOnTopicForAsset(t, ticker, asset?.projectName))
+    : noAirdrop;
   // Never fall back to off-topic tweets — empty is better than the wrong asset.
   const source = onTopic;
   const filtered = source.filter(isHighQualityTweetCandidate);

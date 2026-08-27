@@ -106,7 +106,7 @@ function buildTweetSearchQueries(
 
   if (!symbol) return [];
 
-  const spamExcl = `-launchpad -presale -listing -BEP20 -"fair launch" -"new gem" -"${symbol}-SOL" -"${symbol}-BEP20" -"${symbol}-ETH"`;
+  const spamExcl = `-airdrop -airdrops -launchpad -presale -listing -BEP20 -"fair launch" -"new gem" -"${symbol}-SOL" -"${symbol}-BEP20" -"${symbol}-ETH"`;
 
   if (symbol === "USDC") {
     queries.push(
@@ -121,7 +121,9 @@ function buildTweetSearchQueries(
       `$${symbol} (price OR etf OR staking OR staked OR validator OR chart OR tvl OR "market cap") ${spamExcl} -launched -launching lang:en`,
     );
     if (symbol === "SOL" || symbol === "WSOL") {
-      queries.push(`("Solana" (price OR etf OR staking OR ETF)) lang:en`);
+      queries.push(
+        `("Solana" (price OR etf OR staking OR ETF)) -airdrop -airdrops lang:en`,
+      );
     }
   } else {
     queries.push(`$${symbol} ${spamExcl} lang:en`);
