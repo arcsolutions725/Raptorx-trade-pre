@@ -20,6 +20,21 @@ export const DEX_CHAIN_SLUG: Record<string, string> = {
 export const toDexChainSlug = (chain?: string | null): string | undefined =>
   chain ? DEX_CHAIN_SLUG[chain.trim().toLowerCase()] : undefined;
 
+/**
+ * Stable DexScreener token icon. Always constructable from chain + address, so
+ * Golden/Pump rows still have an image when Birdeye omits `logoURI`.
+ */
+export function dexScreenerTokenImageUrl(
+  chain?: string | null,
+  address?: string | null,
+): string | undefined {
+  const slug = toDexChainSlug(chain);
+  const addr = typeof address === "string" ? address.trim() : "";
+  if (!slug || !addr) return undefined;
+  const token = addr.startsWith("0x") ? addr.toLowerCase() : addr;
+  return `https://dd.dexscreener.com/ds-data/tokens/${slug}/${token}.png`;
+}
+
 export interface DexScreenerPair {
   chainId: string;
   dexId: string;

@@ -4,6 +4,7 @@ import {
   enrichWithCreationMixedChains,
   normalizeEpochToSeconds,
 } from "@/lib/birdeyeTokenCreationInfo";
+import { dexScreenerTokenImageUrl } from "@/lib/api/dexscreener";
 import { applyDexMarketOverlay } from "@/lib/dexscreenerMarketData";
 import { normGoldenDbChain } from "@/lib/goldenReportRegistryMatch";
 import { prisma } from "@/lib/prisma";
@@ -225,7 +226,14 @@ function stubRowFromProject(contractAddress: string, dbChain: string): any {
     chainId,
     tokenAddress,
     uniqueName: null,
+    logo: dexScreenerTokenImageUrl(chainId, tokenAddress),
   };
+}
+
+function ensureRowLogo(row: any): any {
+  if (typeof row?.logo === "string" && row.logo.trim()) return row;
+  const logo = dexScreenerTokenImageUrl(row?.chainId, row?.tokenAddress);
+  return logo ? { ...row, logo } : row;
 }
 
 async function tokenRowFromProject(
@@ -322,7 +330,7 @@ async function buildReportScreenerTokenRows(
     ),
   );
   rows.length = 0;
-  rows.push(...overlaidGroups.flat());
+  rows.push(...overlaidGroups.flat().map(ensureRowLogo));
 
   rows.sort((a, b) => {
     const mcA = a?.marketCap ?? 0;
@@ -353,7 +361,7 @@ async function buildReportScreenerTokenRows(
 const buildReportScreenerTokenRowsCached = unstable_cache(
   async (isGolden: boolean, includeAge: boolean) =>
     buildReportScreenerTokenRows(isGolden, { includeAge }),
-  ["report-screener-rows-v1"],
+  ["report-screener-rows-v2"],
   { revalidate: 60, tags: [REPORT_SCREENER_ROWS_TAG] },
 );
 

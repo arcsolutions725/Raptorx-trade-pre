@@ -17,6 +17,7 @@ import {
 } from "@/components/ui/modal/WhatsNewModal";
 import { GlossyReportButton } from "./GlossyReportButton";
 import { Token24hSparkline } from "./Token24hSparkline";
+import { dexScreenerTokenImageUrl } from "@/lib/api/dexscreener";
 
 function fromEpochSeconds(sec?: number): Date | null {
   if (typeof sec !== "number" || !Number.isFinite(sec) || sec <= 0) return null;
@@ -230,9 +231,17 @@ export function TableRow({
   );
 
   const [logoLoadFailed, setLogoLoadFailed] = useState(false);
+  const constructedLogo = dexScreenerTokenImageUrl(
+    token?.chainId,
+    token?.tokenAddress,
+  );
+  const [logoSrc, setLogoSrc] = useState<string | undefined>(
+    token?.logo || constructedLogo,
+  );
   useEffect(() => {
     setLogoLoadFailed(false);
-  }, [token?.tokenAddress, token?.logo]);
+    setLogoSrc(token?.logo || constructedLogo);
+  }, [token?.tokenAddress, token?.logo, constructedLogo]);
 
   const displayName = token?.name ?? token?.symbol ?? "Unknown";
   const displaySymbol = token?.symbol ? `${token.symbol}` : "";
@@ -241,8 +250,7 @@ export function TableRow({
   const vol = pickVolume24h(token?.totalVolume);
   const liq = token?.liquidityUsd;
   const age = timeSince(fromEpochSeconds(token?.createdAt));
-  const logoImage = token?.logo;
-  const showTokenImage = Boolean(logoImage) && !logoLoadFailed;
+  const showTokenImage = Boolean(logoSrc) && !logoLoadFailed;
 
   const priceChange24h = pct24h(token?.pricePercentChange);
   const volumeChange24h = pct24h(token?.volumePercentChange);
@@ -422,12 +430,18 @@ export function TableRow({
         >
           {showTokenImage ? (
             <Image
-              src={logoImage as string}
+              src={logoSrc as string}
               alt=""
               width={32}
               height={32}
               className="w-8 h-8 object-contain group-hover:scale-[1.05] transition"
-              onError={() => setLogoLoadFailed(true)}
+              onError={() => {
+                if (logoSrc && constructedLogo && logoSrc !== constructedLogo) {
+                  setLogoSrc(constructedLogo);
+                  return;
+                }
+                setLogoLoadFailed(true);
+              }}
             />
           ) : (
             <span

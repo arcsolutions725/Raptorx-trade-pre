@@ -30,7 +30,16 @@ export function mergeRichScreenerRow(
   previous?: TrendingToken,
 ): TrendingToken {
   if (!previous || !isRichScreenerRow(previous)) return incoming;
-  if (isRichScreenerRow(incoming)) return incoming;
+  if (isRichScreenerRow(incoming)) {
+    // Dex overlay can make a Birdeye-stub "rich" (mcap/price) without a logo.
+    // Keep the last known icon so Golden/Pump images don't blink off on refetch.
+    return {
+      ...incoming,
+      logo: incoming.logo || previous.logo,
+      name: incoming.name ?? previous.name,
+      symbol: incoming.symbol ?? previous.symbol,
+    };
+  }
 
   return {
     ...previous,

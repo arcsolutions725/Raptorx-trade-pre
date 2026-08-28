@@ -43,6 +43,7 @@ export type DexMarketRow = {
   usdPrice?: number;
   pairAddress?: string;
   quoteSymbol?: string;
+  logo?: string;
 };
 
 type Entry = { at: number; row: DexMarketRow | null };
@@ -163,6 +164,11 @@ async function fetchBatchInto(
       }
     }
 
+    const imageUrl =
+      typeof p?.info?.imageUrl === "string" && p.info.imageUrl.trim()
+        ? p.info.imageUrl.trim()
+        : undefined;
+
     const row: DexMarketRow = {
       marketCap,
       usdPrice,
@@ -172,6 +178,7 @@ async function fetchBatchInto(
         typeof p?.quoteToken?.symbol === "string"
           ? p.quoteToken.symbol
           : undefined,
+      logo: imageUrl,
     };
     cache.set(cacheKey(slug, a), { at: now, row });
   }
@@ -275,6 +282,7 @@ export async function applyDexMarketOverlay(
       usdPrice: dexOnly ? row.usdPrice : (row.usdPrice ?? it?.usdPrice),
       pairAddress: row.pairAddress ?? it?.pairAddress,
       quoteSymbol: row.quoteSymbol ?? it?.quoteSymbol,
+      logo: it?.logo || row.logo,
     };
   });
 }
