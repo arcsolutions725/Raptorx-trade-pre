@@ -112,7 +112,9 @@ export function ProjectSocialLinks({
           className="inline-flex items-center gap-1 text-[11px] font-medium text-white/70 transition hover:text-white"
         >
           <SocialGlyph kind={item.key} />
-          {compact ? null : <span>{item.label}</span>}
+          {compact || item.key === "twitter" ? null : (
+            <span>{item.label}</span>
+          )}
         </a>
       ))}
     </div>

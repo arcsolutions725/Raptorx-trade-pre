@@ -42,6 +42,32 @@ export function hrefForScreenerChain(chain: Chain): string {
   return seg ? `/${seg}` : REX_SCREENER_ALL_HREF;
 }
 
+/** Public token page for a generated report (`/solana/<mint>`, `/base/0x…`). */
+export function hrefForScreenerToken(
+  chain: Chain | string | null | undefined,
+  address?: string | null,
+): string {
+  const raw = String(chain || "solana").toLowerCase();
+  const asChain: Chain =
+    raw === "bnb" || raw === "bsc" || raw === "56"
+      ? "bsc"
+      : raw === "eth" || raw === "ethereum" || raw === "1"
+        ? "ethereum"
+        : raw === "base" || raw === "8453"
+          ? "base"
+          : raw === "monad" || raw === "10143"
+            ? "monad"
+            : raw === "robinhood" || raw === "4663"
+              ? "robinhood"
+              : raw === "all"
+                ? "all"
+                : "solana";
+  const addr = (address || "").trim();
+  const seg = chainToSlug(asChain);
+  if (!seg || !addr) return hrefForScreenerChain(asChain);
+  return `/${seg}/${addr}`;
+}
+
 /** URL segment for a non-`all` chain tab. */
 export function pathSegmentForChain(chain: Exclude<Chain, "all">): ScreenerChainSlug {
   return chainToSlug(chain) as ScreenerChainSlug;

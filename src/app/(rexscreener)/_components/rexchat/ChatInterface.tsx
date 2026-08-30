@@ -9,6 +9,7 @@ import {
   Check,
   RotateCcw,
   ArrowLeft,
+  Share2,
   Square,
   X,
 } from "lucide-react";
@@ -49,6 +50,7 @@ import {
   renderRexPilotMarkdownSection,
 } from "./rexPilotReportMarkdown";
 import { PilotReportHistoryButton } from "./PilotReportHistoryButton";
+import { hrefForScreenerToken } from "@/lib/rexscreenerRoutes";
 
 export interface DexScreenerPair {
   chainId: string;
@@ -1075,6 +1077,37 @@ export default function ChatInterface({
     );
   }
 
+  function ShareReportLinkButton() {
+    const [copied, setCopied] = useState(false);
+    const onShare = useCallback(() => {
+      const path = hrefForScreenerToken(
+        reportData?.chain,
+        reportData?.contractAddress,
+      );
+      const url = `${window.location.origin}${path}`;
+      copy(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }, [reportData?.chain, reportData?.contractAddress]);
+
+    return (
+      <button
+        type="button"
+        onClick={onShare}
+        className="relative mr-1 inline-flex items-center justify-center rounded p-1 text-white transition hover:text-[#FFD700]"
+        title={copied ? "Link copied" : "Share report link"}
+        aria-label={copied ? "Link copied" : "Share report link"}
+      >
+        <Share2 className="h-6 w-6" />
+        {copied ? (
+          <span className="absolute -bottom-7 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[#ffc000] bg-black/90 px-2 py-0.5 text-[10px] text-[#ffc000]">
+            Link copied
+          </span>
+        ) : null}
+      </button>
+    );
+  }
+
   function CopyContractAddressButton({
     contractaddress,
   }: {
@@ -1345,6 +1378,7 @@ export default function ChatInterface({
                 disabled={whatsNewLoading}
                 ariaLabel="What's New"
               />
+              <ShareReportLinkButton />
             </div>
             <div className="flex items-center">
               <CopyContractAddressButton
