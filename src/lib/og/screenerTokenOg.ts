@@ -160,12 +160,22 @@ export function formatOgUsd(n?: number): string {
   return `$${n.toPrecision(3)}`;
 }
 
+function firstHeaderValue(value?: string | null): string {
+  return (value || "").split(",")[0]?.trim() || "";
+}
+
+/**
+ * Origin used for og:image / og:url. Prefer the incoming Host so preview
+ * deployments do not advertise production `/api/og/token` (which 404s until
+ * that route is live on prod). Env URL is only a last-resort fallback.
+ */
 export function getOgSiteUrl(host?: string | null, proto?: string | null): string {
+  const rawHost = firstHeaderValue(host);
+  if (rawHost) {
+    const protocol = firstHeaderValue(proto) || "https";
+    return `${protocol}://${rawHost}`.replace(/\/$/, "");
+  }
   const env = process.env.NEXT_PUBLIC_SITE_URL?.replace(/\/$/, "");
   if (env) return env;
-  if (host) {
-    const protocol = proto || "https";
-    return `${protocol}://${host}`.replace(/\/$/, "");
-  }
   return "https://raptorx.trade";
 }

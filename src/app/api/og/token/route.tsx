@@ -44,9 +44,12 @@ export async function GET(request: NextRequest) {
       return new Response("Token not found", { status: 404 });
     }
 
-    const host = request.headers.get("host");
-    const proto = request.headers.get("x-forwarded-proto") || request.nextUrl.protocol.replace(":", "");
-    const siteUrl = getOgSiteUrl(host, proto);
+    const host =
+      request.headers.get("x-forwarded-host") || request.headers.get("host");
+    const proto =
+      request.headers.get("x-forwarded-proto") ||
+      request.nextUrl.protocol.replace(":", "");
+    const siteUrl = request.nextUrl.origin || getOgSiteUrl(host, proto);
 
     const [logoSrc, brandSrc] = await Promise.all([
       toPngDataUrl(token.logoUrl),

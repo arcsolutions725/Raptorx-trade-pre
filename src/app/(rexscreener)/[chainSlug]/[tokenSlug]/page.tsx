@@ -23,7 +23,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   const headersList = await headers();
   const siteUrl = getOgSiteUrl(
-    headersList.get("host"),
+    headersList.get("x-forwarded-host") || headersList.get("host"),
     headersList.get("x-forwarded-proto") || "https",
   );
 
@@ -37,6 +37,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const ogImageUrl = `${siteUrl}/api/og/token?chain=${encodeURIComponent(chainSlug)}&address=${encodeURIComponent(tokenSlug)}`;
 
   return {
+    metadataBase: new URL(siteUrl),
     title,
     description,
     openGraph: {
