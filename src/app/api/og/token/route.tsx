@@ -59,6 +59,10 @@ export async function GET(request: NextRequest) {
     const ticker = (token.symbol || "TOKEN").replace(/^\$/, "").slice(0, 14);
     const name = (token.name || ticker).slice(0, 36);
     const initial = ticker.slice(0, 1).toUpperCase();
+    const priceText = formatOgUsd(token.priceUsd);
+    const mcapText = formatOgUsd(token.marketCap);
+    const showMcap = mcapText !== "—";
+    const showPrice = priceText !== "—";
 
     const imageResponse = new ImageResponse(
       (
@@ -126,8 +130,8 @@ export async function GET(request: NextRequest) {
                   alignItems: "center",
                   gap: 10,
                   color: "#FFC000",
-                  fontSize: 22,
-                  fontWeight: 700,
+                  fontSize: 36,
+                  fontWeight: 800,
                   letterSpacing: 4,
                 }}
               >
@@ -137,12 +141,12 @@ export async function GET(request: NextRequest) {
                 style={{
                   display: "flex",
                   alignItems: "center",
-                  padding: "8px 16px",
+                  padding: "10px 22px",
                   borderRadius: 999,
                   border: "1px solid rgba(255,192,0,0.45)",
                   color: "#FFC000",
-                  fontSize: 20,
-                  fontWeight: 600,
+                  fontSize: 28,
+                  fontWeight: 700,
                 }}
               >
                 {token.chainLabel}
@@ -188,7 +192,7 @@ export async function GET(request: NextRequest) {
                     style={{
                       display: "flex",
                       color: "#FFC000",
-                      fontSize: 96,
+                      fontSize: 108,
                       fontWeight: 800,
                     }}
                   >
@@ -209,7 +213,7 @@ export async function GET(request: NextRequest) {
                   style={{
                     display: "flex",
                     color: "#FFC000",
-                    fontSize: 84,
+                    fontSize: 108,
                     fontWeight: 800,
                     lineHeight: 1,
                     letterSpacing: -2,
@@ -221,88 +225,94 @@ export async function GET(request: NextRequest) {
                   style={{
                     display: "flex",
                     color: "#ffffff",
-                    fontSize: 32,
+                    fontSize: 42,
                     fontWeight: 600,
-                    marginTop: 14,
+                    marginTop: 16,
                     opacity: 0.92,
                   }}
                 >
                   {name}
                 </div>
-                <div
-                  style={{
-                    display: "flex",
-                    gap: 16,
-                    marginTop: 28,
-                  }}
-                >
+                {(showPrice || showMcap) ? (
                   <div
                     style={{
                       display: "flex",
-                      flexDirection: "column",
-                      padding: "12px 20px",
-                      borderRadius: 16,
-                      backgroundColor: "#161616",
-                      border: "1px solid rgba(255,255,255,0.08)",
+                      gap: 18,
+                      marginTop: 32,
                     }}
                   >
-                    <div
-                      style={{
-                        display: "flex",
-                        color: "rgba(255,255,255,0.5)",
-                        fontSize: 16,
-                        fontWeight: 600,
-                        letterSpacing: 1,
-                      }}
-                    >
-                      PRICE
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        color: "#ffffff",
-                        fontSize: 28,
-                        fontWeight: 700,
-                        marginTop: 4,
-                      }}
-                    >
-                      {formatOgUsd(token.priceUsd)}
-                    </div>
+                    {showPrice ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          padding: "16px 26px",
+                          borderRadius: 16,
+                          backgroundColor: "#161616",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            color: "rgba(255,255,255,0.5)",
+                            fontSize: 22,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                          }}
+                        >
+                          PRICE
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            color: "#ffffff",
+                            fontSize: 40,
+                            fontWeight: 800,
+                            marginTop: 6,
+                          }}
+                        >
+                          {priceText}
+                        </div>
+                      </div>
+                    ) : null}
+                    {showMcap ? (
+                      <div
+                        style={{
+                          display: "flex",
+                          flexDirection: "column",
+                          padding: "16px 26px",
+                          borderRadius: 16,
+                          backgroundColor: "#161616",
+                          border: "1px solid rgba(255,255,255,0.08)",
+                        }}
+                      >
+                        <div
+                          style={{
+                            display: "flex",
+                            color: "rgba(255,255,255,0.5)",
+                            fontSize: 22,
+                            fontWeight: 700,
+                            letterSpacing: 1,
+                          }}
+                        >
+                          MCAP
+                        </div>
+                        <div
+                          style={{
+                            display: "flex",
+                            color: "#ffffff",
+                            fontSize: 40,
+                            fontWeight: 800,
+                            marginTop: 6,
+                          }}
+                        >
+                          {mcapText}
+                        </div>
+                      </div>
+                    ) : null}
                   </div>
-                  <div
-                    style={{
-                      display: "flex",
-                      flexDirection: "column",
-                      padding: "12px 20px",
-                      borderRadius: 16,
-                      backgroundColor: "#161616",
-                      border: "1px solid rgba(255,255,255,0.08)",
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: "flex",
-                        color: "rgba(255,255,255,0.5)",
-                        fontSize: 16,
-                        fontWeight: 600,
-                        letterSpacing: 1,
-                      }}
-                    >
-                      MCAP
-                    </div>
-                    <div
-                      style={{
-                        display: "flex",
-                        color: "#ffffff",
-                        fontSize: 28,
-                        fontWeight: 700,
-                        marginTop: 4,
-                      }}
-                    >
-                      {formatOgUsd(token.marketCap)}
-                    </div>
-                  </div>
-                </div>
+                ) : null}
               </div>
             </div>
 
@@ -318,7 +328,7 @@ export async function GET(request: NextRequest) {
                 style={{
                   display: "flex",
                   color: "rgba(255,255,255,0.45)",
-                  fontSize: 20,
+                  fontSize: 28,
                 }}
               >
                 AI research report · raptorx.trade
@@ -340,8 +350,8 @@ export async function GET(request: NextRequest) {
                   style={{
                     display: "flex",
                     color: "#FFC000",
-                    fontSize: 22,
-                    fontWeight: 700,
+                    fontSize: 32,
+                    fontWeight: 800,
                   }}
                 >
                   RaptorX
