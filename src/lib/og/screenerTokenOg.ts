@@ -36,6 +36,23 @@ const num = (v: unknown): number | undefined => {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 };
 
+/** Wrapped natives: DexScreener has price but almost never circulating mcap/fdv. */
+const NATIVE_COINGECKO_IDS: Record<string, string> = {
+  so11111111111111111111111111111111111111112: "solana",
+  "0xc02aaa39b223fe8d0a0e5c4f27ead9083c756cc2": "ethereum",
+  "0x4200000000000000000000000000000000000006": "ethereum",
+  "0xbb4cdb9cbd36b01bd1cbaebf2de08d9173bc095c": "binancecoin",
+};
+
+async function fetchNativeMarketCap(address: string): Promise<number | undefined> {
+  const id = NATIVE_COINGECKO_IDS[address.toLowerCase()];
+  if (!id) return undefined;
+  const j = await fetchJson(
+    `https://api.coingecko.com/api/v3/simple/price?ids=${encodeURIComponent(id)}&vs_currencies=usd&include_market_cap=true`,
+  );
+  return num(j?.[id]?.usd_market_cap);
+}
+
 function chainLabel(chain: Chain): string {
   return CHAIN_LABEL[chain] || chain;
 }
@@ -139,13 +156,18 @@ export async function fetchScreenerTokenOgData(
     (typeof pair?.info?.imageUrl === "string" && pair.info.imageUrl.trim()) ||
     dexScreenerTokenImageUrl(chain, addrParam);
 
+  const marketCap =
+    num(pair?.marketCap) ??
+    num(pair?.fdv) ??
+    (await fetchNativeMarketCap(addrParam));
+
   return {
     ...fallback,
     symbol,
     name,
     logoUrl: logo,
     priceUsd: num(pair?.priceUsd),
-    marketCap: num(pair?.marketCap) ?? num(pair?.fdv),
+    marketCap,
   };
 }
 
