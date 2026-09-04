@@ -9,6 +9,19 @@ import { detectChain } from "@/utils/detectChain";
 import { getBNBHolderAnalytics } from "@/lib/api/bnbAnalytics";
 import { getBirdeyeSecurityAnalyticsWithMetadata } from "@/lib/api/birdeyeSecurtiy";
 
+/** Flip to false to resume the daily 200-token auto-report cron. */
+const DAILY_AUTO_REPORTS_PAUSED = true;
+
+function pausedResponse() {
+  return NextResponse.json({
+    success: true,
+    paused: true,
+    message: "Daily auto report generation is paused.",
+    processed: 0,
+    results: [],
+  });
+}
+
 const systemPrompt = `You are a professional crypto research analyst and technical writer. Your task is to generate a well-structured, comprehensive, and visually appealing technical report about a cryptocurrency project.
 
 ### Requirements:
@@ -183,6 +196,9 @@ async function awardReportPoints(userId: string) {
 export async function POST(request: NextRequest) {
   try {
     const userId = requireUserId(request);
+    if (DAILY_AUTO_REPORTS_PAUSED && userId === "system-cron-daily-reports") {
+      return pausedResponse();
+    }
     const {
       contractAddress,
       ticker,
@@ -632,6 +648,10 @@ ${JSON.stringify(securityAnalytics, null, 2)}`
 
 // GET handler for Vercel cron jobs
 export async function GET(request: NextRequest) {
+  if (DAILY_AUTO_REPORTS_PAUSED) {
+    return pausedResponse();
+  }
+
   try {
     const { searchParams } = new URL(request.url);
     const chain = searchParams.get("chain") || "solana";
