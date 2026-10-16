@@ -1,12 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
-import { userHasSubscriptionBypass } from "@/lib/subscription/bypass";
-import {
-  checkAndIncrementUsage,
-  FREE_LIMITS,
-  type UsageFeature,
-} from "@/lib/subscription/limits";
 
 function requireUserId(req: NextRequest) {
   const uid = req.headers.get("x-user-id");
@@ -62,143 +56,14 @@ export async function POST(
       convId = conv.id;
     }
 
-    // Subscription & usage: follow-up limits — check BEFORE creating the message
+    // Daily task points for user follow-up queries (no usage/paywall gate).
     if (role === "user") {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
-      const isRexScreener =
-        report.reportType !== "market" && report.chain !== "market";
-
-      if (isRexScreener) {
-        // RexScreener: 2 queries per report per day (free and paid enforced differently)
-        const user = await prisma.user.findUnique({
-          where: { id: userId },
-          select: {
-            username: true,
-            email: true,
-            subscriptionPlan: true,
-            subscriptionPeriodEnd: true,
-          },
-        });
-        const hasPaidBundle =
-          (user &&
-            userHasSubscriptionBypass({
-              username: user.username,
-              email: user.email,
-            })) ||
-          (user?.subscriptionPlan === "CLAW_PRO" &&
-            user?.subscriptionPeriodEnd &&
-            new Date(user.subscriptionPeriodEnd) > new Date());
-
-        if (!hasPaidBundle) {
-          // Free tier: 2 queries per report per day; from 3rd question → paywall
-          const userMessagesToday = await prisma.message.count({
-            where: {
-              conversationId: convId!,
-              role: "user",
-              timestamp: { gte: today },
-            },
-          });
-          if (
-            userMessagesToday >= FREE_LIMITS.rexScreenerFollowupsPerReportPerDay
-          ) {
-            return NextResponse.json(
-              {
-                ok: false,
-                error: "Follow-up limit reached",
-                code: "FREE_LIMIT_REACHED",
-                plan: "FREE",
-              },
-              { status: 402 },
-            );
-          }
-        } else {
-          // Paid: use global follow-up counter
-          const usageResult = await checkAndIncrementUsage(
-            userId,
-            "REXSCREENER_FOLLOWUP"
-          );
-          if (!usageResult.ok) {
-            return NextResponse.json(
-              {
-                ok: false,
-                error: "Follow-up limit reached",
-                code: usageResult.reason,
-                plan: usageResult.plan,
-              },
-              { status: 402 },
-            );
-          }
-        }
-      } else {
-        // RexMarkets: 2 tech + 2 news queries per report per day (free); from 3rd of each → paywall
-        const user = await prisma.user.findUnique({
-          where: { id: userId },
-          select: {
-            username: true,
-            email: true,
-            subscriptionPlan: true,
-            subscriptionPeriodEnd: true,
-          },
-        });
-        const hasPaidBundle =
-          (user &&
-            userHasSubscriptionBypass({
-              username: user.username,
-              email: user.email,
-            })) ||
-          (user?.subscriptionPlan === "CLAW_PRO" &&
-            user?.subscriptionPeriodEnd &&
-            new Date(user.subscriptionPeriodEnd) > new Date());
-
-        if (!hasPaidBundle) {
-          // Free tier: count tech vs news user messages in this report's conversation today
-          const isNews = followupKind === "news";
-          const limit = isNews
-            ? FREE_LIMITS.rexMarketsNewsFollowupsPerReportPerDay
-            : FREE_LIMITS.rexMarketsTechFollowupsPerReportPerDay;
-          const countToday = await prisma.message.count({
-            where: {
-              conversationId: convId!,
-              role: "user",
-              timestamp: { gte: today },
-              // Treat null/undefined as tech for legacy messages
-              ...(isNews
-                ? { followupKind: "news" }
-                : { OR: [{ followupKind: "tech" }, { followupKind: null }] }),
-            },
-          });
-          if (countToday >= limit) {
-            return NextResponse.json(
-              {
-                ok: false,
-                error: "Follow-up limit reached",
-                code: "FREE_LIMIT_REACHED",
-                plan: "FREE",
-              },
-              { status: 402 },
-            );
-          }
-        } else {
-          let usageFeature: UsageFeature =
-            followupKind === "news"
-              ? "REXMARKETS_NEWS_FOLLOWUP"
-              : "REXMARKETS_TECH_FOLLOWUP";
-          const usageResult = await checkAndIncrementUsage(userId, usageFeature);
-          if (!usageResult.ok) {
-            return NextResponse.json(
-              {
-                ok: false,
-                error: "Follow-up limit reached",
-                code: usageResult.reason,
-                plan: usageResult.plan,
-              },
-              { status: 402 },
-            );
-          }
-        }
-      }
+      // Talking to the model is free: report follow-up questions (RexScreener and
+      // RexMarkets, tech and news) are unlimited for everyone — no subscription or
+      // paywall. Only report *generation* remains gated (see generate-report).
 
       // ---------- Daily Task Points: Award up to 300 points/day for user follow-up queries ----------
       const userForTasks = await prisma.user.findUnique({

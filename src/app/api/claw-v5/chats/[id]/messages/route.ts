@@ -45,7 +45,6 @@ import {
   buildTopMarketsSuggestMessage,
   type TopMarketsEmbedPayload,
 } from "@/lib/ai/tools/market";
-import { checkAndIncrementUsage } from "@/lib/subscription/limits";
 
 const openRouter = new OpenRouter({
   apiKey: process.env.OPENROUTER_API_KEY,
@@ -247,24 +246,8 @@ export async function POST(
       return NextResponse.json({ error: "Chat not found" }, { status: 404 });
     }
 
-    // Subscription & usage: every user message to Claw counts toward limits.
-    if (role !== "assistant") {
-      const usageResult = await checkAndIncrementUsage(
-        chat.userId,
-        "CLAW_MESSAGE",
-      );
-      if (!usageResult.ok) {
-        const code = usageResult.reason;
-        return NextResponse.json(
-          {
-            error: "Claw usage limit reached",
-            code,
-            plan: usageResult.plan,
-          },
-          { status: 402 },
-        );
-      }
-    }
+    // Talking to Claw is free: user messages are unlimited for everyone — no
+    // subscription or paywall. (Report generation stays gated elsewhere.)
 
     // Save user message
     const userMessage = await prisma.clawV5Message.create({
