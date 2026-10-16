@@ -8,10 +8,6 @@ import { getTweetsSearch } from "@/lib/api/tweet";
 import { detectChain } from "@/utils/detectChain";
 import { getBNBHolderAnalytics } from "@/lib/api/bnbAnalytics";
 import { getBirdeyeSecurityAnalyticsWithMetadata } from "@/lib/api/birdeyeSecurtiy";
-import {
-  checkAndIncrementUsage,
-  type UsageFeature,
-} from "@/lib/subscription/limits";
 
 const systemPrompt = `You are a professional crypto research analyst and technical writer. Your task is to generate a well-structured, comprehensive, and visually appealing technical report about a cryptocurrency project.
 
@@ -459,21 +455,8 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    const usageResult = await checkAndIncrementUsage(
-      userId,
-      "REXSCREENER_REPORT" as UsageFeature,
-    );
-    if (!usageResult.ok) {
-      const code = usageResult.reason;
-      return NextResponse.json(
-        {
-          error: "Report limit reached",
-          code,
-          plan: usageResult.plan,
-        },
-        { status: 402 },
-      );
-    }
+    // Report generation is free and unlimited for everyone — no subscription or
+    // paywall (billing disabled across RaptorX).
 
     // ---------- Admin protections (no duplicates on store) ----------
     if (storeToSystem && !isAdmin) {

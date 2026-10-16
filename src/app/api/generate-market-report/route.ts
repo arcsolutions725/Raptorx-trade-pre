@@ -2,10 +2,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import OpenAI from "openai";
 import { prisma } from "@/lib/prisma";
-import {
-  checkAndIncrementUsage,
-  type UsageFeature,
-} from "@/lib/subscription/limits";
 
 const systemPrompt = `You are a professional market analyst and technical writer specializing in prediction markets and political/economic forecasting. Your task is to generate a comprehensive, well-structured, and visually appealing report about a prediction market question.
 
@@ -180,7 +176,7 @@ async function awardReportPoints(userId: string) {
 export async function POST(request: NextRequest) {
   try {
     const userId = requireUserId(request);
-    const { marketTicker, marketTitle, marketData, reportKind, stream } =
+    const { marketTicker, marketTitle, marketData, stream } =
       await request.json();
 
     if (!marketTicker || !marketTitle) {
@@ -194,24 +190,8 @@ export async function POST(request: NextRequest) {
     if (!user)
       return NextResponse.json({ error: "User not found" }, { status: 401 });
 
-    // Subscription & usage: Rex Markets report generation
-    // reportKind can be "technical" | "news" from client; default both to technical bucket.
-    const feature: UsageFeature =
-      reportKind === "news"
-        ? "REXMARKETS_NEWS_REPORT"
-        : "REXMARKETS_TECH_REPORT";
-    const usageResult = await checkAndIncrementUsage(userId, feature);
-    if (!usageResult.ok) {
-      const code = usageResult.reason;
-      return NextResponse.json(
-        {
-          error: "Market report limit reached",
-          code,
-          plan: usageResult.plan,
-        },
-        { status: 402 },
-      );
-    }
+    // Rex Markets report generation is free and unlimited for everyone — no
+    // subscription or paywall (billing disabled across RaptorX).
 
     // Summarize market data to reduce token usage (was sending full raw API responses)
     const summarizedData = summarizeMarketDataForReport(marketData);
