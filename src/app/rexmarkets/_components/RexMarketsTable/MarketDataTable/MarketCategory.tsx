@@ -1,6 +1,14 @@
 "use client";
 
-import { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import {
+  useState,
+  useMemo,
+  useCallback,
+  useRef,
+  useEffect,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
 import clsx from "clsx";
 import { useKalshiCategories } from "@/hooks/useKalshiCategories";
 import { usePolymarketCategories } from "@/hooks/usePolymarketCategories";
@@ -19,6 +27,7 @@ import {
   predictFunTagIdFromValue,
 } from "@/lib/predictfun/navigation";
 import { usePredictFunCategorySubTags } from "@/hooks/usePredictFunCategorySubTags";
+import { ChevronIcon } from "./listUi";
 
 /** Myriad listing topics (GET /markets?topics=) — match Myriad web filters. */
 const MYRIAD_CATEGORIES: Record<string, string[]> = {
@@ -36,50 +45,50 @@ type MarketCategoryProps = {
   onTagChange?: (tag: string | null) => void;
   selectedCategory?: string | null;
   selectedTag?: string | null;
+  /** Rendered at the right of the category bar (search + layout toggle); first row on phones. */
+  toolbarEnd?: ReactNode;
 };
 
-type SliderStyle = {
-  left: number;
-  width: number;
-};
-
-const CATEGORY_SKELETON_PILL_WIDTHS = [
-  "w-10",
-  "w-14",
-  "w-16",
-  "w-14",
-  "w-[4.5rem]",
-  "w-12",
-  "w-16",
-] as const;
+const CATEGORY_SKELETON_PILL_WIDTHS = [44, 132, 104, 96, 70, 96, 84, 112, 88] as const;
 
 function MarketCategorySkeleton() {
   return (
-    <div className="w-full mb-2" aria-busy="true" aria-live="polite">
-      <div className="relative flex h-[44px] w-full max-w-full items-center overflow-hidden rounded-xl bg-white/[0.06] p-0.5">
-        <div className="flex min-w-max items-center gap-0.5 px-0.5">
-          {CATEGORY_SKELETON_PILL_WIDTHS.map((width, index) => (
-            <div
-              key={index}
-              className={clsx(
-                "h-10 shrink-0 animate-pulse rounded-[10px] bg-white/[0.04]",
-                width,
-              )}
-              aria-hidden
-            />
-          ))}
-        </div>
-      </div>
+    <div
+      className="flex min-w-0 items-center gap-1.5 overflow-hidden"
+      aria-busy="true"
+      aria-live="polite"
+    >
+      {CATEGORY_SKELETON_PILL_WIDTHS.map((width, index) => (
+        <span
+          key={index}
+          className="rx-skel block h-[34px] shrink-0 rounded-full"
+          style={{ width }}
+          aria-hidden
+        />
+      ))}
       <span className="sr-only">Loading categories</span>
     </div>
   );
 }
+
+/** Edge fade on a horizontal scroller, only on the sides that can still scroll. */
+function edgeFade(left: boolean, right: boolean): CSSProperties | undefined {
+  if (!left && !right) return undefined;
+  const mask = `linear-gradient(90deg, ${left ? "transparent 0, #000 36px" : "#000 0"}, ${
+    right ? "#000 calc(100% - 44px), transparent 100%" : "#000 100%"
+  })`;
+  return { maskImage: mask, WebkitMaskImage: mask };
+}
+
+const scrollArrowClass =
+  "rx-icon-btn rx-icon-btn--s absolute top-1/2 z-20 -translate-y-1/2 shadow-[0_4px_12px_rgba(0,0,0,.5)]";
 
 export default function MarketCategory({
   onCategoryChange,
   onTagChange,
   selectedCategory: externalSelectedCategory,
   selectedTag: externalSelectedTag,
+  toolbarEnd,
 }: MarketCategoryProps) {
   const { dataSource } = useDataSource();
   const isAllMode = dataSource === "all";
@@ -258,10 +267,8 @@ export default function MarketCategory({
         : kalshiErrorObj;
   const [internalCategory, setInternalCategory] = useState<string | null>(null);
   const [internalTag, setInternalTag] = useState<string | null>(null);
-  const categoryButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const categoryContainerRef = useRef<HTMLDivElement | null>(null);
   const tagsContainerRef = useRef<HTMLDivElement | null>(null);
-  const [sliderStyle, setSliderStyle] = useState<SliderStyle | null>(null);
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   // Hover and scroll state
@@ -432,11 +439,6 @@ export default function MarketCategory({
     },
     [categoriesData, dataSource]
   );
-
-  // Reset refs array when categories change
-  useEffect(() => {
-    categoryButtonRefs.current = new Array(categories.length).fill(null);
-  }, [categories.length]);
 
   // Limitless tag item: { label, value } where value is "paramKey:paramValue"
   type LimitlessTagItem = { label: string; value: string };
@@ -730,74 +732,6 @@ export default function MarketCategory({
     onTagChange?.(null);
   }, [externalSelectedTag, onTagChange]);
 
-  // Find the index of the active category to calculate slider position
-  const activeCategoryIndex = useMemo(() => {
-    if (!selectedCategory) return -1;
-    
-    // Get the category label from the selected category (which might be a slug)
-    const categoryLabel = getCategoryLabelFromSlug(selectedCategory);
-    if (!categoryLabel) return -1;
-
-    return categories.findIndex(
-      ([category]) =>
-        categoryLabel.toLowerCase() === category.toLowerCase()
-    );
-  }, [categories, selectedCategory, getCategoryLabelFromSlug]);
-
-  // Function to update slider position
-  const updateSliderPosition = useCallback(() => {
-    if (
-      activeCategoryIndex < 0 ||
-      !categoryButtonRefs.current[activeCategoryIndex] ||
-      !categoryContainerRef.current
-    ) {
-      setSliderStyle(null);
-      return;
-    }
-
-    const activeButton = categoryButtonRefs.current[activeCategoryIndex];
-    const container = categoryContainerRef.current;
-    const flexContainer = activeButton.parentElement;
-
-    if (!flexContainer || !activeButton) {
-      setSliderStyle(null);
-      return;
-    }
-
-    try {
-      // Get the flex container's position relative to the scrollable container
-      const flexContainerRect = flexContainer.getBoundingClientRect();
-      const containerRect = container.getBoundingClientRect();
-      const flexContainerLeft =
-        flexContainerRect.left - containerRect.left + container.scrollLeft;
-
-      // Get button position relative to flex container
-      const buttonLeft = activeButton.offsetLeft;
-
-      // Account for container padding (p-0.5 = 2px)
-      const padding = 2;
-
-      setSliderStyle({
-        left: flexContainerLeft + buttonLeft + padding,
-        width: activeButton.offsetWidth,
-      });
-    } catch (err) {
-      // Silently fail if calculation errors occur (e.g., during unmount)
-      console.warn("Failed to update slider position:", err);
-      setSliderStyle(null);
-    }
-  }, [activeCategoryIndex]);
-
-  // Update slider position based on active button
-  useEffect(() => {
-    // Use requestAnimationFrame for smoother updates
-    const rafId = requestAnimationFrame(() => {
-      updateSliderPosition();
-    });
-
-    return () => cancelAnimationFrame(rafId);
-  }, [activeCategoryIndex, categories.length, updateSliderPosition]);
-
   // Check scrollability for categories
   const checkCategoryScrollability = useCallback(() => {
     const container = categoryContainerRef.current;
@@ -859,7 +793,8 @@ export default function MarketCategory({
     });
   }, []);
 
-  // Update slider position on window resize and scroll
+  // Track category scroll position on resize and scroll (drives the arrows and the edge fade).
+  // Re-attaches once the chip row mounts after loading.
   useEffect(() => {
     let rafId: number | null = null;
 
@@ -868,7 +803,6 @@ export default function MarketCategory({
         cancelAnimationFrame(rafId);
       }
       rafId = requestAnimationFrame(() => {
-        updateSliderPosition();
         checkCategoryScrollability();
       });
     };
@@ -878,7 +812,6 @@ export default function MarketCategory({
     };
 
     const handleCategoryScroll = () => {
-      updateSliderPosition();
       checkCategoryScrollability();
     };
 
@@ -915,7 +848,7 @@ export default function MarketCategory({
         cancelAnimationFrame(rafId);
       }
     };
-  }, [updateSliderPosition, checkCategoryScrollability]);
+  }, [checkCategoryScrollability, categories.length, isLoading]);
 
   // Check tags scrollability
   useEffect(() => {
@@ -951,334 +884,251 @@ export default function MarketCategory({
     };
   }, [selectedCategory, selectedTags.length, checkTagScrollability]);
 
-  // Early returns after all hooks
+  // "All" chip: same as toggling the active category off. Myriad and Predict.fun ship their own "All" tab.
+  const hasOwnAllCategory = categories.some(
+    ([category]) => category.trim().toLowerCase() === "all"
+  );
+  const showAllChip =
+    !hasOwnAllCategory && dataSource !== "myriad" && dataSource !== "predictfun";
+
+  const handleAllClick = useCallback(() => {
+    if (externalSelectedCategory === undefined) {
+      setInternalCategory(null);
+    }
+    onCategoryChange?.(null);
+    if (externalSelectedTag === undefined) {
+      setInternalTag(null);
+    }
+    onTagChange?.(null);
+  }, [externalSelectedCategory, externalSelectedTag, onCategoryChange, onTagChange]);
+
+  // ----- category chips (or their loading / error / empty states) -----
+  let categoriesNode: ReactNode;
+
   if (isLoading) {
-    return <MarketCategorySkeleton />;
-  }
-
-  // In "all" mode, only show error if both sources fail
-  // Otherwise, show categories from the available source
-  if (isError && !isAllMode) {
-    return (
-      <div
-        className="p-6 bg-black/30 border border-white/10 rounded-lg"
-        role="alert"
-      >
-        <div className="text-red-400">
-          Failed to load categories:{" "}
-          {error instanceof Error ? error.message : "Unknown error"}
-        </div>
-      </div>
+    categoriesNode = <MarketCategorySkeleton />;
+  } else if (isError && !isAllMode) {
+    // In "all" mode, only show error if both sources fail
+    categoriesNode = (
+      <p className="rx-small m-0 py-2 text-rx-down" role="alert">
+        Failed to load categories:{" "}
+        {error instanceof Error ? error.message : "Unknown error"}
+      </p>
     );
-  }
-
-  // In "all" mode, if both sources have errors, show error
-  if (isError && isAllMode && kalshiError && polymarketError) {
-    return (
-      <div
-        className="p-6 bg-black/30 border border-white/10 rounded-lg"
-        role="alert"
-      >
-        <div className="text-red-400">
-          Failed to load categories from both sources
-        </div>
-      </div>
+  } else if (isError && isAllMode && kalshiError && polymarketError) {
+    categoriesNode = (
+      <p className="rx-small m-0 py-2 text-rx-down" role="alert">
+        Failed to load categories from both sources
+      </p>
     );
-  }
-
-  if (!categoriesData || typeof categoriesData !== "object") {
-    // In "all" mode, if we have some data, continue; otherwise show message
-    if (isAllMode && (kalshiCategories || polymarketCategories)) {
-      // Continue with available data
-    } else {
-      return (
-        <div className="p-6 bg-black/30 border border-white/10 rounded-lg">
-          <div className="text-white/70">No category data available</div>
-        </div>
-      );
-    }
-  }
-
-  if (categories.length === 0) {
+  } else if (
+    (!categoriesData || typeof categoriesData !== "object") &&
+    !(isAllMode && (kalshiCategories || polymarketCategories))
+  ) {
+    categoriesNode = (
+      <p className="rx-small m-0 py-2">No category data available</p>
+    );
+  } else if (categories.length === 0) {
     // In "all" mode, if we're still loading one source, show loading
-    if (isAllMode && (kalshiLoading || polymarketLoading)) {
-      return <MarketCategorySkeleton />;
-    }
-    return (
-      <div className="p-4 bg-black/30 border border-white/10 rounded-lg">
-        <div className="text-white/70">No categories available</div>
+    categoriesNode =
+      isAllMode && (kalshiLoading || polymarketLoading) ? (
+        <MarketCategorySkeleton />
+      ) : (
+        <p className="rx-small m-0 py-2">No categories available</p>
+      );
+  } else {
+    const selectedCategoryLabel = selectedCategory
+      ? getCategoryLabelFromSlug(selectedCategory)
+      : null;
+
+    categoriesNode = (
+      <div
+        className="relative min-w-0"
+        onMouseEnter={() => setIsCategoryHovered(true)}
+        onMouseLeave={() => setIsCategoryHovered(false)}
+      >
+        {isCategoryHovered && canScrollCategoryLeft && (
+          <button
+            type="button"
+            onClick={() => scrollCategory("left")}
+            className={clsx(scrollArrowClass, "left-0")}
+            aria-label="Scroll categories left"
+          >
+            <ChevronIcon direction="left" />
+          </button>
+        )}
+        {isCategoryHovered && canScrollCategoryRight && (
+          <button
+            type="button"
+            onClick={() => scrollCategory("right")}
+            className={clsx(scrollArrowClass, "right-0")}
+            aria-label="Scroll categories right"
+          >
+            <ChevronIcon direction="right" />
+          </button>
+        )}
+
+        <nav
+          ref={categoryContainerRef}
+          aria-label="Categories"
+          className="flex min-w-0 items-center gap-1.5 overflow-x-auto scrollbar-none"
+          style={{
+            WebkitOverflowScrolling: "touch",
+            touchAction: "pan-x pan-y",
+            overscrollBehavior: "contain",
+            scrollBehavior: "smooth",
+            ...edgeFade(canScrollCategoryLeft, canScrollCategoryRight),
+          }}
+        >
+          {showAllChip && (
+            <button
+              type="button"
+              onClick={handleAllClick}
+              aria-pressed={!selectedCategory}
+              aria-label="Show all categories"
+              className={clsx("rx-chip shrink-0", !selectedCategory && "is-active")}
+            >
+              All
+            </button>
+          )}
+          {categories.map(([category]) => {
+            const isActive = selectedCategoryLabel
+              ? selectedCategoryLabel.toLowerCase() === category.toLowerCase()
+              : false;
+            return (
+              <button
+                key={category}
+                type="button"
+                onClick={() => handleCategoryClick(category)}
+                aria-pressed={isActive}
+                aria-label={`Filter by ${category} category`}
+                className={clsx("rx-chip shrink-0", isActive && "is-active")}
+              >
+                <span className="inline-block first-letter:uppercase">
+                  {category}
+                </span>
+              </button>
+            );
+          })}
+        </nav>
       </div>
     );
   }
 
-  return (
-    <div className="w-full">
-      {/* Categories - Switch Tab Style */}
-      <div className="mb-2">
-        <div
-          className="relative inline-flex items-center h-[44px] group"
-          style={{ maxWidth: "100%" }}
-          onMouseEnter={() => setIsCategoryHovered(true)}
-          onMouseLeave={() => setIsCategoryHovered(false)}
+  // ----- sub-tags (only when a category is selected AND tags are available) -----
+  const showTags =
+    !isLoading &&
+    !!selectedCategory &&
+    (dataSource === "predictfun"
+      ? predictFunShowSubTagNav
+      : selectedTags.length > 0);
+
+  const tagTabClass = (active: boolean) =>
+    clsx("rx-tab mb-0 h-10 shrink-0 px-3 text-[13px]", active && "is-active");
+
+  const tagsNode = showTags ? (
+    <div
+      className="relative -mb-px mt-2 min-w-0"
+      onMouseEnter={() => setIsTagHovered(true)}
+      onMouseLeave={() => setIsTagHovered(false)}
+    >
+      {isTagHovered && canScrollTagLeft && (
+        <button
+          type="button"
+          onClick={() => scrollTags("left")}
+          className={clsx(scrollArrowClass, "left-0")}
+          aria-label="Scroll tags left"
         >
-          {/* Left Arrow Button */}
-          {isCategoryHovered && canScrollCategoryLeft && (
-            <button
-              onClick={() => scrollCategory("left")}
-              className="absolute left-0 z-20 h-full px-2 bg-gradient-to-r from-black/80 to-transparent hover:from-black/90 flex items-center justify-center transition-opacity"
-              aria-label="Scroll categories left"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="text-white"
-              >
-                <path
-                  d="M10 12L6 8L10 4"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          )}
+          <ChevronIcon direction="left" />
+        </button>
+      )}
+      {isTagHovered && canScrollTagRight && (
+        <button
+          type="button"
+          onClick={() => scrollTags("right")}
+          className={clsx(scrollArrowClass, "right-0")}
+          aria-label="Scroll tags right"
+        >
+          <ChevronIcon direction="right" />
+        </button>
+      )}
 
-          {/* Right Arrow Button */}
-          {isCategoryHovered && canScrollCategoryRight && (
-            <button
-              onClick={() => scrollCategory("right")}
-              className="absolute right-0 z-20 h-full px-2 bg-gradient-to-l from-black/80 to-transparent hover:from-black/90 flex items-center justify-center transition-opacity"
-              aria-label="Scroll categories right"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="text-white"
-              >
-                <path
-                  d="M6 4L10 8L6 12"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          )}
-
-          <div
-            ref={categoryContainerRef}
-            className="relative flex items-center bg-white/12 p-0.5 overflow-x-auto scrollbar-none"
-            style={{
-              borderRadius: "12px",
-              maxWidth: "100%",
-              WebkitOverflowScrolling: "touch",
-              touchAction: "pan-x pan-y",
-              overscrollBehavior: "contain",
-              scrollBehavior: "smooth",
-            }}
+      <div
+        ref={tagsContainerRef}
+        className="overflow-x-auto scrollbar-none"
+        style={{
+          maxWidth: "100%",
+          WebkitOverflowScrolling: "touch",
+          touchAction: "pan-x pan-y",
+          overscrollBehavior: "contain",
+          scrollBehavior: "smooth",
+          ...edgeFade(canScrollTagLeft, canScrollTagRight),
+        }}
+      >
+        <div className="rx-tabs min-w-max border-b-0" role="group" aria-label="Tags">
+          <button
+            type="button"
+            onClick={handleClearTag}
+            aria-pressed={selectedTag === null}
+            aria-label="Show all tags"
+            className={tagTabClass(selectedTag === null)}
           >
-            {/* Animated background slider */}
-            {sliderStyle && (
-              <div
-                className="absolute top-[2px] bottom-[2px] bg-[#3C3C3C] shadow-md pointer-events-none"
-                style={{
-                  left: `${sliderStyle.left}px`,
-                  width: `${sliderStyle.width}px`,
-                  height: "40px",
-                  borderRadius: "12px",
-                  transition: "all 0.3s cubic-bezier(0.4, 0, 0.2, 1)",
-                  willChange: "left, width",
-                  boxShadow: "0 1px 3px rgba(0, 0, 0, 0.2)",
-                }}
-              />
-            )}
-
-            {/* Categories Container */}
-            <div className="relative flex items-center justify-start min-w-max gap-0">
-              {categories.map(([category], index) => {
-                // Get the category label from selectedCategory (which might be a slug for Polymarket)
-                const selectedCategoryLabel = selectedCategory
-                  ? getCategoryLabelFromSlug(selectedCategory)
-                  : null;
-                const isActive = selectedCategoryLabel
-                  ? selectedCategoryLabel.toLowerCase() === category.toLowerCase()
-                  : false;
-                return (
-                  <button
-                    key={category}
-                    ref={(el) => {
-                      categoryButtonRefs.current[index] = el;
-                    }}
-                    onClick={() => handleCategoryClick(category)}
-                    aria-pressed={isActive}
-                    aria-label={`Filter by ${category} category`}
-                    className={clsx(
-                      "relative z-10 font-medium text-xs whitespace-nowrap transition-colors duration-200 flex items-center justify-center flex-shrink-0",
-                      isActive
-                        ? "text-white font-semibold"
-                        : "text-white hover:text-white/90"
-                    )}
-                    style={{
-                      padding: "10px 14px",
-                      height: "40px",
-                      borderRadius: "12px",
-                    }}
-                  >
-                    <span className="capitalize">{category}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
+            All
+          </button>
+          {dataSource === "predictfun" && predictFunCategorySubTagsLoading ? (
+            <span className="rx-small flex h-10 items-center px-3 italic" role="status">
+              Loading tags…
+            </span>
+          ) : selectedTags.length > 0 ? (
+            selectedTags.map((tag, tagIndex) => {
+              const tagLabel = getTagLabel(tag);
+              let tagKey: string;
+              if (typeof tag === "object" && tag !== null && "value" in tag && !("slug" in tag)) {
+                tagKey = isAllMode ? `limitless:${(tag as LimitlessTagItem).value}` : (tag as LimitlessTagItem).value;
+              } else if (typeof tag === "object" && tag !== null && "slug" in tag) {
+                const slug = (tag as PolymarketTag).slug;
+                tagKey = isAllMode ? `polymarket:${slug}` : slug;
+              } else {
+                tagKey = isAllMode ? `kalshi:${tag as string}` : (tag as string);
+              }
+              const isTagSelectedValue = isTagSelected(tag);
+              return (
+                <button
+                  key={tagKey || `tag-${tagIndex}`}
+                  type="button"
+                  onClick={() => handleTagClick(tag)}
+                  aria-pressed={isTagSelectedValue}
+                  aria-label={`Filter by ${tagLabel} tag`}
+                  className={tagTabClass(isTagSelectedValue)}
+                >
+                  {tagLabel}
+                </button>
+              );
+            })
+          ) : (
+            <span className="rx-small flex h-10 items-center px-3 italic" role="status">
+              No tags available for this category
+            </span>
+          )}
         </div>
       </div>
+    </div>
+  ) : null;
 
-      {/* Tags - Tab Style with Border Bottom */}
-      {/* Only show tags section if category is selected AND tags are available (non-empty) */}
-      {selectedCategory &&
-        (dataSource === "predictfun"
-          ? predictFunShowSubTagNav
-          : selectedTags.length > 0) && (
-        <div
-          className="relative inline-flex items-center group"
-          style={{ maxWidth: "100%" }}
-          onMouseEnter={() => setIsTagHovered(true)}
-          onMouseLeave={() => setIsTagHovered(false)}
-        >
-          {/* Left Arrow Button */}
-          {isTagHovered && canScrollTagLeft && (
-            <button
-              onClick={() => scrollTags("left")}
-              className="absolute left-0 z-20 h-full px-2 bg-gradient-to-r from-black/80 to-transparent hover:from-black/90 flex items-center justify-center transition-opacity"
-              aria-label="Scroll tags left"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="text-white"
-              >
-                <path
-                  d="M10 12L6 8L10 4"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          )}
-
-          {/* Right Arrow Button */}
-          {isTagHovered && canScrollTagRight && (
-            <button
-              onClick={() => scrollTags("right")}
-              className="absolute right-0 z-20 h-full px-2 bg-gradient-to-l from-black/80 to-transparent hover:from-black/90 flex items-center justify-center transition-opacity"
-              aria-label="Scroll tags right"
-            >
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="text-white"
-              >
-                <path
-                  d="M6 4L10 8L6 12"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            </button>
-          )}
-
-          <div
-            ref={tagsContainerRef}
-            className="overflow-x-auto scrollbar-none"
-            style={{
-              maxWidth: "100%",
-              WebkitOverflowScrolling: "touch",
-              touchAction: "pan-x pan-y",
-              overscrollBehavior: "contain",
-              scrollBehavior: "smooth",
-            }}
-          >
-            <div className="flex items-center gap-0 min-w-max border-b border-white/20">
-              <button
-                onClick={handleClearTag}
-                aria-pressed={selectedTag === null}
-                aria-label="Show all tags"
-                className={clsx(
-                  "relative flex-shrink-0 px-4 py-3 text-sm font-medium transition-all whitespace-nowrap border-b-2",
-                  selectedTag === null
-                    ? "text-[#ffc000] border-b-[#ffc000]"
-                    : "text-white/70 hover:text-white border-b-transparent"
-                )}
-              >
-                All
-              </button>
-              {dataSource === "predictfun" && predictFunCategorySubTagsLoading ? (
-                <span
-                  className="px-4 py-3 text-sm text-white/50 italic"
-                  role="status"
-                >
-                  Loading tags…
-                </span>
-              ) : selectedTags.length > 0 ? (
-                selectedTags.map((tag, tagIndex) => {
-                  const tagLabel = getTagLabel(tag);
-                  let tagKey: string;
-                  if (typeof tag === "object" && tag !== null && "value" in tag && !("slug" in tag)) {
-                    tagKey = isAllMode ? `limitless:${(tag as LimitlessTagItem).value}` : (tag as LimitlessTagItem).value;
-                  } else if (typeof tag === "object" && tag !== null && "slug" in tag) {
-                    const slug = (tag as PolymarketTag).slug;
-                    tagKey = isAllMode ? `polymarket:${slug}` : slug;
-                  } else {
-                    tagKey = isAllMode ? `kalshi:${tag as string}` : (tag as string);
-                  }
-                  const isTagSelectedValue = isTagSelected(tag);
-                  return (
-                    <button
-                      key={tagKey || `tag-${tagIndex}`}
-                      onClick={() => handleTagClick(tag)}
-                      aria-pressed={isTagSelectedValue}
-                      aria-label={`Filter by ${tagLabel} tag`}
-                      className={clsx(
-                        "relative flex-shrink-0 px-4 py-3 text-sm font-medium transition-all whitespace-nowrap border-b-2",
-                        isTagSelectedValue
-                          ? "text-[#ffc000] border-b-[#ffc000]"
-                          : "text-white/70 hover:text-white border-b-transparent"
-                      )}
-                    >
-                      {tagLabel}
-                    </button>
-                  );
-                })
-              ) : (
-                <span
-                  className="px-4 py-3 text-sm text-white/50 italic"
-                  role="status"
-                >
-                  No tags available for this category
-                </span>
-              )}
-            </div>
-          </div>
+  // Bar: categories left, tools right (phones: tools first, chips below); sub-tag tabs sit on the bar's bottom rule.
+  return (
+    <div className={clsx("border-b border-rx-line-strong", showTags ? "pb-0" : "pb-3")}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 md:flex-nowrap">
+        <div className="order-1 w-full min-w-0 md:order-none md:w-auto md:flex-1">
+          {categoriesNode}
         </div>
-      )}
+        {toolbarEnd ? (
+          <div className="flex w-full min-w-0 items-center gap-2.5 md:ml-auto md:w-auto md:shrink-0">
+            {toolbarEnd}
+          </div>
+        ) : null}
+      </div>
+      {tagsNode}
     </div>
   );
 }

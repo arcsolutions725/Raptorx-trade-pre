@@ -1,4 +1,8 @@
-import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
+import clsx from "clsx";
+import {
+  SCREENER_GRID_COLS,
+  SCREENER_ROW_MIN_W,
+} from "./gridColumns";
 
 // ⬅️ Add "liquidity"
 export type SortField = "marketCap" | "volume" | "price" | "age" | "liquidity";
@@ -10,110 +14,122 @@ interface TableHeaderProps {
   onSort: (field: SortField) => void;
 }
 
+/** Column label: mono, uppercase, quiet (RaptorX table header). */
+const TH =
+  "flex items-center whitespace-nowrap px-2.5 py-3.5 font-mono text-[11px] font-medium uppercase tracking-[0.08em] text-rx-text-3";
+
+/**
+ * The header row sits outside the horizontal scroller and follows it with a transform,
+ * so its pinned cells undo that transform (--rx-hscroll) to stay over the pinned row cells.
+ */
+const TH_PINNED =
+  "relative z-[2] self-stretch translate-x-[var(--rx-hscroll,0px)] bg-[var(--rx-pin-head-bg,transparent)]";
+
+function SortIcon({ dir }: { dir: SortDirection | "none" }) {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      aria-hidden="true"
+      className={dir === "none" ? "opacity-50" : undefined}
+    >
+      <path
+        d={
+          dir === "asc"
+            ? "M8 14l4-4 4 4"
+            : dir === "desc"
+              ? "M8 10l4 4 4-4"
+              : "M8 9l4-4 4 4M8 15l4 4 4-4"
+        }
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function TableHeader({
   sortField,
   sortDirection,
   onSort,
 }: TableHeaderProps) {
-  const getSortIcon = (field: SortField) => {
-    if (sortField === field) {
-      return sortDirection === "asc" ? (
-        <ChevronUp className="w-4 h-4 text-white" />
-      ) : (
-        <ChevronDown className="w-4 h-4 text-white" />
-      );
-    }
-    return <ChevronsUpDown className="w-4 h-4 text-white/60" />;
+  const sortButton = (field: SortField, label: string) => {
+    const active = sortField === field && sortDirection !== null;
+    return (
+      <button
+        type="button"
+        onClick={() => onSort(field)}
+        title={`Sort by ${label}`}
+        aria-label={`Sort by ${label}${
+          active ? (sortDirection === "asc" ? ", ascending" : ", descending") : ""
+        }`}
+        className={clsx(
+          "-mx-1.5 -my-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 uppercase tracking-[0.08em] transition-colors hover:text-rx-text",
+          active && "text-rx-gold-hi hover:text-rx-gold-hi",
+        )}
+      >
+        {label}
+        <SortIcon dir={active ? sortDirection : "none"} />
+      </button>
+    );
   };
 
   return (
-    <div className="min-w-301.5 sm:min-w-379 grid grid-cols-[minmax(200px,1.5fr)_minmax(40px,1fr)_minmax(160px,1fr)_minmax(96px,0.8fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(100px,1fr)_minmax(70px,1fr)] sm:grid-cols-[minmax(400px,2fr)_minmax(200px,1fr)_minmax(140px,1fr)_minmax(108px,0.75fr)_minmax(200px,1fr)_minmax(200px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] border-b border-white/10 bg-black/95 backdrop-blur-sm text-white font-semibold shadow-sm">
-      {/* Token — sticky only on sm+ */}
-      <div 
-        className="sm:sticky sm:left-0 sm:z-30 flex items-center px-3 py-2 whitespace-nowrap truncate bg-black sm:shadow-[2px_0_4px_rgba(0,0,0,0.3)] sm:isolation-auto"
-        style={{ isolation: 'isolate' } as React.CSSProperties}
+    <div
+      className={clsx(
+        "grid w-full border-b border-rx-line",
+        SCREENER_GRID_COLS,
+        SCREENER_ROW_MIN_W,
+      )}
+    >
+      <div className={clsx(TH, TH_PINNED, "pl-3 pr-1 sm:pl-1")}>#</div>
+
+      <div
+        className={clsx(
+          TH,
+          TH_PINNED,
+          "shadow-[var(--rx-pin-shadow,none)]",
+        )}
+        title="Click a token to open its chart"
       >
-        <span className="text-[12px] text-white/60 font-normal">Token (Click coin for charting)</span>
+        Token
       </div>
 
-      {/* AI Report — sticky only on sm+ */}
-      <div 
-        className="sm:sticky sm:left-100 sm:z-30 flex items-center justify-center px-3 pr-9 py-2 whitespace-nowrap truncate bg-black sm:shadow-[2px_0_4px_rgba(0,0,0,0.3)] sm:isolation-auto"
-        style={{ isolation: 'isolate' } as React.CSSProperties}
+      <div className={clsx(TH, "px-2")}>AI reports</div>
+
+      <div className={clsx(TH, "justify-end")}>
+        {sortButton("marketCap", "Mcap")}
+      </div>
+
+      <div
+        className={clsx(TH, "justify-end")}
+        title="24h price change (USD)"
       >
-        <span className="text-[12px] text-white/60 font-normal w-[70px] h-[29.56px] flex items-center justify-center">AI Report</span>
+        24h
       </div>
 
-      {/* Mcap — sticky only on sm+ */}
-      <div 
-        className="sm:sticky sm:left-135 sm:z-30 flex items-center justify-center px-3 py-2 whitespace-nowrap truncate bg-black sm:shadow-[2px_0_4px_rgba(0,0,0,0.3)] sm:isolation-auto"
-        style={{ isolation: 'isolate' } as React.CSSProperties}
-      >
-        <button
-          onClick={() => onSort("marketCap")}
-          className="flex items-center gap-1 px-2 py-1 rounded"
-        >
-          <span className="text-[12px] text-white/60 font-normal">Mcap</span>
-          {getSortIcon("marketCap")}
-        </button>
+      <div className={clsx(TH, "justify-end")}>
+        <span className="sr-only">24h trend (hourly line from Birdeye)</span>
       </div>
 
-      {/* 24h chart — after Mcap */}
-      <div className="flex min-h-[48px] items-center justify-end self-stretch px-2 py-2 sm:min-h-[52px] whitespace-nowrap relative z-0 bg-black">
-        <span
-          className="text-[12px] text-white/60 font-normal text-right leading-tight"
-          title="24h price change (USD); line is hourly from Birdeye"
-        >
-          24h %
-        </span>
+      <div className={clsx(TH, "justify-end")}>
+        {sortButton("price", "Price")}
       </div>
 
-      {/* Vol */}
-      <div className="flex items-center justify-center px-3 py-2 whitespace-nowrap truncate relative z-0 bg-black">
-        <button
-          onClick={() => onSort("volume")}
-          className="flex items-center gap-1 px-2 py-1 rounded"
-          title="Sort by Vol"
-        >
-          <span className="text-[12px] text-white/60 font-normal">Vol</span>
-          {getSortIcon("volume")}
-        </button>
+      <div className={clsx(TH, "justify-end")}>
+        {sortButton("volume", "Volume")}
       </div>
 
-      {/* Price */}
-      <div className="flex items-center justify-center px-3 py-2 whitespace-nowrap truncate relative z-0 bg-black">
-        <button
-          onClick={() => onSort("price")}
-          className="flex items-center gap-1 px-2 py-1 rounded"
-          title="Sort by Price"
-        >
-          <span className="text-[12px] text-white/60 font-normal">Price</span>
-          {getSortIcon("price")}
-        </button>
+      <div className={clsx(TH, "justify-end")}>
+        {sortButton("liquidity", "Liquidity")}
       </div>
 
-      {/* Liquidity — now sortable */}
-      <div className="flex items-center justify-center px-3 py-2 whitespace-nowrap truncate relative z-0 bg-black">
-        <button
-          onClick={() => onSort("liquidity")}
-          className="flex items-center gap-1 px-2 py-1 rounded"
-          title="Sort by Liquidity"
-        >
-          <span className="text-[12px] text-white/60 font-normal">Liquidity</span>
-          {getSortIcon("liquidity")}
-        </button>
-      </div>
-
-      {/* Age */}
-      <div className="flex items-center justify-center px-3 py-2 whitespace-nowrap truncate relative z-0 bg-black">
-        <button
-          onClick={() => onSort("age")}
-          className="flex items-center gap-1 px-2 py-1 rounded"
-          title="Sort by Age"
-        >
-          <span className="text-[12px] text-white/60 font-normal">Age</span>
-          {getSortIcon("age")}
-        </button>
+      <div className={clsx(TH, "justify-end pr-3 sm:pr-1")}>
+        {sortButton("age", "Age")}
       </div>
     </div>
   );

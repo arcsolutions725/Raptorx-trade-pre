@@ -1,28 +1,32 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import Link from "next/link";
 import { useRouter, usePathname } from "next/navigation";
 import {
   Plus,
   Search,
-  BarChart3,
+  BookOpen,
   MoreHorizontal,
-  ArrowLeftToLine,
+  PanelLeft,
   Ellipsis,
   X,
 } from "lucide-react";
-import Image from "next/image";
+import clsx from "clsx";
 
 import type { Chat } from "@/lib/storage/chatStorage";
 import ChatContextMenu from "./ChatContextMenu";
 import RenameChatModal from "../modals/RenameChatModal";
 import DeleteChatModal from "../modals/DeleteChatModal";
 
-/** Matches Tailwind `w-16` / `w-64` at default scale (1rem = 16px). */
-export const CLAW_CHAT_SIDEBAR_WIDTH_COLLAPSED_PX = 64;
-export const CLAW_CHAT_SIDEBAR_WIDTH_EXPANDED_PX = 256;
+/** Sidebar widths (px) on md+: collapsed rail and expanded panel. */
+export const CLAW_CHAT_SIDEBAR_WIDTH_COLLAPSED_PX = 76;
+export const CLAW_CHAT_SIDEBAR_WIDTH_EXPANDED_PX = 280;
 
-/** Shift header pill nav right by half the sidebar width gain so its center tracks the main column (md+). */
+/**
+ * Kept for compatibility. The redesigned header keeps its nav next to the logo, so the
+ * claw-v5 pages no longer shift it with the sidebar width.
+ */
 export function clawV5HeaderNavShiftPx(sidebarCollapsed: boolean): number {
   if (sidebarCollapsed) return 0;
   return (
@@ -30,6 +34,8 @@ export function clawV5HeaderNavShiftPx(sidebarCollapsed: boolean): number {
     2
   );
 }
+
+export const CLAW_LIBRARY_HREF = "/claw-v5/library";
 
 interface ChatSidebarProps {
   chats: Chat[];
@@ -40,7 +46,7 @@ interface ChatSidebarProps {
   onChatDelete?: (chatId: string) => void;
   isMobileOpen?: boolean;
   onMobileClose?: () => void;
-  /** Controlled collapse (narrow `w-16`). Omit for uncontrolled local state. */
+  /** Controlled collapse (narrow rail on md+). Omit for uncontrolled local state. */
   collapsed?: boolean;
   onCollapsedChange?: (collapsed: boolean) => void;
 }
@@ -63,7 +69,6 @@ function ChatItem({
   const [showMenu, setShowMenu] = useState(false);
   const [showRenameModal, setShowRenameModal] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
-  const router = useRouter();
 
   const handleRename = async (newTitle: string) => {
     if (onRename) {
@@ -83,28 +88,28 @@ function ChatItem({
 
   return (
     <>
-      <div
-        className={`group relative w-full flex items-center gap-2 px-3 h-9 rounded-xl transition-colors ${
-          isActive
-            ? "bg-[#262626] text-[#FFC000]"
-            : "text-white/80 hover:text-white hover:bg-[#262626]"
-        }`}
-      >
+      <li className={clsx("claw-hist__item", isActive && "is-active")}>
         <button
+          type="button"
           onClick={onClick}
-          className="flex-1 text-left truncate"
-          style={{ fontSize: "14px" }}
+          className="claw-hist__link"
+          aria-current={isActive ? "true" : undefined}
+          title={chat.title}
         >
           {chat.title}
         </button>
         <button
+          type="button"
           onClick={(e) => {
             e.stopPropagation();
             setShowMenu(!showMenu);
           }}
-          className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-[#3a3a3a] rounded"
+          className="claw-hist__more"
+          aria-label={`Options for ${chat.title}`}
+          aria-haspopup="menu"
+          aria-expanded={showMenu}
         >
-          <Ellipsis className="w-4 h-4" />
+          <Ellipsis className="size-4" aria-hidden="true" />
         </button>
         {showMenu && (
           <ChatContextMenu
@@ -115,7 +120,7 @@ function ChatItem({
             onClose={() => setShowMenu(false)}
           />
         )}
-      </div>
+      </li>
 
       {showRenameModal && (
         <RenameChatModal
@@ -165,6 +170,7 @@ function ChatSidebar({
   const router = useRouter();
   const pathname = usePathname();
   const prevPathnameRef = useRef<string>(pathname);
+  const searchInputRef = useRef<HTMLInputElement>(null);
 
   // Close mobile sidebar when route changes (but not on initial mount or when opening)
   useEffect(() => {
@@ -187,6 +193,16 @@ function ChatSidebar({
     };
   }, [isMobileOpen]);
 
+  // Escape closes the mobile drawer
+  useEffect(() => {
+    if (!isMobileOpen || !onMobileClose) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onMobileClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isMobileOpen, onMobileClose]);
+
   const filteredChats = chats.filter((chat) =>
     chat.title.toLowerCase().includes(searchQuery.toLowerCase()),
   );
@@ -207,167 +223,172 @@ function ChatSidebar({
     return pathname === `/claw-v5/${chatId}`;
   };
 
+  const expandAndSearch = () => {
+    setCollapsed(false);
+    setTimeout(() => searchInputRef.current?.focus(), 0);
+  };
+
   return (
     <>
-      {/* Mobile Overlay */}
+      {/* Mobile scrim */}
       <div
-        className={`fixed inset-0 bg-black/50 z-40 md:hidden transition-opacity duration-300 ${
-          isMobileOpen
-            ? "opacity-100 pointer-events-auto"
-            : "opacity-0 pointer-events-none"
-        }`}
+        className={clsx("claw-scrim", isMobileOpen && "is-open")}
         onClick={onMobileClose}
+        aria-hidden="true"
       />
 
-      {/* Sidebar */}
-      <div
-        className={`bg-[#1a1a1a] border-r border-[#2a2a2a] flex flex-col h-full min-h-0 transition-transform duration-300 ease-in-out
-          ${isCollapsed ? "w-16" : "w-64"}
-          ${
-            isMobileOpen
-              ? "fixed left-0 top-0 z-50 transform translate-x-0"
-              : "fixed left-0 top-0 z-50 transform -translate-x-full"
-          }
-          md:relative md:z-auto md:transform-none md:translate-x-0
-        `}
-      >
-        {/* Header */}
-        <div className="px-4 pt-3 pb-4 border-b border-white/10 flex items-center justify-between">
-          {!isCollapsed && (
-            <div className="flex items-center gap-2">
-              <p className="text-white font-normal text-[16px]">
-                <span>Claw </span>
-                <span className="text-[#ffc000]">Version </span>
-                <span className="text-[#D5320A]">5</span>
-              </p>
-            </div>
-          )}
-          <div className="flex items-center gap-2">
-            {/* Mobile Close Button */}
-            {isMobileOpen && onMobileClose && (
-              <button
-                onClick={onMobileClose}
-                className="p-1 rounded transition-colors hover:bg-[#2a2a2a] md:hidden"
-                aria-label="Close sidebar"
-              >
-                <X className="w-5 h-5 text-white/80" />
-              </button>
-            )}
-            {/* Collapse Button - Hidden on mobile */}
-            <button
-              onClick={() => setCollapsed(!isCollapsed)}
-              className="hidden md:block p-1 rounded transition-colors hover:bg-[#2a2a2a]"
-              aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-            >
-              <ArrowLeftToLine
-                className={`w-4 h-5 text-white/80 transition-transform ${
-                  isCollapsed ? "rotate-180" : ""
-                }`}
-              />
-            </button>
-          </div>
-        </div>
-
-        {/* Actions */}
-        <div
-          className={`px-4 pt-3 pb-4 space-y-3 border-b border-white/10 ${isCollapsed ? "flex flex-col items-center gap-3" : ""}`}
-        >
-          <button
-            onClick={onNewChat}
-            className={`${isCollapsed ? "w-10 h-10 flex items-center justify-center" : "w-full flex items-center gap-2 px-3 h-10"} text-white/80 hover:text-white transition-colors text-sm`}
-            style={{ fontSize: "14px" }}
-            title={isCollapsed ? "New chat" : undefined}
-          >
-            <Plus className="w-5 h-5" />
-            {!isCollapsed && <span>New chat</span>}
-          </button>
-
-          {!isCollapsed ? (
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-white/80" />
-              <input
-                type="text"
-                placeholder="Search chats"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full pl-10 pr-3 h-10 bg-[#262626] border border-[#3C3C3C] text-white/80 placeholder-white/50 rounded focus:outline-none focus:ring-1 focus:ring-[#FFC000] text-base"
-              />
-            </div>
-          ) : (
-            <button
-              className="w-10 h-10 flex items-center justify-center text-white/80 hover:text-white transition-colors"
-              title="Search chats"
-            >
-              <Search className="w-5 h-5" />
-            </button>
-          )}
-
-          <button
-            className={`${isCollapsed ? "w-10 h-10 flex items-center justify-center" : "w-full flex items-center gap-2 px-3 h-10"} text-white/80 hover:text-white transition-colors text-sm`}
-            style={{ fontSize: "14px" }}
-            title={isCollapsed ? "Library" : undefined}
-          >
-            <BarChart3 className="w-4 h-4" />
-            {!isCollapsed && <span>Library</span>}
-          </button>
-        </div>
-
-        {!isCollapsed && (
-          <>
-            {/* Chats Section */}
-            <div className="flex-1 min-h-0 overflow-y-auto px-4 pt-5.5 pb-4 custom-chat-messages-scrollbar">
-              <div className="mb-2">
-                <h3
-                  className="text-[#FFC000] uppercase tracking-wider mb-2"
-                  style={{ fontSize: "12px" }}
-                >
-                  CHATS
-                </h3>
-              </div>
-
-              {chats.length === 0 && !isLoading ? (
-                <div
-                  className="text-white/80 text-sm"
-                  style={{ fontSize: "14px" }}
-                >
-                  {searchQuery ? "No chats found" : "No chats yet"}
-                </div>
-              ) : filteredChats.length > 0 ? (
-                <div className="flex flex-col gap-0.5">
-                  {displayedChats.map((chat) => (
-                    <ChatItem
-                      key={chat.id}
-                      chat={chat}
-                      isActive={isChatActive(chat.id)}
-                      onClick={() => handleChatClick(chat.id)}
-                      onRename={onChatRename}
-                      onDelete={onChatDelete}
-                    />
-                  ))}
-                </div>
-              ) : searchQuery && chats.length > 0 ? (
-                <div
-                  className="text-white/80 text-sm"
-                  style={{ fontSize: "14px" }}
-                >
-                  No chats found
-                </div>
-              ) : null}
-
-              {filteredChats.length > 6 && (
-                <button
-                  onClick={() => setShowAllChats(!showAllChats)}
-                  className="mt-4 w-full flex items-center gap-2 px-3 py-2 text-white/80 hover:text-white transition-colors text-sm"
-                  style={{ fontSize: "14px" }}
-                >
-                  <MoreHorizontal className="w-4 h-4" />
-                  <span>{showAllChats ? "Show less" : "See more"}</span>
-                </button>
-              )}
-            </div>
-          </>
+      <aside
+        className={clsx(
+          "claw-side",
+          isCollapsed && "is-collapsed",
+          isMobileOpen && "is-open",
         )}
-      </div>
+        aria-label="Chats"
+      >
+        <div className="claw-side__head">
+          <div className="claw-side__brand">
+            <span className="claw-mark" aria-hidden="true">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                className="claw-ico claw-logo"
+                src="/images/claw-logo-96.webp"
+                width={22}
+                height={22}
+                alt=""
+              />
+            </span>
+            Claw <em>5.0</em>
+          </div>
+          {/* Mobile: close the drawer */}
+          {isMobileOpen && onMobileClose && (
+            <button
+              type="button"
+              onClick={onMobileClose}
+              className="rx-icon-btn panel-ctl md:hidden"
+              aria-label="Close chats"
+              title="Close chats"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
+          )}
+          {/* Desktop: collapse to a rail / expand */}
+          <button
+            type="button"
+            onClick={() => setCollapsed(!isCollapsed)}
+            className="rx-icon-btn panel-ctl hidden md:inline-flex"
+            aria-label={isCollapsed ? "Expand chats" : "Collapse chats"}
+            title={isCollapsed ? "Expand chats" : "Collapse chats"}
+            aria-expanded={!isCollapsed}
+          >
+            <PanelLeft className="size-4" aria-hidden="true" />
+          </button>
+        </div>
+
+        {/* Collapsed rail (md+ only, see claw.css) */}
+        <div className="claw-side__rail">
+          <button
+            type="button"
+            onClick={onNewChat}
+            className="rx-icon-btn"
+            title="New chat"
+            aria-label="New chat"
+          >
+            <Plus className="size-[18px]" aria-hidden="true" />
+          </button>
+          <button
+            type="button"
+            onClick={expandAndSearch}
+            className="rx-icon-btn"
+            title="Search chats"
+            aria-label="Search chats"
+          >
+            <Search className="size-4" aria-hidden="true" />
+          </button>
+          <Link
+            href={CLAW_LIBRARY_HREF}
+            className="rx-icon-btn"
+            title="Library"
+            aria-label="Library"
+          >
+            <BookOpen className="size-4" aria-hidden="true" />
+          </Link>
+        </div>
+
+        <div className="claw-side__full">
+          <button
+            type="button"
+            onClick={onNewChat}
+            className="rx-btn rx-btn--ghost claw-side__new"
+          >
+            <Plus className="size-[18px]" aria-hidden="true" />
+            New chat
+          </button>
+
+          <label className="rx-input claw-side__search">
+            <Search className="size-3.5 shrink-0 text-rx-text-3" aria-hidden="true" />
+            <span className="sr-only">Search chats</span>
+            <input
+              ref={searchInputRef}
+              type="search"
+              placeholder="Search chats"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => {
+                const q = searchQuery.trim();
+                if (e.key === "Enter" && q) {
+                  router.push(
+                    `${CLAW_LIBRARY_HREF}?q=${encodeURIComponent(q)}`,
+                  );
+                }
+              }}
+              autoComplete="off"
+            />
+          </label>
+
+          <Link
+            href={CLAW_LIBRARY_HREF}
+            className="rx-btn rx-btn--ghost claw-side__link"
+          >
+            <BookOpen className="size-4" aria-hidden="true" />
+            Library
+          </Link>
+
+          <span className="rx-eyebrow claw-side__label">Chats</span>
+
+          {chats.length === 0 && !isLoading ? (
+            <p className="claw-hist__empty">
+              {searchQuery ? "No chats found" : "No chats yet"}
+            </p>
+          ) : filteredChats.length > 0 ? (
+            <ul className="claw-hist custom-chat-messages-scrollbar">
+              {displayedChats.map((chat) => (
+                <ChatItem
+                  key={chat.id}
+                  chat={chat}
+                  isActive={isChatActive(chat.id)}
+                  onClick={() => handleChatClick(chat.id)}
+                  onRename={onChatRename}
+                  onDelete={onChatDelete}
+                />
+              ))}
+              {filteredChats.length > 6 && (
+                <li>
+                  <button
+                    type="button"
+                    onClick={() => setShowAllChats(!showAllChats)}
+                    className="rx-btn rx-btn--ghost rx-btn--s claw-side__link mt-2"
+                  >
+                    <MoreHorizontal className="size-4" aria-hidden="true" />
+                    {showAllChats ? "Show less" : "See more"}
+                  </button>
+                </li>
+              )}
+            </ul>
+          ) : searchQuery && chats.length > 0 ? (
+            <p className="claw-hist__empty">No chats found</p>
+          ) : null}
+        </div>
+      </aside>
     </>
   );
 }

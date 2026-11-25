@@ -3,6 +3,7 @@
 
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
+import clsx from "clsx";
 import type { TrendingToken } from "@/hooks/useTrendingTokens";
 import { formatUsd } from "@/utils/format";
 import type { Report } from "@/hooks/useGenerateRexReport";
@@ -15,9 +16,14 @@ import {
   WhatsNewModal,
   type WhatsNewResult,
 } from "@/components/ui/modal/WhatsNewModal";
-import { GlossyReportButton } from "./GlossyReportButton";
-import { Token24hSparkline } from "./Token24hSparkline";
+import { Token24hChangeBadge, Token24hSparkline } from "./Token24hSparkline";
 import { dexScreenerTokenImageUrl } from "@/lib/api/dexscreener";
+import {
+  SCREENER_GRID_COLS,
+  SCREENER_PIN_RANK,
+  SCREENER_PIN_TOKEN,
+  SCREENER_ROW_MIN_W,
+} from "./gridColumns";
 
 function fromEpochSeconds(sec?: number): Date | null {
   if (typeof sec !== "number" || !Number.isFinite(sec) || sec <= 0) return null;
@@ -66,53 +72,61 @@ function formatMultiplierMagnitudeFromPercent(pct: number): string {
   return a.toFixed(decimals).replace(/\.?0+$/, "");
 }
 
-const pctUpClass =
-  "text-emerald-400 font-semibold whitespace-nowrap shrink-0 text-[11px] sm:text-xs tabular-nums inline-flex items-center gap-px";
-const pctDownClass =
-  "text-red-400 font-semibold whitespace-nowrap shrink-0 text-[11px] sm:text-xs tabular-nums inline-flex items-center gap-px";
+/** Monogram fallback colour: a stable muted hue per token (no brand colour in the API). */
+function monogramBackground(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return `hsl(${h % 360} 38% 34%)`;
+}
 
-/** Dollar amount centered; green +nX in the left half, red −nX in the right half (24h). */
-function ValueWithDayChange({
-  valueLabel,
-  changePct,
-}: {
-  valueLabel: string;
-  changePct: number | undefined;
-}) {
-  if (changePct == null || !Number.isFinite(changePct)) {
-    return (
-      <span className="font-bold! block w-full truncate text-center">{valueLabel}</span>
-    );
-  }
-  const multMag = formatMultiplierMagnitudeFromPercent(changePct);
-  if (changePct > 0) {
-    return (
-      <div className="flex w-full min-w-0 items-center overflow-hidden whitespace-nowrap">
-        <div className="flex min-w-0 flex-1 justify-end pr-1">
-          <span className={pctUpClass}>+{multMag}X</span>
-        </div>
-        <span className="font-bold! min-w-0 max-w-[min(100%,11rem)] shrink truncate px-0.5 text-center tabular-nums">
-          {valueLabel}
-        </span>
-        <div className="min-w-0 flex-1 pl-1" aria-hidden />
-      </div>
-    );
-  }
-  if (changePct < 0) {
-    return (
-      <div className="flex w-full min-w-0 items-center overflow-hidden whitespace-nowrap">
-        <div className="min-w-0 flex-1 pr-1" aria-hidden />
-        <span className="font-bold! min-w-0 max-w-[min(100%,11rem)] shrink truncate px-0.5 text-center tabular-nums">
-          {valueLabel}
-        </span>
-        <div className="flex min-w-0 flex-1 justify-start pl-1">
-          <span className={pctDownClass}>-{multMag}X</span>
-        </div>
-      </div>
-    );
-  }
+/* AI report buttons: same shape, two inks (gold Full Report, ember What's New), as in the design. */
+const FULL_REPORT_BTN =
+  "rx-btn rx-btn--report rx-btn--s px-2.5 font-bold text-[#1A1206] border-[#FFE08A] bg-[linear-gradient(180deg,#FFD15C,#E3A300)] shadow-[0_0_0_1px_rgba(255,184,0,0.15),0_4px_14px_rgba(255,170,0,0.22)] hover:brightness-[1.08] hover:-translate-y-px disabled:translate-none disabled:filter-none sm:px-3";
+const WHATS_NEW_BTN =
+  "rx-btn rx-btn--news rx-btn--s px-2.5 font-bold text-[#FFD2B8] border-[#B0461C] bg-[linear-gradient(180deg,#3A1A0C,#200E07)] shadow-[0_0_0_1px_rgba(255,106,19,0.1),0_4px_14px_rgba(255,106,19,0.16)] hover:border-rx-ember hover:-translate-y-px disabled:translate-none sm:px-3";
+/** Small icon controls next to the ticker (copy address, open explorer). */
+const ICON_BTN =
+  "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-rx-text-3 transition-colors hover:bg-white/[0.06] hover:text-rx-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rx-gold-hi disabled:pointer-events-none disabled:opacity-40";
+const CELL = "px-2.5 py-3";
+
+function ReportIcon() {
   return (
-    <span className="font-bold! block w-full truncate text-center">{valueLabel}</span>
+    <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M6 2.5h8.2L19 7.3V20a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20V4A1.5 1.5 0 0 1 6.5 2.5Z"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M14 2.7V7.5h4.8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinejoin="round"
+      />
+      <path
+        d="M8.5 12h7M8.5 15.5h7M8.5 8.5h3"
+        stroke="currentColor"
+        strokeWidth="1.9"
+        strokeLinecap="round"
+      />
+    </svg>
+  );
+}
+
+function NewsIcon() {
+  return (
+    <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M13.6 1.8 4.3 13.4c-.3.4 0 .9.5.9h5.6l-1.3 7.6c-.1.6.6.9 1 .5l9.4-11.7c.3-.4 0-.9-.5-.9h-5.6l1.2-7.5c.1-.6-.6-.9-1-.5Z"
+        fill="#FFD15C"
+        stroke="#B87400"
+        strokeWidth="1"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
 }
 
@@ -128,7 +142,7 @@ type Props = {
   currentUserId: string;
   isAdmin: boolean;
   index?: number;
-  /** When true (mixed "All chains" view), show a small chain logo before the copy control */
+  /** Mixed lists (All chains, Golden, Pump). Every row now shows its chain on the avatar badge. */
   showChainBadge?: boolean;
   /** Normalized 0–1 series for 24h sparkline (Birdeye hourly); falls back to synthetic path */
   sparklineY?: number[];
@@ -150,9 +164,8 @@ export function TableRow({
   adminGenerateAndStoreFromToken,
   onOpenChart,
   currentUserId,
-  isAdmin,
-  index = 0,
-  showChainBadge = false,
+  isAdmin: _isAdmin,
+  showChainBadge: _showChainBadge = false,
   sparklineY,
   sparklinesFetching = false,
   useGoldenGenerateArt: _useGoldenGenerateArt = false,
@@ -287,6 +300,18 @@ export function TableRow({
           ? `https://robinhoodchain.blockscout.com/token/${token?.tokenAddress}`
           : `https://solscan.io/token/${token?.tokenAddress}`;
 
+  const explorerName = isBaseChain
+    ? "BaseScan"
+    : isEthereumChain
+      ? "Etherscan"
+    : isBnbChain
+      ? "BSCScan"
+      : isMonadChain
+        ? "MonadScan"
+        : isRobinhoodChain
+          ? "Robinhood"
+          : "SolScan";
+
   const chainBadge = isBaseChain
     ? { src: "/images/base.png", label: "Base" as const }
     : isEthereumChain
@@ -407,244 +432,271 @@ export function TableRow({
 
   if (!token) return null;
 
-  const isEvenRow = index % 2 === 1;
+  const monogram =
+    (displaySymbol || displayName).replace(/[^A-Za-z0-9]/g, "").slice(0, 2).toUpperCase() || "?";
+  const volumeTone =
+    volumeChange24h == null || volumeChange24h === 0
+      ? null
+      : volumeChange24h > 0
+        ? "up"
+        : "down";
 
   return (
     <>
-      <div className={`min-w-301.5 sm:min-w-379 grid grid-cols-[minmax(200px,1.5fr)_minmax(40px,1fr)_minmax(160px,1fr)_minmax(96px,0.8fr)_minmax(180px,1fr)_minmax(180px,1fr)_minmax(100px,1fr)_minmax(70px,1fr)] sm:grid-cols-[minmax(400px,2fr)_minmax(200px,1fr)_minmax(140px,1fr)_minmax(108px,0.75fr)_minmax(200px,1fr)_minmax(200px,1fr)_minmax(140px,1fr)_minmax(140px,1fr)] items-center px-0 py-0 text-xs sm:text-sm text-white/90 ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
-      {/* Token */}
       <div
-        className={`sm:sticky sm:left-0 sm:z-10 flex items-center px-3 py-[10.5px] sm:py-2 gap-1 sm:gap-2 whitespace-nowrap truncate ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}
-        title={displayName}
+        className={clsx(
+          "group grid items-center border-b border-[rgba(36,36,36,0.7)] text-[13px] text-rx-text transition-colors duration-150 hover:bg-[rgba(255,184,0,0.035)] sm:text-sm",
+          SCREENER_GRID_COLS,
+          SCREENER_ROW_MIN_W,
+        )}
       >
-        <div className="pr-0 sm:pr-2 shrink-0 text-[#A0A0A5]">{`#${rank}`}</div>
-
-        <button
-          type="button"
-          onClick={openChart}
-          onKeyDown={keyOpenChart}
-          className="pl-3 w-8 h-8 shrink-0 overflow-hidden rounded-full outline-none cursor-pointer group py-0! px-0! flex items-center justify-center border border-white/15 bg-white/5 hover:bg-white/10"
-          disabled={!token?.tokenAddress}
-          aria-label={`Open chart for ${displayName}`}
-          title="Open chart"
-        >
-          {showTokenImage ? (
-            <Image
-              src={logoSrc as string}
-              alt=""
-              width={32}
-              height={32}
-              className="w-8 h-8 object-contain group-hover:scale-[1.05] transition"
-              onError={() => {
-                if (logoSrc && constructedLogo && logoSrc !== constructedLogo) {
-                  setLogoSrc(constructedLogo);
-                  return;
-                }
-                setLogoLoadFailed(true);
-              }}
-            />
-          ) : (
-            <span
-              className="text-white/55 text-[15px] font-semibold leading-none select-none"
-              aria-hidden
-            >
-              ?
-            </span>
-          )}
-        </button>
-
+        {/* Rank */}
         <div
-          role="button"
-          tabIndex={0}
-          onClick={openChart}
-          onKeyDown={keyOpenChart}
-          className="pl-3 cursor-pointer focus:outline-none focus:ring-2 focus:ring-white/30 rounded min-w-0"
-          aria-label={`Open chart for ${displayName}`}
-          title="Open chart"
+          className={clsx(
+            SCREENER_PIN_RANK,
+            "rx-num flex items-center py-3 pl-3 pr-1 text-xs text-rx-text-3 sm:pl-1",
+          )}
         >
-          <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 min-w-0">
-            <span className="font-normal leading-tight truncate">
-              {displaySymbol
-                ? `${displaySymbol}/${baseCurrency}`
-                : baseCurrency}
+          {rank}
+        </div>
+
+        {/* Token: avatar with chain badge, ticker / quote, copy + explorer, name */}
+        <div
+          className={clsx(
+            SCREENER_PIN_TOKEN,
+            "flex min-w-0 items-center gap-3",
+            CELL,
+          )}
+          title={displayName}
+        >
+          <span className="relative shrink-0">
+            <button
+              type="button"
+              onClick={openChart}
+              onKeyDown={keyOpenChart}
+              className="rx-avatar rx-avatar--token size-9 cursor-pointer overflow-hidden transition-transform hover:scale-[1.05] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rx-gold-hi disabled:cursor-default"
+              style={{
+                background: showTokenImage
+                  ? "var(--rx-surface-3)"
+                  : monogramBackground(token.tokenAddress || displaySymbol || displayName),
+              }}
+              disabled={!token?.tokenAddress}
+              aria-label={`Open chart for ${displayName}`}
+              title="Open chart"
+            >
+              {showTokenImage ? (
+                <Image
+                  src={logoSrc as string}
+                  alt=""
+                  width={36}
+                  height={36}
+                  className="size-9 object-cover"
+                  onError={() => {
+                    if (logoSrc && constructedLogo && logoSrc !== constructedLogo) {
+                      setLogoSrc(constructedLogo);
+                      return;
+                    }
+                    setLogoLoadFailed(true);
+                  }}
+                />
+              ) : (
+                <small
+                  className="font-mono text-[11px] font-semibold leading-none text-white select-none"
+                  aria-hidden
+                >
+                  {monogram}
+                </small>
+              )}
+            </button>
+            <span
+              className="rx-avatar__chain overflow-hidden bg-rx-surface-3"
+              title={chainBadge.label}
+            >
+              <Image
+                src={chainBadge.src}
+                alt={chainBadge.label}
+                width={14}
+                height={14}
+                className="block size-full object-cover"
+              />
             </span>
-            <span className="text-[#ffc000] font-normal leading-tight truncate">
+          </span>
+
+          <div className="flex min-w-0 flex-col gap-0.5">
+            <div className="flex min-w-0 items-center gap-1">
+              <button
+                type="button"
+                onClick={openChart}
+                disabled={!token?.tokenAddress}
+                className="min-w-0 cursor-pointer truncate rounded text-left text-sm font-semibold text-rx-text transition-colors hover:text-rx-gold-hi focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rx-gold-hi disabled:cursor-default"
+                aria-label={`Open chart for ${displayName}`}
+                title="Open chart"
+              >
+                {displaySymbol || baseCurrency}{" "}
+                {displaySymbol ? (
+                  <span className="font-normal text-rx-text-3">
+                    / {baseCurrency}
+                  </span>
+                ) : null}
+              </button>
+              <button
+                type="button"
+                onClick={handleCopyAddress}
+                disabled={!token?.tokenAddress}
+                className={clsx(ICON_BTN, "ml-0.5")}
+                title={token?.tokenAddress ? "Copy contract address" : "No address"}
+                aria-label={
+                  copied
+                    ? "Contract address copied"
+                    : `Copy ${displaySymbol || displayName} contract address`
+                }
+              >
+                {copied ? (
+                  <Check className="size-3.5 text-rx-up" aria-hidden />
+                ) : (
+                  <Copy className="size-[13px]" aria-hidden />
+                )}
+              </button>
+              {token?.tokenAddress ? (
+                <a
+                  href={explorerUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className={ICON_BTN}
+                  aria-label={`View on ${explorerName}`}
+                  title={`View token on ${explorerName}`}
+                >
+                  <ExternalLink className="size-[13px]" aria-hidden />
+                </a>
+              ) : null}
+            </div>
+            <div className="max-w-[230px] truncate text-xs text-rx-text-2 min-[1800px]:max-w-[360px]">
               {displayName}
-            </span>
+            </div>
           </div>
         </div>
 
-        {showChainBadge ? (
-          <span
-            className="inline-flex shrink-0 ml-2 items-center"
-            title={chainBadge.label}
-          >
-            <Image
-              src={chainBadge.src}
-              alt={chainBadge.label}
-              width={18}
-              height={18}
-              className="w-[18px] h-[18px] object-contain opacity-95"
-            />
-          </span>
-        ) : null}
-
-        <button
-          type="button"
-          onClick={handleCopyAddress}
-          disabled={!token?.tokenAddress}
-          className={`inline-flex items-center justify-center rounded px-1.5 py-1 active:scale-95 focus:outline-none shrink-0 ${showChainBadge ? "ml-1" : "ml-2"}`}
-          title={token?.tokenAddress ? "Copy contract address" : "No address"}
-        >
-          {copied ? (
-            <Check className="w-4 h-4" />
-          ) : (
-            <Copy className="w-4 h-4" />
-          )}
-        </button>
-      </div>
-
-      {/* AI Report */}
-      <div
-        className={`sm:sticky sm:left-100 relative h-auto min-h-[4.75rem] w-full sm:z-10 flex items-center justify-center px-3 py-1 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
-      >
-        <div className="flex flex-col items-center justify-center gap-0.5">
+        {/* AI reports */}
+        <div className="flex items-center gap-1.5 px-2 py-3">
           {isGenerating && countdown !== null ? (
-            <div className="flex h-7.5 w-17.5 items-center justify-center">
-              <div className="text-[#FFD700] font-bold text-lg animate-pulse">
-                {countdown}s
-              </div>
-            </div>
+            <span
+              role="status"
+              aria-live="polite"
+              aria-label={`Generating report, ${countdown} seconds left`}
+              className={clsx(
+                FULL_REPORT_BTN,
+                "pointer-events-none min-w-[100px] tabular-nums",
+              )}
+            >
+              <span className="rx-spin size-3 border-[1.5px]" aria-hidden />
+              {countdown}s
+            </span>
           ) : (
-            <GlossyReportButton
-              label="Full Report"
-              variant="full-report"
+            <button
+              type="button"
+              className={FULL_REPORT_BTN}
               onClick={!authenticated ? handleSignIn : onGenerateClick}
               disabled={isGenerating || !ready || whatsNewLoading}
-              ariaLabel={`Full Report for ${displayName}`}
-            />
+              aria-label={`Full Report for ${displayName}`}
+              title="Full Report"
+            >
+              <ReportIcon />
+              Full Report
+            </button>
           )}
-          <GlossyReportButton
-            label="What's New"
-            variant="whats-new"
+          <button
+            type="button"
+            className={WHATS_NEW_BTN}
             onClick={!authenticated ? handleSignIn : onWhatsNewClick}
             disabled={!ready || whatsNewLoading}
-            ariaLabel={`What's New for ${displayName}`}
-          />
+            aria-label={`What's New for ${displayName}`}
+            title="What's New"
+          >
+            {whatsNewLoading ? (
+              <span className="rx-spin size-3 border-[1.5px]" aria-hidden />
+            ) : (
+              <NewsIcon />
+            )}
+            What&apos;s New
+          </button>
         </div>
 
-        <a
-          href={explorerUrl}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center justify-center rounded-lg text-[#ffc000] transition-colors cursor-pointer hover:text-[#ffda44]"
-          aria-label={`View on ${
-            isBaseChain
-              ? "BaseScan"
-              : isEthereumChain
-                ? "Etherscan"
-              : isBnbChain
-                ? "BSCScan"
-                : isMonadChain
-                  ? "MonadScan"
-                  : isRobinhoodChain
-                    ? "Robinhood"
-                    : "SolScan"
-          }`}
-          title={`View token on ${
-            isBaseChain
-              ? "BaseScan"
-              : isEthereumChain
-                ? "Etherscan"
-              : isBnbChain
-                ? "BSCScan"
-                : isMonadChain
-                  ? "MonadScan"
-                  : isRobinhoodChain
-                    ? "Robinhood"
-                    : "SolScan"
-          }`}
-        >
-          <ExternalLink className="w-3.5 h-3.5" />
-        </a>
-      </div>
-
-      {/* Market Cap — 24h price %-based multiplier */}
-      <div
-        className={`sm:sticky sm:left-135 min-h-[4.75rem] sm:z-10 flex w-full min-w-0 items-center px-3 py-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
-      >
-        <div className="min-w-0 w-full overflow-hidden">
+        {/* Mcap */}
+        <div className={clsx(CELL, "rx-num text-right font-semibold text-rx-text")}>
           {marketLoading ? (
-            <div className="flex w-full items-center justify-center" role="status" aria-label="Loading market cap">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-[#FFC000]" />
-            </div>
-          ) : (
-            <ValueWithDayChange
-              valueLabel={formatUsd(mcap)}
-              changePct={priceChange24h}
+            <span
+              className="rx-skel ml-auto block h-3.5 w-16"
+              role="status"
+              aria-label="Loading market cap"
             />
+          ) : (
+            formatUsd(mcap)
           )}
         </div>
-      </div>
 
-      {/* 24h chart — after Mcap */}
-      <div
-        className={`flex min-h-[4.75rem] w-full min-w-0 self-stretch items-center justify-end overflow-hidden px-1.5 py-1 sm:px-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
-      >
-        <Token24hSparkline
-          changePct24h={priceChange24h}
-          seriesY={sparklineY}
-          isFetching={sparklinesFetching}
-        />
-      </div>
+        {/* 24h change */}
+        <div className={clsx(CELL, "rx-num flex min-w-0 justify-end")}>
+          <Token24hChangeBadge changePct24h={priceChange24h} />
+        </div>
 
-      {/* Volume — 24h volume change % as multiplier */}
-      <div
-        className={`flex min-h-[4.75rem] w-full min-w-0 items-center px-3 py-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
-      >
-        <div className="min-w-0 w-full overflow-hidden">
-          <ValueWithDayChange
-            valueLabel={formatUsd(vol)}
-            changePct={volumeChange24h}
+        {/* 24h trend */}
+        <div className={clsx(CELL, "flex justify-end")}>
+          <Token24hSparkline
+            changePct24h={priceChange24h}
+            seriesY={sparklineY}
+            isFetching={sparklinesFetching}
           />
         </div>
-      </div>
 
-      {/* Price — 24h price change % as multiplier */}
-      <div
-        className={`flex min-h-[4.75rem] w-full min-w-0 items-center px-3 py-2 ${isEvenRow ? "bg-[#191919]" : "bg-black"}`}
-      >
-        <div className="min-w-0 w-full overflow-hidden">
+        {/* Price */}
+        <div className={clsx(CELL, "rx-num text-right font-semibold text-rx-text")}>
           {marketLoading ? (
-            <div className="flex w-full items-center justify-center" role="status" aria-label="Loading price">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-[#FFC000]" />
-            </div>
-          ) : (
-            <ValueWithDayChange
-              valueLabel={formatUsd(price)}
-              changePct={priceChange24h}
+            <span
+              className="rx-skel ml-auto block h-3.5 w-14"
+              role="status"
+              aria-label="Loading price"
             />
+          ) : (
+            <div className="truncate" title={formatUsd(price)}>
+              {formatUsd(price)}
+            </div>
           )}
         </div>
-      </div>
 
-      {/* Liquidity */}
-      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate min-h-[4.75rem] items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
-        <span className="font-bold!">{formatUsd(liq)}</span>
-      </div>
+        {/* Volume, with the 24h volume change as a multiplier */}
+        <div className={clsx(CELL, "rx-num flex flex-col items-end gap-1 text-right")}>
+          <div>{formatUsd(vol)}</div>
+          {volumeTone && volumeChange24h != null ? (
+            <div
+              className={clsx(
+                "text-[11px] leading-none",
+                volumeTone === "up" ? "text-rx-up" : "text-rx-down",
+              )}
+              title={`24h volume change ${volumeChange24h > 0 ? "+" : ""}${volumeChange24h.toFixed(2)}%`}
+            >
+              {volumeTone === "up" ? "+" : "-"}
+              {formatMultiplierMagnitudeFromPercent(volumeChange24h)}X
+            </div>
+          ) : null}
+        </div>
 
-      {/* Age */}
-      <div className={`flex justify-center px-3 py-2 whitespace-nowrap truncate min-h-[4.75rem] items-center ${isEvenRow ? 'bg-[#191919]' : 'bg-black'}`}>
-        {ageLoading ? (
-          <span
-            className="inline-block h-3.5 w-9 animate-pulse rounded bg-white/15"
-            aria-label="Loading age"
-            role="status"
-          />
-        ) : (
-          <span className="font-bold!">{age}</span>
-        )}
-      </div>
+        {/* Liquidity */}
+        <div className={clsx(CELL, "rx-num text-right text-rx-text-2")}>
+          {formatUsd(liq)}
+        </div>
+
+        {/* Age */}
+        <div className={clsx(CELL, "pr-3 text-right text-rx-text-2 sm:pr-1")}>
+          {ageLoading ? (
+            <span
+              className="rx-skel ml-auto block h-3.5 w-9"
+              aria-label="Loading age"
+              role="status"
+            />
+          ) : (
+            age
+          )}
+        </div>
       </div>
       <PaywallModal
         open={showPaywall}

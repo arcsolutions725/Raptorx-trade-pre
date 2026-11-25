@@ -37,6 +37,7 @@ import {
   tokenToPathSegment,
 } from "@/lib/rexscreenerRoutes";
 import { useOpenPilotSidebarOnMobileReportGen } from "@/hooks/useOpenPilotSidebarOnMobileReportGen";
+import { markClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
 
 /** After the first auto-open on RexScreener, skip auto-open on refresh; user can still open via the button. */
 const DAILY_MISSION_MODAL_OPENED_KEY = "dailymission_modal_opened";
@@ -469,6 +470,12 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
     setShowLeaderboard(false);
   }, []);
 
+  /** Floating "Ask Claw": same destination as the header's Claw AI 5.0 nav link. */
+  const openClawAssistant = useCallback(() => {
+    markClawV5ScrollToInput();
+    router.push("/claw-v5");
+  }, [router]);
+
   const navigateScreenerChain = useCallback(
     (chain: Chain) => {
       pendingScreenerTokenPathRef.current = null;
@@ -537,7 +544,7 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
   return (
     <RexScreenerTableContext.Provider value={tableContext}>
       <div
-        className="relative w-full h-screen flex flex-col overflow-hidden"
+        className="rx-screener relative w-full h-screen flex flex-col overflow-hidden"
         aria-busy={loadingUser}
         data-loading-user={loadingUser || undefined}
       >
@@ -614,40 +621,70 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
 
         {currentUserId && (
           <div
-            className={`fixed bottom-20 sm:bottom-12 left-4 z-40 gap-2 flex-col ${
+            className={`fixed bottom-20 left-3 z-40 flex-col items-start gap-2 sm:bottom-[114px] sm:left-5 sm:flex-row sm:items-center ${
               showReportSidebar ? "hidden lg:flex" : "flex"
             }`}
           >
             <button
+              type="button"
               onClick={openDailyTasksPopup}
-              className="text-white font-semibold shadow-lg transition-all duration-200 cursor-pointer shrink-0"
+              className="rx-btn h-[30px] shrink-0 gap-2 rounded-[15px] border-rx-gold-line bg-[linear-gradient(180deg,#261D0B,#15100A)] pl-[3px] pr-3 text-xs text-[#FFE2A0] shadow-[inset_0_1px_0_rgba(255,236,205,0.14),0_8px_20px_rgba(0,0,0,0.45)] hover:border-[#6A511B]"
               aria-label="Open Daily Tasks"
               title="Daily Missions"
             >
-              <Image
-                src={"/images/dailymissions.png"}
-                alt="Daily Missions"
-                width={105}
-                height={51}
-                className="w-[88px] h-11 sm:w-[105px] sm:h-[51px] object-contain"
-              />
+              <span
+                className="flex size-6 items-center justify-center rounded-full bg-[linear-gradient(180deg,#FFD670,#E3A300)]"
+                aria-hidden="true"
+              >
+                <Image
+                  src="/images/claw-mini.svg"
+                  alt=""
+                  width={14}
+                  height={14}
+                  className="size-3.5 brightness-0 opacity-85"
+                />
+              </span>
+              Daily missions
             </button>
 
             <button
+              type="button"
               onClick={openLeaderboard}
-              className="text-white font-semibold shadow-lg transition-all duration-200 cursor-pointer shrink-0"
+              className="rx-btn h-[30px] shrink-0 gap-1.5 rounded-[15px] border-rx-gold-line bg-[linear-gradient(180deg,#261D0B,#15100A)] px-3 text-xs text-rx-gold-hi shadow-[inset_0_1px_0_rgba(255,236,205,0.14),0_8px_20px_rgba(0,0,0,0.45)] hover:border-[#6A511B]"
               aria-label="Open Leaderboard"
               title="Global Leaderboard"
             >
-              <Image
-                src={"/images/leaderboard.png"}
-                alt="Leaderboard"
-                width={105}
-                height={51}
-                className="w-[88px] h-11 sm:w-[105px] sm:h-[51px] object-contain"
-              />
+              <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+                <path
+                  d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinejoin="round"
+                />
+              </svg>
+              Leaderboard
             </button>
           </div>
+        )}
+
+        {/* Floating Ask Claw (desktop + tablet, overview list only) */}
+        {!showReportSidebar && !viewingChart && (
+          <button
+            type="button"
+            onClick={openClawAssistant}
+            className="rx-ask-claw fixed bottom-[114px] right-5 z-40 hidden h-[52px] items-center gap-2.5 rounded-full border-0 bg-[linear-gradient(180deg,#F04A2C_0%,#D81F2A_55%,#B5101F_100%)] pl-3.5 pr-5 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,190,170,0.45),0_14px_34px_rgba(200,16,46,0.38),0_4px_10px_rgba(0,0,0,0.4)] transition-[transform,filter] duration-300 ease-[cubic-bezier(.2,.7,.2,1)] hover:-translate-y-0.5 hover:brightness-[1.08] focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#FFE7A6] md:inline-flex"
+            aria-label="Ask Claw: open Claw AI 5.0"
+          >
+            <Image
+              src="/images/claw-mini.svg"
+              alt=""
+              width={22}
+              height={22}
+              className="size-[22px] brightness-0 invert drop-shadow-[0_1px_0_rgba(90,0,10,0.35)]"
+            />
+            Ask Claw
+          </button>
         )}
 
         <DailyTasksPopup

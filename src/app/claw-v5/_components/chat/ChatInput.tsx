@@ -2,8 +2,9 @@
 
 import { useEffect, useRef, useState, FormEvent } from "react";
 import { createPortal } from "react-dom";
-import { ChevronDown, SlidersHorizontal, Square, X } from "lucide-react";
-import Image from "next/image";
+import { Check, ChevronDown, X } from "lucide-react";
+import clsx from "clsx";
+import SourceLogo, { type SourceLogoKind } from "./SourceLogo";
 
 export type PredictionMarketMode =
   | "Markets"
@@ -14,6 +15,7 @@ export type PredictionMarketMode =
 const DEFAULT_PLACEHOLDER =
   "Search Prediction Events, Arbitrage, Wallets, Cryptocurrencies and more!";
 
+// Mode → default placeholder (selection-specific placeholders below win).
 const PLACEHOLDER_BY_MODE: Record<PredictionMarketMode, string> = {
   Markets: DEFAULT_PLACEHOLDER,
   Crypto: "Ask Claw about crypto, indicators, technical analysis and more!",
@@ -28,10 +30,9 @@ const LABEL_BY_MODE: Record<PredictionMarketMode, string> = {
   Polymarket: "Prediction Markets",
 };
 
-const CRYPTO_CHAIN_LABEL: Record<
-  "solana" | "ethereum" | "base" | "bnb" | "monad",
-  string
-> = {
+type CryptoChain = "solana" | "ethereum" | "base" | "bnb" | "monad";
+
+const CRYPTO_CHAIN_LABEL: Record<CryptoChain, string> = {
   solana: "Solana",
   ethereum: "Ethereum",
   base: "Base",
@@ -90,7 +91,7 @@ const PLACEHOLDER_PREDICTFUN =
   "Ask about Predict.fun markets, events, odds, and trading on Predict.fun...";
 
 export type ClawSelectionContext = {
-  cryptoChain?: "solana" | "ethereum" | "base" | "bnb" | "monad";
+  cryptoChain?: CryptoChain;
   predictionSubmode?: PredictionSubmode;
   predictionDisplayLevel?: "category" | "provider";
 };
@@ -109,12 +110,9 @@ interface ChatInputProps {
   disabled?: boolean;
   /** Placeholder shown when disabled (e.g. "Sign in to chat"). */
   disabledPlaceholder?: string;
+  /** Welcome screen: the composer rises in after the headline (prototype entrance). */
+  intro?: boolean;
 }
-
-const CHAT_CONTENT_MAX_WIDTH = "max-w-3xl";
-// UI feature flags (keep code, hide UI)
-const SHOW_CREATE_ARTIFACT = false;
-const SHOW_TOOLBAR = true;
 
 export default function ChatInput({
   onSendMessage,
@@ -128,11 +126,16 @@ export default function ChatInput({
   onMarketModeChange,
   disabled: disabledProp = false,
   disabledPlaceholder,
+  intro = false,
 }: ChatInputProps) {
   const [internalMode, setInternalMode] =
     useState<PredictionMarketMode>("Markets");
   const [dropdownOpen, setDropdownOpen] = useState(false);
-  const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
+  const [dropdownPosition, setDropdownPosition] = useState({
+    bottom: 0,
+    left: 0,
+    maxHeight: 440,
+  });
   const dropdownRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
@@ -143,13 +146,15 @@ export default function ChatInput({
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const lastPrefillRef = useRef<string | undefined>(undefined);
 
-  // Position dropdown above trigger when opening (for portal)
+  // Position the dropdown above the trigger when opening (it is portalled to <body>)
   useEffect(() => {
     if (!dropdownOpen || !triggerRef.current) return;
     const rect = triggerRef.current.getBoundingClientRect();
+    const width = 268;
     setDropdownPosition({
-      top: rect.top - 4,
-      left: rect.left,
+      bottom: window.innerHeight - rect.top + 8,
+      left: Math.max(8, Math.min(rect.left, window.innerWidth - width - 8)),
+      maxHeight: Math.max(220, Math.min(440, rect.top - 16)),
     });
   }, [dropdownOpen]);
 
@@ -176,14 +181,23 @@ export default function ChatInput({
       }
       setDropdownOpen(false);
     };
+    const handleKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setDropdownOpen(false);
+        triggerRef.current?.focus();
+      }
+    };
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
   }, [dropdownOpen]);
 
   const isInputDisabled = isLoading || disabledProp;
-  const [selectedCryptoChain, setSelectedCryptoChain] = useState<
-    "solana" | "ethereum" | "base" | "bnb" | "monad"
-  >("solana");
+  const [selectedCryptoChain, setSelectedCryptoChain] =
+    useState<CryptoChain>("solana");
   const [selectedPredictionSubmode, setSelectedPredictionSubmode] =
     useState<PredictionSubmode>("polymarket");
   const [cryptoDisplayLevel, setCryptoDisplayLevel] = useState<
@@ -236,16 +250,19 @@ export default function ChatInput({
                 LABEL_BY_MODE[marketMode]
           : LABEL_BY_MODE[marketMode];
 
-  const collapsedCryptoIconSrc =
-    selectedCryptoChain === "solana"
-      ? "/images/solana.png"
-      : selectedCryptoChain === "ethereum"
-        ? "/images/ETH_light_logo.webp"
-      : selectedCryptoChain === "base"
-        ? "/images/base.png"
-        : selectedCryptoChain === "monad"
-          ? "/images/monad.png"
-          : "/images/bnbchain.png";
+  /** Icon shown on the collapsed trigger for the current selection. */
+  const collapsedIcon: SourceLogoKind =
+    marketMode === "Crypto"
+      ? cryptoDisplayLevel === "category"
+        ? "crypto"
+        : selectedCryptoChain
+      : marketMode === "Markets"
+        ? isMarketsModeProvider(selectedPredictionSubmode)
+          ? selectedPredictionSubmode
+          : "internet"
+        : predictionDisplayLevel === "category"
+          ? "prediction"
+          : selectedPredictionSubmode;
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
@@ -284,9 +301,9 @@ export default function ChatInput({
     const el = textareaRef.current;
     if (!el) return;
     el.style.height = "0px";
-    const next = Math.min(el.scrollHeight, 140);
-    el.style.height = `${Math.max(next, 56)}px`;
-  }, [message]);
+    const next = Math.min(el.scrollHeight, 200);
+    el.style.height = `${Math.max(next, 32)}px`;
+  }, [message, placeholder]);
 
   // Allow parent to prefill the composer (used for landing-page sample prompts).
   // Replaces current composer text when a new prefill arrives (sample prompt click UX).
@@ -308,83 +325,72 @@ export default function ChatInput({
     setTimeout(() => textareaRef.current?.focus(), 0);
   }, [prefillText, message]);
 
+  const internetSelected =
+    marketMode === "Markets" && !isMarketsModeProvider(selectedPredictionSubmode);
+  const cryptoCategorySelected =
+    marketMode === "Crypto" && cryptoDisplayLevel === "category";
+  const predictionCategorySelected =
+    (marketMode === "Polymarket" ||
+      marketMode === "Kalshi" ||
+      (marketMode === "Markets" &&
+        isMarketsModeProvider(selectedPredictionSubmode))) &&
+    predictionDisplayLevel === "category";
+
+  const isProviderSelected = (key: PredictionSubmode) =>
+    selectedPredictionSubmode === key &&
+    predictionDisplayLevel === "provider" &&
+    ((key === "polymarket" && marketMode === "Polymarket") ||
+      (key === "kalshi" && marketMode === "Kalshi") ||
+      (key === "limitless" && marketMode === "Markets") ||
+      (key === "myriad" && marketMode === "Markets") ||
+      (key === "predictfun" && marketMode === "Markets"));
+
+  const checkMark = (
+    <Check className="menu__check" strokeWidth={2.5} aria-hidden="true" />
+  );
+
+  const hasText = message.trim().length > 0;
+
   return (
-    <div className="shrink-0 bg-black p-3 md:p-4 flex flex-col items-center gap-2">
-      {/* Quoted Content Display */}
-      {quotedContent && (
-        <div
-          className={`${CHAT_CONTENT_MAX_WIDTH} w-full bg-[#0f0f0f] border border-white/10 rounded-2xl p-3 md:p-4 relative`}
-        >
-          <div className="flex items-start gap-2">
-            <div className="flex-1 min-w-0">
-              <div className="text-xs text-[#737373] mb-1">Quoted message:</div>
-              <div className="text-xs md:text-sm text-white/80 line-clamp-2 break-words">
-                {quotedContent}
-              </div>
+    <div className="claw-composer">
+      <div className="claw-col">
+        {/* Quoted Content Display */}
+        {quotedContent && (
+          <div className="rx-well claw-quote">
+            <div className="min-w-0 flex-1">
+              <span className="rx-eyebrow">Quoting</span>
+              <p className="claw-quote__text">{quotedContent}</p>
             </div>
             {onClearQuote && (
               <button
                 type="button"
                 onClick={onClearQuote}
-                className="flex-shrink-0 p-1 hover:bg-[#2a2a2a] rounded transition-colors touch-manipulation"
+                className="rx-icon-btn rx-icon-btn--s touch-manipulation"
                 aria-label="Remove quote"
               >
-                <X className="w-4 h-4 text-gray-400" />
+                <X className="size-3.5" aria-hidden="true" />
               </button>
             )}
           </div>
-        </div>
-      )}
+        )}
 
-      <form
-        onSubmit={handleSubmit}
-        className={`relative ${CHAT_CONTENT_MAX_WIDTH} w-full`}
-      >
-        {/* Composer */}
-        <div className="bg-[#0f0f0f] border border-white/10 rounded-2xl shadow-[0_0_0_1px_rgba(255,255,255,0.02)] overflow-visible focus-within:border-[#FFC000]/40 focus-within:shadow-[0_0_0_3px_rgba(255,192,0,0.12)] transition-[border-color,box-shadow]">
-          {/* Top action (purely UI for now) */}
-          {SHOW_CREATE_ARTIFACT && (
-            <div className="px-4 pt-3 pb-1">
-              <button
-                type="button"
-                className="inline-flex items-center gap-2 text-xs text-white/50 hover:text-white/70 transition-colors"
-                aria-label="Create artifact"
-              >
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  className="text-white/50"
-                >
-                  <path
-                    d="M21 19V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M3 19a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                  <path
-                    d="M7 9h10M7 13h7"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                  />
-                </svg>
-                <span>Create Artifact...</span>
-              </button>
-            </div>
-          )}
-
-          {/* Textarea */}
-          <div className="px-4 pt-2">
+        <div className={clsx("composer-wrap", intro && "composer-wrap--intro")}>
+          <span className="composer__glow" aria-hidden="true" />
+          <form
+            onSubmit={handleSubmit}
+            className={clsx(
+              "rx-raised composer",
+              hasText && "has-text",
+              isLoading && "is-thinking",
+              disabledProp && "is-disabled",
+            )}
+          >
+            <span className="composer__ring" aria-hidden="true" />
+            <label htmlFor="claw-composer-input" className="sr-only">
+              Message Claw
+            </label>
             <textarea
+              id="claw-composer-input"
               ref={textareaRef}
               value={message}
               onChange={(e) => setMessage(e.target.value)}
@@ -399,577 +405,213 @@ export default function ChatInput({
               placeholder={placeholder}
               disabled={isInputDisabled}
               rows={1}
-              className="w-full bg-transparent text-white/90 placeholder-white/35 pb-2 pt-1 focus:outline-none disabled:opacity-50 text-base resize-none overflow-y-auto min-h-[56px] max-h-[140px] custom-chat-input-scrollbar"
-              aria-label="Message"
+              className="custom-chat-input-scrollbar overflow-y-auto"
             />
-          </div>
 
-          {/* Toolbar */}
-          <div className="px-3 pb-2 pt-0.5 flex items-center justify-between gap-3">
-            {SHOW_TOOLBAR ? (
-              <div className="flex items-center gap-3 text-white/70">
-                {/* <button
-                  type="button"
-                  className="h-8 w-8 rounded-lg hover:bg-white/5 active:bg-white/10 transition-colors flex items-center justify-center"
-                  aria-label="Attach"
-                >
-                  <Paperclip className="w-4 h-4" />
-                </button>
+            <div className="composer__bar">
+              <div className="relative min-w-0">
                 <button
+                  ref={triggerRef}
                   type="button"
-                  className="h-8 w-8 rounded-lg hover:bg-white/5 active:bg-white/10 transition-colors flex items-center justify-center"
-                  aria-label="Edit"
+                  onClick={() => {
+                    if (isInputDisabled) return;
+                    setDropdownOpen((open) => !open);
+                  }}
+                  disabled={isInputDisabled}
+                  className="rx-btn rx-btn--secondary rx-btn--s composer__src"
+                  aria-label={`Where Claw looks: ${collapsedLabel}`}
+                  aria-expanded={dropdownOpen}
+                  aria-haspopup="listbox"
                 >
-                  <PenLine className="w-4 h-4" />
+                  <SourceLogo kind={collapsedIcon} onButton />
+                  <span>{collapsedLabel}</span>
+                  <ChevronDown className="size-3 shrink-0" aria-hidden="true" />
                 </button>
-                <button
-                  type="button"
-                  className="h-8 w-8 rounded-lg hover:bg-white/5 active:bg-white/10 transition-colors flex items-center justify-center"
-                  aria-label="Voice"
-                >
-                  <Mic className="w-4 h-4" />
-                </button> */}
-
-                {/* <div className="mx-1 h-5 w-px bg-white/10" /> */}
-
-                <div className="relative">
-                  <button
-                    ref={triggerRef}
-                    type="button"
-                    onClick={() => {
-                      if (isInputDisabled) return;
-                      setDropdownOpen((open) => !open);
-                    }}
-                    disabled={isInputDisabled}
-                    className="h-8 px-2 rounded-lg hover:bg-white/5 active:bg-white/10 transition-colors inline-flex items-center gap-2 text-xs disabled:opacity-50 disabled:pointer-events-none disabled:cursor-not-allowed"
-                    aria-label="Prediction market"
-                    aria-expanded={dropdownOpen}
-                    aria-haspopup="listbox"
-                  >
-                    {/* Internet Markets / Limitless */}
-                    {marketMode === "Markets" && (
-                      <span
-                        className="w-6 h-6 rounded flex items-center justify-center shrink-0 overflow-hidden"
-                        aria-hidden
-                      >
-                        {selectedPredictionSubmode === "limitless" ? (
-                          <span className="w-7 h-7 rounded-[10px] bg-[#c3ff01] border border-black/15 flex items-center justify-center shadow-md shadow-black/20">
-                            <Image
-                              src="/images/limitless-logo-new.webp"
-                              alt="Limitless"
-                              width={22}
-                              height={22}
-                              className="h-5 w-5 object-contain"
-                            />
-                          </span>
-                        ) : selectedPredictionSubmode === "myriad" ? (
-                          <span className="w-7 h-7 rounded-[10px] bg-black border border-[#ffc000]/20 flex items-center justify-center shadow-md shadow-black/60">
-                            <Image
-                              src="/images/myriad.webp"
-                              alt="Myriad"
-                              width={24}
-                              height={24}
-                              className="h-5 w-auto object-contain rounded"
-                            />
-                          </span>
-                        ) : selectedPredictionSubmode === "predictfun" ? (
-                          <span className="w-7 h-7 rounded-[10px] flex items-center justify-center shadow-md shadow-black/60">
-                            <Image
-                              src="/images/predict-fun.webp"
-                              alt="Predict.fun"
-                              width={22}
-                              height={22}
-                              className="h-5 w-5 object-contain"
-                            />
-                          </span>
-                        ) : (
-                          <Image
-                            src="/images/market-opened.png"
-                            alt="Internet Markets"
-                            width={22}
-                            height={22}
-                            className="h-5 w-auto object-contain"
-                          />
-                        )}
-                      </span>
-                    )}
-
-                    {/* Crypto: category icon or chain icon */}
-                    {marketMode === "Crypto" && (
-                      <span
-                        className="w-5 h-5 rounded flex items-center justify-center shrink-0 overflow-hidden"
-                        aria-hidden
-                      >
-                        {cryptoDisplayLevel === "category" ? (
-                          <Image
-                            src="/images/crypto.webp"
-                            alt="Crypto"
-                            width={22}
-                            height={22}
-                            className="h-5 w-auto object-contain"
-                          />
-                        ) : (
-                          <Image
-                            src={collapsedCryptoIconSrc}
-                            alt={CRYPTO_CHAIN_LABEL[selectedCryptoChain]}
-                            width={20}
-                            height={20}
-                            className="h-5 w-auto object-contain"
-                          />
-                        )}
-                      </span>
-                    )}
-
-                    {/* Prediction Markets: category icon or provider icon */}
-                    {(marketMode === "Kalshi" || marketMode === "Polymarket") && (
-                      <span
-                        className="w-5 h-5 rounded flex items-center justify-center shrink-0 overflow-hidden"
-                        aria-hidden
-                      >
-                        {predictionDisplayLevel === "category" ? (
-                          <Image
-                            src="/images/predection-markets.png"
-                            alt="Prediction Markets"
-                            width={20}
-                            height={20}
-                            className="h-5 w-auto object-contain"
-                          />
-                        ) : selectedPredictionSubmode === "kalshi" ? (
-                          <span className="w-5 h-5 rounded flex items-center justify-center bg-[#17cb91] text-white text-xs font-bold">
-                            K
-                          </span>
-                        ) : selectedPredictionSubmode === "polymarket" ? (
-                          <Image
-                            src="/images/polymarket.png"
-                            alt="Polymarket"
-                            width={20}
-                            height={20}
-                            className="h-5 w-auto object-contain"
-                          />
-                        ) : selectedPredictionSubmode === "myriad" ? (
-                          <Image
-                            src="/images/myriad.webp"
-                            alt="Myriad"
-                            width={20}
-                            height={20}
-                            className="h-5 w-auto object-contain rounded"
-                          />
-                        ) : selectedPredictionSubmode === "limitless" ? (
-                          <span className="w-5 h-5 rounded flex items-center justify-center bg-[#c3ff01] overflow-hidden border border-black/10">
-                            <Image
-                              src="/images/limitless-logo-new.webp"
-                              alt="Limitless"
-                              width={18}
-                              height={18}
-                              className="object-contain"
-                            />
-                          </span>
-                        ) : null}
-                      </span>
-                    )}
-                    <span className="text-[#FFC000] font-semibold">
-                      {collapsedLabel}
-                    </span>
-                    <ChevronDown
-                      className={`w-3.5 h-3.5 text-white/50 transition-transform shrink-0 ${dropdownOpen ? "rotate-180" : ""}`}
-                    />
-                  </button>
-                  {dropdownOpen &&
-                    !isInputDisabled &&
-                    createPortal(
+                {dropdownOpen &&
+                  !isInputDisabled &&
+                  createPortal(
+                    <div className="rx-claw">
                       <div
                         ref={dropdownRef}
-                        className="fixed min-w-[230px] py-2 bg-gradient-to-b from-[#171717] to-[#050505] border border-white/10 rounded-2xl shadow-2xl shadow-black/70 backdrop-blur-md z-[9999] origin-top transform-gpu animate-[dropdown-in_140ms_ease-out]"
+                        className="claw-menu"
                         role="listbox"
+                        aria-label="Where Claw looks"
                         style={{
-                          top: dropdownPosition.top,
+                          bottom: dropdownPosition.bottom,
                           left: dropdownPosition.left,
-                          transform: "translateY(-100%)",
+                          maxHeight: dropdownPosition.maxHeight,
                         }}
                       >
                         {/* Internet Markets */}
                         <button
                           type="button"
                           role="option"
-                          aria-selected={
-                            marketMode === "Markets" &&
-                            !isMarketsModeProvider(selectedPredictionSubmode)
-                          }
+                          aria-selected={internetSelected}
                           onClick={() => {
                             setMarketMode("Markets");
                             setSelectedPredictionSubmode("polymarket");
                             setDropdownOpen(false);
                           }}
-                          className={`w-full px-3.5 py-2.5 text-left text-[13px] transition-colors flex items-center justify-between gap-2.5 ${
-                            marketMode === "Markets" &&
-                            !isMarketsModeProvider(selectedPredictionSubmode)
-                              ? "bg-white/10 text-white"
-                              : "text-white/80 hover:bg-white/5 hover:text-white"
-                          }`}
+                          className="menu__item menu__item--group"
                         >
-                          <span className="flex items-center gap-2 shrink-0 min-w-[1.25rem]">
-                            <span
-                              className="w-5 h-5 flex items-center justify-center shrink-0"
-                              aria-hidden
-                            >
-                              <Image
-                                src="/images/market-opened.png"
-                                alt="Internet Markets"
-                                width={20}
-                                height={20}
-                                className="h-5 w-auto object-contain"
-                              />
-                            </span>
-                            <span className="text-[#FFC000] font-semibold">
-                              Internet Markets
-                            </span>
-                          </span>
-                          {marketMode === "Markets" &&
-                            !isMarketsModeProvider(selectedPredictionSubmode) && (
-                            <span
-                              className="text-[#FFC000] shrink-0"
-                              aria-hidden
-                            >
-                              ✓
-                            </span>
-                          )}
+                          <SourceLogo kind="internet" />
+                          Internet Markets
+                          {internetSelected && checkMark}
                         </button>
 
-                        <div className="my-1 h-px w-full bg-white/10" />
+                        <hr />
 
                         {/* Crypto group */}
-                        <div className="px-3.5 py-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMarketMode("Crypto");
-                              setCryptoDisplayLevel("category");
-                              setDropdownOpen(false);
-                            }}
-                            className={`w-full flex items-center gap-2.5 mb-1 rounded-xl px-2.5 py-1.5 -mx-1.5 -mt-0.5 transition-colors ${
-                              marketMode === "Crypto" && cryptoDisplayLevel === "category"
-                                ? "bg-white/10 text-white"
-                                : "text-white/90 hover:bg-white/5 hover:text-white"
-                            }`}
-                          >
-                            <span
-                              className="w-5 h-5 rounded flex items-center justify-center p-0.5 shrink-0 overflow-hidden"
-                              aria-hidden
+                        <span className="rx-eyebrow menu__group block px-2.5 pt-1.5 pb-1">
+                          Crypto
+                        </span>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={cryptoCategorySelected}
+                          onClick={() => {
+                            setMarketMode("Crypto");
+                            setCryptoDisplayLevel("category");
+                            setDropdownOpen(false);
+                          }}
+                          className="menu__item menu__item--group"
+                        >
+                          <SourceLogo kind="crypto" />
+                          All crypto
+                          {cryptoCategorySelected && checkMark}
+                        </button>
+                        {(
+                          [
+                            "solana",
+                            "ethereum",
+                            "monad",
+                            "base",
+                            "bnb",
+                          ] as CryptoChain[]
+                        ).map((key) => {
+                          const selected =
+                            marketMode === "Crypto" &&
+                            selectedCryptoChain === key &&
+                            cryptoDisplayLevel === "chain";
+                          return (
+                            <button
+                              key={key}
+                              type="button"
+                              role="option"
+                              aria-selected={selected}
+                              onClick={() => {
+                                setMarketMode("Crypto");
+                                setSelectedCryptoChain(key);
+                                setCryptoDisplayLevel("chain");
+                                setDropdownOpen(false);
+                              }}
+                              className="menu__item"
                             >
-                              <Image
-                                src="/images/crypto.webp"
-                                alt="Crypto"
-                                width={20}
-                                height={20}
-                                className="h-5 w-auto object-contain"
-                              />
-                            </span>
-                            <span className="text-[#FFC000] font-semibold text-[13px]">
-                              Crypto
-                            </span>
-                            {marketMode === "Crypto" && cryptoDisplayLevel === "category" && (
-                              <span
-                                className="ml-auto text-[#FFC000] shrink-0"
-                                aria-hidden
-                              >
-                                ✓
-                              </span>
-                            )}
-                          </button>
-                          <div className="flex flex-col gap-1.5 pl-8">
-                            {[
-                              {
-                                key: "solana",
-                                label: "Solana",
-                                src: "/images/solana.png",
-                              },
-                              {
-                                key: "ethereum",
-                                label: "Ethereum",
-                                src: "/images/ETH_light_logo.webp",
-                              },
-                              { key: "monad", label: "Monad", src: "/images/monad.png" },
-                              { key: "base", label: "Base", src: "/images/base.png" },
-                              {
-                                key: "bnb",
-                                label: "BNB",
-                                src: "/images/bnbchain.png",
-                              },
-                            ].map((item) => (
-                              <button
-                                key={item.key}
-                                type="button"
-                                onClick={() => {
-                                  setMarketMode("Crypto");
-                                  setSelectedCryptoChain(
-                                    item.key as
-                                      | "solana"
-                                      | "ethereum"
-                                      | "base"
-                                      | "bnb"
-                                      | "monad",
-                                  );
-                                  setCryptoDisplayLevel("chain");
-                                  setDropdownOpen(false);
-                                }}
-                                className={`flex items-center gap-2.5 text-[13px] rounded-lg px-2.5 py-1.5 transition-colors ${
-                                  marketMode === "Crypto" &&
-                                  selectedCryptoChain === item.key &&
-                                  cryptoDisplayLevel === "chain"
-                                    ? "bg-white/10 text-white"
-                                    : "text-white hover:text-white/90 hover:bg-white/5"
-                                }`}
-                              >
-                                <span
-                                  className="w-5 h-5 flex items-center justify-center shrink-0 overflow-hidden"
-                                  aria-hidden
-                                >
-                                  <Image
-                                    src={item.src}
-                                    alt={item.label}
-                                    width={20}
-                                    height={20}
-                                    className="h-5 w-auto object-contain"
-                                  />
-                                </span>
-                                <span>{item.label}</span>
-                                {marketMode === "Crypto" &&
-                                  selectedCryptoChain === item.key &&
-                                  cryptoDisplayLevel === "chain" && (
-                                    <span
-                                      className="ml-auto text-[#FFC000] shrink-0"
-                                      aria-hidden
-                                    >
-                                      ✓
-                                    </span>
-                                  )}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
+                              <SourceLogo kind={key} />
+                              {CRYPTO_CHAIN_LABEL[key]}
+                              {selected && checkMark}
+                            </button>
+                          );
+                        })}
 
-                        <div className="my-1 h-px w-full bg-white/10" />
+                        <hr />
 
                         {/* Prediction Markets group */}
-                        <div className="px-3.5 py-1.5">
-                          <button
-                            type="button"
-                            onClick={() => {
-                              setMarketMode("Polymarket");
-                              setSelectedPredictionSubmode("polymarket");
-                              setPredictionDisplayLevel("category");
-                              setDropdownOpen(false);
-                            }}
-                            className={`w-full flex items-center gap-2.5 mb-1 rounded-xl px-2.5 py-1.5 -mx-1.5 -mt-0.5 transition-colors ${
-                              (marketMode === "Polymarket" ||
-                                marketMode === "Kalshi" ||
-                                (marketMode === "Markets" &&
-                                  isMarketsModeProvider(selectedPredictionSubmode))) &&
-                              predictionDisplayLevel === "category"
-                                ? "bg-white/10 text-white"
-                                : "text-white/90 hover:bg-white/5 hover:text-white"
-                            }`}
-                          >
-                            <span
-                              className="w-5 h-5 flex items-center justify-center shrink-0 overflow-hidden"
-                              aria-hidden
+                        <span className="rx-eyebrow menu__group block px-2.5 pt-1.5 pb-1">
+                          Prediction markets
+                        </span>
+                        <button
+                          type="button"
+                          role="option"
+                          aria-selected={predictionCategorySelected}
+                          onClick={() => {
+                            setMarketMode("Polymarket");
+                            setSelectedPredictionSubmode("polymarket");
+                            setPredictionDisplayLevel("category");
+                            setDropdownOpen(false);
+                          }}
+                          className="menu__item menu__item--group"
+                        >
+                          <SourceLogo kind="prediction" />
+                          All prediction markets
+                          {predictionCategorySelected && checkMark}
+                        </button>
+                        {(
+                          [
+                            { key: "predictfun", mode: "Markets" },
+                            { key: "myriad", mode: "Markets" },
+                            { key: "limitless", mode: "Markets" },
+                            { key: "polymarket", mode: "Polymarket" },
+                            { key: "kalshi", mode: "Kalshi" },
+                          ] as {
+                            key: PredictionSubmode;
+                            mode: PredictionMarketMode;
+                          }[]
+                        ).map((item) => {
+                          const selected = isProviderSelected(item.key);
+                          return (
+                            <button
+                              key={item.key}
+                              type="button"
+                              role="option"
+                              aria-selected={selected}
+                              onClick={() => {
+                                setMarketMode(item.mode);
+                                setSelectedPredictionSubmode(item.key);
+                                setPredictionDisplayLevel("provider");
+                                setDropdownOpen(false);
+                              }}
+                              className="menu__item"
                             >
-                              <Image
-                                src="/images/predection-markets.png"
-                                alt="Prediction Markets"
-                                width={20}
-                                height={20}
-                                className="h-5 w-auto object-contain"
-                              />
-                            </span>
-                            <span className="text-[#FFC000] font-semibold text-[13px]">
-                              Prediction Markets
-                            </span>
-                            {(marketMode === "Polymarket" ||
-                              marketMode === "Kalshi" ||
-                              (marketMode === "Markets" &&
-                                isMarketsModeProvider(selectedPredictionSubmode))) &&
-                              predictionDisplayLevel === "category" && (
-                                <span
-                                  className="ml-auto text-[#FFC000] shrink-0"
-                                  aria-hidden
-                                >
-                                  ✓
-                                </span>
-                              )}
-                          </button>
-                          <div className="flex flex-col gap-1.5 pl-8">
-                            {[
-                              {
-                                key: "predictfun",
-                                label: "Predict.fun",
-                                mode: "Markets" as const,
-                                iconSrc: "/images/predict-fun.webp",
-                              },
-                              {
-                                key: "myriad",
-                                label: "Myriad",
-                                mode: "Markets" as const,
-                                iconSrc: "/images/myriad.webp",
-                              },
-                              {
-                                key: "limitless",
-                                label: "Limitless",
-                                mode: "Markets" as const,
-                                iconSrc: "/images/limitless-logo-new.webp",
-                              },
-                              {
-                                key: "polymarket",
-                                label: "Polymarket",
-                                mode: "Polymarket" as const,
-                                iconSrc: "/images/polymarket.png",
-                              },
-                              {
-                                key: "kalshi",
-                                label: "Kalshi",
-                                mode: "Kalshi" as const,
-                              },
-                            ].map((item) => (
-                              <button
-                                key={item.key}
-                                type="button"
-                                onClick={() => {
-                                  setMarketMode(item.mode);
-                                  setSelectedPredictionSubmode(
-                                    item.key as PredictionSubmode,
-                                  );
-                                  setPredictionDisplayLevel("provider");
-                                  setDropdownOpen(false);
-                                }}
-                                className={`flex items-center gap-2.5 text-[13px] rounded-lg px-2.5 py-1.5 transition-colors ${
-                                  selectedPredictionSubmode === item.key &&
-                                  predictionDisplayLevel === "provider" &&
-                                  ((item.key === "polymarket" && marketMode === "Polymarket") ||
-                                    (item.key === "kalshi" && marketMode === "Kalshi") ||
-                                    (item.key === "limitless" && marketMode === "Markets") ||
-                                    (item.key === "myriad" && marketMode === "Markets") ||
-                                    (item.key === "predictfun" && marketMode === "Markets"))
-                                    ? "bg-white/10 text-white"
-                                    : "text-white hover:text-white/90 hover:bg-white/5"
-                                }`}
-                              >
-                                <span
-                                  className="w-5 h-5 flex items-center justify-center shrink-0 overflow-hidden"
-                                  aria-hidden
-                                >
-                                  {item.key === "kalshi" ? (
-                                    <span className="w-5 h-5 rounded flex items-center justify-center bg-[#17cb91] text-white text-xs font-bold">
-                                      K
-                                    </span>
-                                  ) : item.key === "polymarket" ? (
-                                    <span className="w-8 h-8 rounded-[12px] bg-[#2C59F7] border border-[#1F46FF]/60 flex items-center justify-center backdrop-blur-sm">
-                                      <Image
-                                        src={item.iconSrc!}
-                                        alt={item.label}
-                                        width={20}
-                                        height={20}
-                                        className="h-4 w-4 object-contain"
-                                      />
-                                    </span>
-                                  ) : item.key === "limitless" ? (
-                                    <span className="w-8 h-8 rounded-[12px] bg-[#c3ff01] border border-black/15 flex items-center justify-center">
-                                      <Image
-                                        src={item.iconSrc!}
-                                        alt={item.label}
-                                        width={20}
-                                        height={20}
-                                        className="h-4 w-4 object-contain"
-                                      />
-                                    </span>
-                                  ) : item.key === "predictfun" ? (
-                                    <span className="w-8 h-8 flex items-center justify-center">
-                                      <Image
-                                        src={item.iconSrc!}
-                                        alt={item.label}
-                                        width={20}
-                                        height={20}
-                                        className="h-4 w-4 object-contain"
-                                      />
-                                    </span>
-                                  ) : (
-                                    <Image
-                                      src={item.iconSrc!}
-                                      alt={item.label}
-                                      width={20}
-                                      height={20}
-                                      className="h-5 w-auto object-contain rounded-md"
-                                    />
-                                  )}
-                                </span>
-                                <span>{item.label}</span>
-                                {selectedPredictionSubmode === item.key &&
-                                  predictionDisplayLevel === "provider" &&
-                                  ((item.key === "polymarket" &&
-                                    marketMode === "Polymarket") ||
-                                    (item.key === "kalshi" && marketMode === "Kalshi") ||
-                                    (item.key === "limitless" &&
-                                      marketMode === "Markets") ||
-                                    (item.key === "myriad" && marketMode === "Markets") ||
-                                    (item.key === "predictfun" &&
-                                      marketMode === "Markets")) && (
-                                    <span
-                                      className="ml-auto text-[#FFC000] shrink-0"
-                                      aria-hidden
-                                    >
-                                      ✓
-                                    </span>
-                                  )}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>,
-                      document.body,
-                    )}
-                </div>
-                {/* <button
-                  type="button"
-                  className="h-8 w-8 rounded-lg hover:bg-white/5 active:bg-white/10 transition-colors flex items-center justify-center"
-                  aria-label="Web"
-                >
-                  <Globe className="w-4 h-4" />
-                </button> */}
+                              <SourceLogo kind={item.key} />
+                              {PREDICTION_SUBMODE_LABEL[item.key]}
+                              {selected && checkMark}
+                            </button>
+                          );
+                        })}
+                      </div>
+                    </div>,
+                    document.body,
+                  )}
               </div>
-            ) : (
-              <div />
-            )}
 
-            {isLoading && onStop ? (
-              <button
-                type="button"
-                onClick={onStop}
-                className="h-7 w-7 rounded-lg bg-white/10 hover:bg-white/15 text-white/70 hover:text-white flex items-center justify-center transition-colors"
-                aria-label="Stop generating"
-                title="Stop generating"
-              >
-                <Square className="w-4 h-4 fill-current text-white" />
-              </button>
-            ) : (
-              <button
-                type="submit"
-                disabled={!message.trim() || isInputDisabled}
-                className="h-9 w-9 md:h-10 md:w-10 active:bg-white/10 text-white flex items-center justify-center transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                aria-label="Send message"
-                title="Send (Enter)"
-              >
-                <div className="relative w-7 h-7 md:w-9 md:h-9">
-                  <Image
-                    src="/images/claw_banner.png"
-                    alt="Send"
-                    fill
-                    className="object-contain"
+              {isLoading && onStop ? (
+                <button
+                  type="button"
+                  onClick={onStop}
+                  className="rx-btn rx-btn--s composer__stop"
+                  aria-label="Stop generating"
+                  title="Stop generating"
+                >
+                  <span className="stop-sq" aria-hidden="true" />
+                  Stop
+                </button>
+              ) : (
+                <button
+                  type="submit"
+                  disabled={!message.trim() || isInputDisabled}
+                  className="rx-btn rx-btn--claw rx-btn--s composer__send"
+                  aria-label="Ask Claw"
+                  title="Send (Enter)"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    className="claw-ico claw-logo"
+                    src="/images/claw-logo-96.webp"
+                    width={18}
+                    height={18}
+                    alt=""
                   />
-                </div>
-              </button>
-            )}
-          </div>
+                  Ask Claw
+                </button>
+              )}
+            </div>
+          </form>
         </div>
-      </form>
+        <p className="composer__hint">
+          Claw can be wrong. Check key figures before you trade.
+        </p>
+      </div>
     </div>
   );
 }

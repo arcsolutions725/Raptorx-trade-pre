@@ -143,7 +143,17 @@ export default function RexMarketsPage() {
           />
 
           <div className="flex-1 overflow-hidden">
-            <Suspense fallback={<div className="flex items-center justify-center h-full">Loading markets...</div>}>
+            <Suspense
+              fallback={
+                <div
+                  className="rx-small flex h-full items-center justify-center gap-2.5"
+                  role="status"
+                >
+                  <span className="rx-spin text-rx-gold" aria-hidden />
+                  Loading markets...
+                </div>
+              }
+            >
               <RexMarketsTable
                 onReportGenerated={handleReportGenerated}
                 currentUserId={currentUserId}
@@ -156,7 +166,7 @@ export default function RexMarketsPage() {
 
         {/* Rex Pilot - Right side on desktop, overlay on mobile */}
         <div
-          className={`fixed top-0 right-0 h-screen lg:h-full w-full sm:w-[500px] lg:w-[700px] bg-black z-[60] lg:z-auto transform transition-transform duration-500 ease-in-out ${
+          className={`fixed top-0 right-0 h-screen lg:h-full w-full sm:w-[500px] lg:w-[700px] bg-[#0C0C0C] sm:border-l sm:border-rx-gold-line z-[60] lg:z-auto transform transition-transform duration-500 ease-in-out ${
             showReportSidebar 
               ? "translate-x-0 lg:relative lg:flex-shrink-0" 
               : "translate-x-full lg:absolute"
@@ -193,7 +203,7 @@ export default function RexMarketsPage() {
         {/* Overlay - only on mobile */}
         {showReportSidebar && (
           <div
-            className="lg:hidden fixed inset-0 bg-black/50 z-50"
+            className="lg:hidden fixed inset-0 bg-black/55 backdrop-blur-[2px] z-50"
             onClick={() => setShowReportSidebar(false)}
             aria-hidden="true"
             style={{ touchAction: 'none' }}

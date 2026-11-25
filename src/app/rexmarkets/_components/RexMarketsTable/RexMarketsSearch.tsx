@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, KeyboardEvent } from "react";
-import { Search } from "lucide-react";
+import { CornerDownLeft, Search, X } from "lucide-react";
 
 type RexMarketsSearchProps = {
   onSearch?: (query: string | null) => void;
@@ -59,42 +59,49 @@ export default function RexMarketsSearch({
   };
 
   return (
-    <div className="w-full">
-      <form onSubmit={handleSubmit} className="relative">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/60 w-5 h-5" />
-          <input
-            type="text"
-            value={displayValue}
-            onChange={(e) => {
-              setInternalQuery(e.target.value);
-            }}
-            onKeyDown={handleKeyDown}
-            placeholder="Search markets..."
-            className="w-full pl-10 pr-12 py-2.5 bg-[#262626] border-[0.5px] border-[#3c3c3c] rounded-lg text-base sm:text-sm text-[#A0A0A0] placeholder-[#A0A0A0] outline-none transition-all"
-          />
-          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
-            {hasActiveSearch && (
-              <button
-                type="button"
-                onClick={handleClear}
-                className="p-1.5 rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-400 hover:text-red-300 transition-colors"
-                title="Clear search"
-              >
-                ✕
-              </button>
-            )}
-            <button
-              type="submit"
-              disabled={!internalQuery.trim()}
-              className="p-2 rounded-md bg-[#fff]/10 hover:bg-[#fff]/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              title="Search"
-            >
-              <Search className="w-4 h-4 text-white" />
-            </button>
-          </div>
-        </div>
-      </form>
-    </div>
+    <form
+      onSubmit={handleSubmit}
+      role="search"
+      className="rx-input h-[38px] w-full min-w-0 gap-2 pl-3 pr-1.5"
+    >
+      <Search className="size-3.5 shrink-0 text-rx-text-3" aria-hidden />
+      <label className="sr-only" htmlFor="rex-markets-search">
+        Search markets
+      </label>
+      <input
+        id="rex-markets-search"
+        type="text"
+        enterKeyHint="search"
+        autoComplete="off"
+        value={displayValue}
+        onChange={(e) => {
+          setInternalQuery(e.target.value);
+        }}
+        onKeyDown={handleKeyDown}
+        placeholder="Search markets"
+        className="min-w-0 text-base sm:text-sm"
+      />
+      {hasActiveSearch && (
+        <button
+          type="button"
+          onClick={handleClear}
+          className="rx-icon-btn rx-icon-btn--s size-[26px] shrink-0 rounded-[7px]"
+          title="Clear search"
+          aria-label="Clear search"
+        >
+          <X className="size-3.5" aria-hidden />
+        </button>
+      )}
+      {internalQuery.trim() ? (
+        <button
+          type="submit"
+          className="rx-icon-btn rx-icon-btn--s size-[26px] shrink-0 rounded-[7px] text-rx-gold-hi"
+          title="Search"
+          aria-label="Search"
+        >
+          <CornerDownLeft className="size-3.5" aria-hidden />
+        </button>
+      ) : null}
+    </form>
   );
 }

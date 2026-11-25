@@ -12,7 +12,7 @@ interface ChatContextMenuProps {
 }
 
 export default function ChatContextMenu({
-  chatId,
+  chatId: _chatId,
   onRename,
   onOpenInNewTab,
   onDelete,
@@ -33,46 +33,56 @@ export default function ChatContextMenu({
     };
   }, [onClose]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+
   return (
-    <div
-      ref={menuRef}
-      className="absolute right-0 top-full mt-1 bg-[#2a2a2a] border border-[#3a3a3a] rounded-lg p-1 min-w-[180px] z-50 shadow-lg"
-    >
+    <div ref={menuRef} className="rx-menu claw-hist__menu" role="menu">
       <button
+        type="button"
+        role="menuitem"
         onClick={() => {
           onRename();
           onClose();
         }}
-        className="w-full flex items-center gap-2 px-3 py-2 text-white/80 hover:bg-[#3a3a3a] rounded text-sm transition-colors"
+        className="rx-menu__item"
       >
-        <Pencil className="w-4 h-4" />
+        <Pencil aria-hidden="true" />
         <span>Rename</span>
       </button>
 
       <button
+        type="button"
+        role="menuitem"
         onClick={() => {
           onOpenInNewTab();
           onClose();
         }}
-        className="w-full flex items-center gap-2 px-3 py-2 text-white/80 hover:bg-[#3a3a3a] rounded text-sm transition-colors"
+        className="rx-menu__item"
       >
-        <ExternalLink className="w-4 h-4" />
-        <span>Open in New Tab</span>
+        <ExternalLink aria-hidden="true" />
+        <span>Open in new tab</span>
       </button>
 
-      <div className="border-t border-[#3a3a3a] my-1"></div>
+      <div className="my-1 h-px bg-rx-line" role="separator" />
 
       <button
+        type="button"
+        role="menuitem"
         onClick={() => {
           onDelete();
           onClose();
         }}
-        className="w-full flex items-center gap-2 px-3 py-2 text-red-400 hover:bg-[#3a3a3a] rounded text-sm transition-colors"
+        className="rx-menu__item is-danger"
       >
-        <Trash2 className="w-4 h-4" />
+        <Trash2 aria-hidden="true" />
         <span>Delete</span>
       </button>
     </div>
   );
 }
-

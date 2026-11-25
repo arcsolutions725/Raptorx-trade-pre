@@ -1,6 +1,5 @@
 "use client";
 
-import Image from "next/image";
 import {
   useState,
   useEffect,
@@ -21,7 +20,18 @@ import { useDataSource } from "@/contexts/DataSourceContext";
 import clsx from "clsx";
 import { PaywallModal } from "@/components/ui/modal/PaywallModal";
 import { getMarketReportGenKey } from "@/lib/rexmarkets/marketRoutes";
-import { PREDICT_FUN_LOGO_SRC } from "@/lib/predictfun/assets";
+import {
+  REX_TABLE_GRID,
+  REX_TABLE_GRID_WITH_SOURCE,
+  REX_TABLE_PIN,
+} from "./TableHeader";
+import {
+  CheckIcon,
+  MarketThumb,
+  ReportIcon,
+  VenueBadge,
+  formatCents,
+} from "./listUi";
 
 type MarketReportData = {
   id: string;
@@ -54,9 +64,10 @@ type TableRowProps = {
   showSourceLogo?: boolean;
 };
 
+/** Kalshi prices arrive in dollars (0–1); shown in cents. */
 function formatPrice(price?: number): string {
   if (typeof price !== "number") return "—";
-  return `$${(price * 100).toFixed(2)}¢`;
+  return formatCents(price * 100);
 }
 
 function formatVolume(volume?: number): string {
@@ -72,7 +83,7 @@ function TableRow({
   onMarketSelected,
   onReportGenerated,
   currentUserId,
-  index = 0,
+  // index: kept in props for callers; rows are no longer zebra-striped
   showSourceColumn = false,
   showSourceLogo = false,
 }: TableRowProps) {
@@ -113,8 +124,8 @@ function TableRow({
       ? (market as KalashiMarket).event_ticker
       : null
   );
-  const [imageError, setImageError] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
+  const category = (market as KalashiMarket).category;
 
   // Memoize market type calculations
   const marketsArray = useMemo(() => market?.markets || [], [market?.markets]);
@@ -163,7 +174,7 @@ function TableRow({
       const pmMarket = market as PolymarketMarket;
       if (pmMarket.yesPrice === "—") return "—";
       return typeof pmMarket.yesPrice === "number"
-        ? `$${pmMarket.yesPrice.toFixed(2)}¢`
+        ? formatCents(pmMarket.yesPrice)
         : pmMarket.yesPrice;
     }
     if (isKalshi) {
@@ -174,7 +185,7 @@ function TableRow({
       const limitlessMarket = market as LimitlessMarket;
       if (limitlessMarket.yesPrice === "—") return "—";
       return typeof limitlessMarket.yesPrice === "number"
-        ? `$${limitlessMarket.yesPrice.toFixed(2)}¢`
+        ? formatCents(limitlessMarket.yesPrice)
         : limitlessMarket.yesPrice;
     }
     return "—";
@@ -185,7 +196,7 @@ function TableRow({
       const pmMarket = market as PolymarketMarket;
       if (pmMarket.noPrice === "—") return "—";
       return typeof pmMarket.noPrice === "number"
-        ? `$${pmMarket.noPrice.toFixed(2)}¢`
+        ? formatCents(pmMarket.noPrice)
         : pmMarket.noPrice;
     }
     if (isKalshi) {
@@ -196,7 +207,7 @@ function TableRow({
       const limitlessMarket = market as LimitlessMarket;
       if (limitlessMarket.noPrice === "—") return "—";
       return typeof limitlessMarket.noPrice === "number"
-        ? `$${limitlessMarket.noPrice.toFixed(2)}¢`
+        ? formatCents(limitlessMarket.noPrice)
         : limitlessMarket.noPrice;
     }
     return "—";
@@ -207,7 +218,7 @@ function TableRow({
       const pmMarket = market as PolymarketMarket;
       if (pmMarket.choiceI === "—") return "—";
       return typeof pmMarket.choiceI === "number"
-        ? `$${pmMarket.choiceI.toFixed(2)}¢`
+        ? formatCents(pmMarket.choiceI)
         : pmMarket.choiceI;
     }
     if (isKalshi) {
@@ -219,7 +230,7 @@ function TableRow({
       const limitlessMarket = market as LimitlessMarket;
       if (limitlessMarket.choiceI === "—") return "—";
       return typeof limitlessMarket.choiceI === "number"
-        ? `$${limitlessMarket.choiceI.toFixed(2)}¢`
+        ? formatCents(limitlessMarket.choiceI)
         : limitlessMarket.choiceI;
     }
     return "—";
@@ -230,7 +241,7 @@ function TableRow({
       const pmMarket = market as PolymarketMarket;
       if (pmMarket.choiceII === "—") return "—";
       return typeof pmMarket.choiceII === "number"
-        ? `$${pmMarket.choiceII.toFixed(2)}¢`
+        ? formatCents(pmMarket.choiceII)
         : pmMarket.choiceII;
     }
     if (isKalshi) {
@@ -242,7 +253,7 @@ function TableRow({
       const limitlessMarket = market as LimitlessMarket;
       if (limitlessMarket.choiceII === "—") return "—";
       return typeof limitlessMarket.choiceII === "number"
-        ? `$${limitlessMarket.choiceII.toFixed(2)}¢`
+        ? formatCents(limitlessMarket.choiceII)
         : limitlessMarket.choiceII;
     }
     return "—";
@@ -264,11 +275,6 @@ function TableRow({
     }
     return "—";
   }, [market, isPolymarket, isKalshi, isLimitlessLike]);
-
-  // Reset image error when market or image URL changes
-  useEffect(() => {
-    setImageError(false);
-  }, [market?.ticker, symbolImageUrl]);
 
   // Initialize countdown when generation starts
   useEffect(() => {
@@ -358,10 +364,6 @@ function TableRow({
     await login();
   }, [ready, login]);
 
-  const handleImageError = useCallback(() => {
-    setImageError(true);
-  }, []);
-
   const handleGenerateButtonClick = useCallback(
     (e: MouseEvent<HTMLButtonElement>) => {
       e.stopPropagation();
@@ -374,186 +376,96 @@ function TableRow({
     [authenticated, handleSignIn, onGenerateClick, market]
   );
 
-  const isEvenRow = index % 2 === 1;
+  const showMeta = showSourceLogo || !!category;
 
-  const gridColumns = showSourceColumn
-    ? "[grid-template-columns:minmax(300px,2fr)_minmax(100px,1fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(100px,1fr)] sm:[grid-template-columns:minmax(400px,2.5fr)_minmax(100px,1fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(100px,1fr)]"
-    : "[grid-template-columns:minmax(300px,2fr)_minmax(100px,1fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)] sm:[grid-template-columns:minmax(400px,2.5fr)_minmax(100px,1fr)_minmax(100px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)_minmax(120px,1fr)]";
+  const cell =
+    "flex items-center justify-end whitespace-nowrap px-2.5 py-3 font-mono text-[14px] font-medium tabular-nums tracking-[-.01em]";
 
   return (
     <>
     <div
-      className={`grid ${gridColumns} items-center px-0 py-0 text-sm text-white/90 text-[14px] ${
-        isEvenRow ? "bg-[#191919]" : "bg-black"
-      }`}
+      className={clsx(
+        "group/row grid items-center border-b border-[rgba(36,36,36,.7)] text-rx-text transition-colors duration-150 hover:bg-[rgba(255,184,0,.035)]",
+        showSourceColumn ? REX_TABLE_GRID_WITH_SOURCE : REX_TABLE_GRID,
+      )}
     >
-      {/* Markets */}
+      {/* Market (pinned); the whole cell opens the market, the title is the keyboard target */}
       <div
-        className={`sm:sticky sm:left-0 sm:z-10 flex items-center px-3 py-2 whitespace-nowrap truncate ${
-          isEvenRow ? "bg-[#191919]" : "bg-black"
-        } cursor-pointer text-[#ffc000] hover:text-white transition-all duration-200`}
+        className={clsx(
+          REX_TABLE_PIN,
+          "z-[1] flex min-w-0 cursor-pointer items-center gap-3 self-stretch py-3 pl-3 pr-2.5 transition-colors duration-150 group-hover/row:bg-[#15120C] sm:pl-1",
+        )}
         title={market.title}
         onClick={handleClick}
       >
-        <div className="flex items-center gap-2 min-w-0">
-          {symbolImageUrl && !imageError && (
-            <div className="flex-shrink-0">
-              <Image
-                src={symbolImageUrl}
-                alt={market.title || "Market"}
-                width={32}
-                height={32}
-                className="rounded"
-                unoptimized
-                onError={handleImageError}
-              />
+        <MarketThumb src={symbolImageUrl} title={market.title} size={32} />
+        <div className="flex min-w-0 flex-1 flex-col gap-1">
+          <button
+            type="button"
+            className="line-clamp-2 min-w-0 whitespace-normal break-words text-left text-[14px] font-semibold leading-[1.3] text-rx-text transition-colors hover:text-rx-gold-hi focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rx-gold-hi md:line-clamp-1"
+          >
+            {market.title}
+          </button>
+          {showMeta && (
+            <div className="flex min-w-0 items-center gap-1.5 text-[11px] leading-none text-rx-text-2">
+              {showSourceLogo && <VenueBadge venue={marketSource} />}
+              {category && <span className="truncate">{category}</span>}
             </div>
           )}
-          <div className="flex flex-col min-w-0 gap-1 flex-1">
-            <div className="flex items-center gap-2">
-              <span className="!font-bold leading-tight truncate">
-                {market.title}
-              </span>
-              {showSourceLogo && (
-                <div className="flex-shrink-0 flex items-center">
-                  <span className="text-white/60">(</span>
-                  {isPolymarket ? (
-                    <Image
-                      src="/images/polymarket.png"
-                      alt="Polymarket"
-                      width={16}
-                      height={16}
-                      className="w-4 h-4"
-                    />
-                  ) : isLimitless ? (
-                    <span className="text-[#8B5CF6] font-bold text-sm">L</span>
-                  ) : isMyriad ? (
-                    <Image
-                      src="/images/myriad.webp"
-                      alt="Myriad"
-                      width={16}
-                      height={16}
-                      className="w-4 h-4 object-contain"
-                    />
-                  ) : isPredictFun ? (
-                    <Image
-                      src={PREDICT_FUN_LOGO_SRC}
-                      alt="Predict.fun"
-                      width={16}
-                      height={16}
-                      className="w-4 h-4 object-contain"
-                    />
-                  ) : (
-                    <span className="text-[#17cb91] font-bold text-sm">K</span>
-                  )}
-                  <span className="text-white/60">)</span>
-                </div>
-              )}
-            </div>
-          </div>
         </div>
       </div>
 
       {/* Choice I */}
-      <div
-        className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-[51px] items-center ${
-          isEvenRow ? "bg-[#191919]" : "bg-black"
-        }`}
-      >
-        <span className="!font-bold">{choice1Price}</span>
-      </div>
+      <div className={cell}>{choice1Price}</div>
 
       {/* Choice II */}
-      <div
-        className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-[51px] items-center ${
-          isEvenRow ? "bg-[#191919]" : "bg-black"
-        }`}
-      >
-        <span className="!font-bold">{choice2Price}</span>
-      </div>
+      <div className={cell}>{choice2Price}</div>
 
       {/* AI Report */}
-      <div
-        className={`flex justify-center px-3 py-2 whitespace-nowrap truncate h-[51px] items-center ${
-          isEvenRow ? "bg-[#191919]" : "bg-black"
-        }`}
-      >
+      <div className="flex items-center justify-end px-2.5 py-3">
         {isGenerating && countdown !== null ? (
-          <div className="flex flex-col items-center">
-            <div className="text-[#FFD700] font-bold text-lg animate-pulse">
-              {countdown}s
-            </div>
-          </div>
+          <span
+            className="rx-btn rx-btn--report rx-btn--s pointer-events-none tabular-nums"
+            role="status"
+            aria-label={`Generating report, ${countdown} seconds left`}
+          >
+            <span className="rx-spin size-3 border-[1.5px] text-rx-gold" aria-hidden />
+            Generating {countdown}s
+          </span>
         ) : hasGenerated ? (
-          <div className="flex items-center justify-center w-[78px] h-[32px] rounded-sm bg-[#FFD700]">
-            <span className="text-black !font-bold text-sm">Generated!</span>
-          </div>
+          <span className="rx-badge rx-badge--up h-8 gap-1.5 px-2.5 text-[12px]">
+            <CheckIcon />
+            Generated
+          </span>
         ) : (
           <button
             type="button"
             onClick={handleGenerateButtonClick}
             disabled={isGenerating || !ready}
-            className={clsx(
-              "relative w-[70px] h-[30px] flex items-center justify-center transition",
-              isGenerating || !ready
-                ? "opacity-60 cursor-wait"
-                : "cursor-pointer hover:opacity-80"
-            )}
+            className="rx-btn rx-btn--report rx-btn--s"
             aria-label={`Generate report for ${market.title}`}
-            style={{ flexShrink: 0, pointerEvents: "auto" }}
           >
-            <Image
-              src="/images/generate.webp"
-              alt="generate report"
-              width={100}
-              height={40}
-              className="object-contain hover:scale-[1.05] transition pointer-events-none"
-            />
+            <ReportIcon />
+            Generate report
           </button>
         )}
       </div>
 
       {/* YES Price */}
-      <div
-        className={`h-[51px] items-center flex justify-center px-3 py-2 whitespace-nowrap truncate ${
-          isEvenRow ? "bg-[#191919]" : "bg-black"
-        }`}
-      >
-        <span className="!font-bold text-green-400">{yesPrice}</span>
-      </div>
+      <div className={clsx(cell, "text-rx-up")}>{yesPrice}</div>
 
       {/* No Price */}
-      <div
-        className={`h-[51px] items-center flex justify-center px-3 py-2 whitespace-nowrap truncate ${
-          isEvenRow ? "bg-[#191919]" : "bg-black"
-        }`}
-      >
-        <span className="!font-bold text-red-400">{noPrice}</span>
-      </div>
+      <div className={clsx(cell, "text-rx-down")}>{noPrice}</div>
 
       {/* Vol(24h) */}
-      <div
-        className={`flex items-center justify-center px-3 py-2 whitespace-nowrap h-[51px] relative ${
-          isEvenRow ? "bg-[#191919]" : "bg-black"
-        }`}
-      >
-        <span className="!font-bold">{volume24h}</span>
+      <div className={clsx(cell, !showSourceColumn && "pr-3 sm:pr-1")}>
+        {volume24h}
       </div>
 
       {/* Source - only shown when showSourceColumn is true */}
       {showSourceColumn && (
-        <div
-          className={`flex items-center justify-center px-3 py-2 whitespace-nowrap h-[51px] relative ${
-            isEvenRow ? "bg-[#191919]" : "bg-black"
-          }`}
-        >
-          <span className="!font-bold text-xs">
-            {marketSource === "polymarket" ? (
-              <span className="text-[#2C59F7]">Polymarket</span>
-            ) : (
-              <span className="text-[#17cb91]">Kalshi</span>
-            )}
-          </span>
+        <div className="flex items-center justify-end px-2.5 py-3 pr-3 sm:pr-1">
+          <VenueBadge venue={marketSource} />
         </div>
       )}
     </div>

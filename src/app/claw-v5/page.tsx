@@ -5,9 +5,8 @@ import { useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
 import Image from "next/image";
-import ChatSidebar, {
-  clawV5HeaderNavShiftPx,
-} from "./_components/chat/ChatSidebar";
+import ChatSidebar from "./_components/chat/ChatSidebar";
+import ClawAura from "./_components/chat/ClawAura";
 import ChatInput, {
   type PredictionMarketMode,
   type ClawSelectionContext,
@@ -22,7 +21,8 @@ import {
   saveChatToStorage,
   Chat,
 } from "@/lib/storage/chatStorage";
-import { Loader2, Menu } from "lucide-react";
+import { ArrowRight, Clock, PanelLeft, TrendingUp } from "lucide-react";
+import clsx from "clsx";
 import { PaywallModal, type PaywallLimitCode } from "@/components/ui/modal/PaywallModal";
 
 import {
@@ -367,169 +367,156 @@ export default function ClawV5Page() {
       .replace(/^Crypto:\s*/i, "")
       .trim();
 
+  /** Prompt cards: the spotlight follows the pointer (prototype hover). */
+  const trackSpotlight = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    e.currentTarget.style.setProperty("--mx", `${e.clientX - r.left}px`);
+    e.currentTarget.style.setProperty("--my", `${e.clientY - r.top}px`);
+  };
+
   return (
     <>
     <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="flex h-full min-h-0 w-full flex-col">
-          {/* Header */}
-          <RexHeader
-            onHistoryClick={() => {}}
-            showExchangeButton={false}
-            clawV5MainNavShiftPx={clawV5HeaderNavShiftPx(
-              isChatSidebarCollapsed,
-            )}
-          />
+      {/* Header */}
+      <RexHeader onHistoryClick={() => {}} showExchangeButton={false} />
 
-          {/* Main Content */}
-          <div className="flex min-h-0 flex-1 overflow-hidden bg-black border-y-2 border-[#FFC000] relative">
-            {/* Mobile Sidebar Toggle Button - Top Left */}
-            <button
-              onClick={() => setIsSidebarOpen(true)}
-              className="md:hidden absolute top-4 left-4 z-20 text-white/80 hover:text-white transition-colors"
-              aria-label="Open sidebar"
-            >
-              <Menu className="w-6 h-6" />
-            </button>
+      {/* Main Content */}
+      <div className={clsx("claw", isSending && "is-thinking")}>
+        <ClawAura />
 
-            <ChatSidebar
-              chats={chats}
-              isLoading={isLoading}
-              onNewChat={handleNewChat}
-              onChatRename={handleChatRename}
-              onChatDelete={handleChatDelete}
-              isMobileOpen={isSidebarOpen}
-              onMobileClose={() => setIsSidebarOpen(false)}
-              collapsed={isChatSidebarCollapsed}
-              onCollapsedChange={setIsChatSidebarCollapsed}
-            />
+        <ChatSidebar
+          chats={chats}
+          isLoading={isLoading}
+          onNewChat={handleNewChat}
+          onChatRename={handleChatRename}
+          onChatDelete={handleChatDelete}
+          isMobileOpen={isSidebarOpen}
+          onMobileClose={() => setIsSidebarOpen(false)}
+          collapsed={isChatSidebarCollapsed}
+          onCollapsedChange={setIsChatSidebarCollapsed}
+        />
 
-            <div className="flex-1 flex flex-col bg-black min-w-0 min-h-0">
-              {/* Scroll matches chat thread: custom scrollbar + min-h-0 flex fix */}
-              <div
-                ref={welcomeScrollRef}
-                className="flex-1 overflow-y-auto overflow-x-clip min-h-0 custom-chat-messages-scrollbar px-2 md:px-4 pt-2 md:pt-8 pb-2"
-              >
-                <div
-                  className={`mx-auto w-full max-w-4xl flex flex-col pb-3 md:pb-6 ${
-                    isSending
-                      ? "items-stretch justify-start gap-3 min-h-0"
-                      : "items-center justify-center min-h-full p-3 md:p-8"
-                  }`}
-                >
-                {isSending ? (
-                  <div className="flex flex-col items-center gap-4">
-                    <Loader2 className="w-12 h-12 text-[#FFC000] animate-spin" />
-                    <p className="text-sm text-white/70 text-center px-4">
-                      Opening chat…
-                    </p>
-                  </div>
-                ) : (
-                  <>
-                    {/* Claw v5 Icon */}
-                    <div className="mb-2 md:mb-8 w-12 h-12 md:w-24 md:h-24 relative">
-                      <Image
-                        src="/images/claw-v5.webp"
-                        alt="Claw v5"
-                        fill
-                        className="object-contain"
-                        priority
-                      />
-                    </div>
+        <section
+          className={clsx("claw-main", isSending && "is-thinking")}
+          aria-label="Claw AI conversation"
+        >
+          {/* Mobile: open the chats drawer */}
+          <button
+            type="button"
+            onClick={() => setIsSidebarOpen(true)}
+            className="rx-icon-btn claw-toggle md:hidden"
+            aria-label="Open chats"
+            aria-expanded={isSidebarOpen}
+          >
+            <PanelLeft className="size-[18px]" aria-hidden="true" />
+          </button>
 
-                    {/* Welcome Message */}
-                    <h1 className="text-[18px] md:text-xl font-semibold! text-white/85 mb-7 md:mb-8 text-center px-2 md:px-4 leading-snug max-w-[22rem] md:max-w-none">
-                      Claw: The Thinking Engine for Prediction Markets & Crypto
-                    </h1>
-
-                    {/* Sample Prompts */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 md:gap-4 max-w-md md:max-w-4xl w-full mb-6 md:mb-8 px-0 md:px-4">
-                      <button
-                        onClick={() =>
-                          setPrefillText(
-                            stripLeadingLabel(MARKET_SAMPLE_PROMPT),
-                          )
-                        }
-                        disabled={!authenticated}
-                        className="bg-[#141414] border border-[#3C3C3C] hover:border-[#FFC000]/40 rounded-2xl p-2 md:p-6 text-left transition-colors w-full shadow-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-[#3C3C3C]"
-                      >
-                        <div className="flex items-center gap-3 mb-3">
-                          <span className="w-9 h-9 md:w-11 md:h-11 flex items-center justify-center overflow-hidden">
-                            <Image
-                              src="/images/market-prompt.webp"
-                              alt="Markets Prompt"
-                              width={28}
-                              height={28}
-                              className="w-9 h-9 md:w-11 md:h-11 object-contain"
-                              priority
-                            />
-                          </span>
-                          <div className="min-w-0">
-                            <h3 className="text-white/90 font-semibold text-sm!">
-                              Markets Prompt Example
-                            </h3>
-                          </div>
-                        </div>
-                        <p className="text-[#A3A3A3] text-xs leading-relaxed">
-                          {stripLeadingLabel(MARKET_SAMPLE_PROMPT)}
-                        </p>
-                      </button>
-
-                      <button
-                        onClick={() =>
-                          setPrefillText(
-                            stripLeadingLabel(CRYPTO_SAMPLE_PROMPT),
-                          )
-                        }
-                        disabled={!authenticated}
-                        className="bg-[#141414] border border-[#3C3C3C] hover:border-[#FFC000]/40 rounded-2xl p-4 md:p-6 text-left transition-colors w-full shadow-sm disabled:opacity-60 disabled:cursor-not-allowed disabled:hover:border-[#3C3C3C]"
-                      >
-                        <div className="flex items-center gap-3 mb-3">
-                          <span className="w-9 h-9 md:w-11 md:h-11 flex items-center justify-center overflow-hidden">
-                            <Image
-                              src="/images/crypto-prompt.webp"
-                              alt="Crypto Prompt"
-                              width={28}
-                              height={28}
-                              className="w-9 h-9 md:w-11 md:h-11 object-contain"
-                              priority
-                            />
-                          </span>
-                          <div className="min-w-0">
-                            <h3 className="text-white/90 font-semibold text-sm!">
-                              Crypto Prompt Example
-                            </h3>
-                          </div>
-                        </div>
-                        <p className="text-[#A3A3A3] text-xs leading-relaxed">
-                          {stripLeadingLabel(CRYPTO_SAMPLE_PROMPT)}
-                        </p>
-                      </button>
-                    </div>
-                  </>
-                )}
+          {/* Scroll matches chat thread: custom scrollbar + min-h-0 flex fix */}
+          <div
+            ref={welcomeScrollRef}
+            className="claw-scroll custom-chat-messages-scrollbar"
+          >
+            <div className="claw-col">
+              {isSending ? (
+                <div className="claw-status" role="status" aria-live="polite">
+                  <span className="rx-spin" aria-hidden="true" />
+                  <p className="m-0">Opening chat…</p>
                 </div>
-              </div>
+              ) : (
+                <div className="claw-empty">
+                  <Image
+                    className="claw-hero"
+                    src="/images/claw-hero.webp"
+                    alt=""
+                    width={232}
+                    height={232}
+                    priority
+                  />
 
-              {/* Chat Input */}
-              <ChatInput
-                onSendMessage={handleSendMessage}
-                isLoading={isSending}
-                onStop={handleStop}
-                placeholder="Search Prediction Events, Arbitrage, Wallets, Cryptocurrencies and more!"
-                prefillText={prefillText}
-                marketMode={marketMode}
-                onMarketModeChange={setMarketMode}
-                disabled={!authenticated}
-                disabledPlaceholder="Sign in to chat"
-              />
+                  {/* Welcome Message */}
+                  <h1>
+                    Claw AI 5.0: The Thinking Engine for
+                    <br />
+                    <em>Prediction Markets &amp; Crypto</em>
+                  </h1>
+
+                  {/* Sample Prompts */}
+                  <div
+                    className="claw-prompts"
+                    role="list"
+                    aria-label="Example questions"
+                  >
+                    <button
+                      type="button"
+                      role="listitem"
+                      onPointerMove={trackSpotlight}
+                      onClick={() =>
+                        setPrefillText(stripLeadingLabel(MARKET_SAMPLE_PROMPT))
+                      }
+                      disabled={!authenticated}
+                      className="claw-prompt"
+                    >
+                      <span className="claw-prompt__ico" aria-hidden="true">
+                        <Clock />
+                      </span>
+                      <span className="claw-prompt__text">
+                        <span className="claw-prompt__label">Markets prompt</span>
+                        <span className="claw-prompt__q">
+                          {stripLeadingLabel(MARKET_SAMPLE_PROMPT)}
+                        </span>
+                      </span>
+                      <span className="claw-prompt__go" aria-hidden="true">
+                        <ArrowRight className="size-4" />
+                      </span>
+                    </button>
+
+                    <button
+                      type="button"
+                      role="listitem"
+                      onPointerMove={trackSpotlight}
+                      onClick={() =>
+                        setPrefillText(stripLeadingLabel(CRYPTO_SAMPLE_PROMPT))
+                      }
+                      disabled={!authenticated}
+                      className="claw-prompt claw-prompt--ember"
+                    >
+                      <span className="claw-prompt__ico" aria-hidden="true">
+                        <TrendingUp />
+                      </span>
+                      <span className="claw-prompt__text">
+                        <span className="claw-prompt__label">Crypto prompt</span>
+                        <span className="claw-prompt__q">
+                          {stripLeadingLabel(CRYPTO_SAMPLE_PROMPT)}
+                        </span>
+                      </span>
+                      <span className="claw-prompt__go" aria-hidden="true">
+                        <ArrowRight className="size-4" />
+                      </span>
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Footer */}
-          <Footer />
-        </div>
+          {/* Chat Input */}
+          <ChatInput
+            onSendMessage={handleSendMessage}
+            isLoading={isSending}
+            onStop={handleStop}
+            placeholder="Search Prediction Events, Arbitrage, Wallets, Cryptocurrencies and more!"
+            prefillText={prefillText}
+            marketMode={marketMode}
+            onMarketModeChange={setMarketMode}
+            disabled={!authenticated}
+            disabledPlaceholder="Sign in to chat"
+            intro
+          />
+        </section>
       </div>
+
+      {/* Footer */}
+      <Footer />
     </div>
     <PaywallModal
       open={showPaywall}

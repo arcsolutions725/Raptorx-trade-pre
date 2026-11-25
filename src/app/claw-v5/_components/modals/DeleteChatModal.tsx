@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { createPortal } from "react-dom";
-import { X, AlertTriangle, Loader2 } from "lucide-react";
+import { X, AlertTriangle } from "lucide-react";
 
 interface DeleteChatModalProps {
   isOpen: boolean;
@@ -57,55 +57,63 @@ export default function DeleteChatModal({
   };
 
   const modalContent = (
-    <div 
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onClick={handleBackdropClick}
-    >
-      <div 
-        className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-4 w-full max-w-xs overflow-hidden min-w-0"
-        onClick={(e) => e.stopPropagation()}
+    <div className="rx-claw">
+      <div
+        className="claw-modal-root"
+        onClick={handleBackdropClick}
       >
-        <div className="flex items-center justify-between mb-3 min-w-0">
-          <h2 className="text-white text-base font-semibold truncate pr-2">Delete Chat</h2>
-          <button
-            onClick={onClose}
-            disabled={isDeleting}
-            className="flex-shrink-0 text-gray-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <div className="mb-4 min-w-0">
-          <div className="flex items-center gap-2 mb-2 min-w-0">
-            <AlertTriangle className="w-4 h-4 flex-shrink-0 text-red-400" />
-            <p className="text-white text-sm min-w-0">
-              Are you sure you want to delete this chat?
-            </p>
+        <div
+          className="claw-modal min-w-0"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="claw-delete-title"
+          aria-describedby="claw-delete-desc"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="claw-modal__head">
+            <span
+              className="flex size-9 shrink-0 items-center justify-center rounded-[10px] border border-[var(--rx-down-line)] bg-rx-down-tint text-rx-down"
+              aria-hidden="true"
+            >
+              <AlertTriangle className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <h2 id="claw-delete-title">Delete chat?</h2>
+              <p id="claw-delete-desc">
+                &ldquo;{chatTitle}&rdquo; will be permanently deleted. This
+                action cannot be undone.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isDeleting}
+              className="rx-icon-btn rx-icon-btn--s disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Close"
+            >
+              <X className="size-4" aria-hidden="true" />
+            </button>
           </div>
-          <p className="text-gray-400 text-xs pl-6 break-all min-w-0">
-            "{chatTitle}" will be permanently deleted. This action cannot be undone.
-          </p>
-        </div>
 
-        <div className="flex gap-2 justify-end">
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={isDeleting}
-            className="px-3 py-1.5 text-gray-400 hover:text-white transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Cancel
-          </button>
-          <button
-            type="button"
-            onClick={handleConfirm}
-            disabled={isDeleting}
-            className="px-3 py-1.5 bg-red-600 text-white rounded hover:bg-red-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-2"
-          >
-            {isDeleting && <Loader2 className="w-4 h-4 animate-spin" />}
-            <span>{isDeleting ? "Deleting..." : "Delete"}</span>
-          </button>
+          <div className="claw-modal__foot">
+            <button
+              type="button"
+              onClick={onClose}
+              disabled={isDeleting}
+              className="rx-btn rx-btn--secondary"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirm}
+              disabled={isDeleting}
+              className="rx-btn rx-btn--danger"
+            >
+              {isDeleting && <span className="rx-spin" aria-hidden="true" />}
+              <span>{isDeleting ? "Deleting..." : "Delete"}</span>
+            </button>
+          </div>
         </div>
       </div>
     </div>

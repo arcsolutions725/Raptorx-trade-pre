@@ -1,6 +1,7 @@
 "use client";
 
-import { X } from "lucide-react";
+import { ArrowLeftRight, X } from "lucide-react";
+import clsx from "clsx";
 import { SwapWidget } from "@/components/swap/SwapWidget";
 import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
 import { useEthereumWalletAddress } from "@/hooks/useEthereumWalletAddress";
@@ -80,17 +81,30 @@ export function CryptoSwapPanel({
         ? ethereumAddress
         : null;
 
-  // Only mount SwapWidget when panel is open so it receives toTokenAddress on first mount (fixes empty "To" field)
-  const content = (
-    <div className="relative h-full min-h-0 bg-[#0b0b0b]">
+  const head = (
+    <div className="panel__head">
+      <span className="claw-mark" aria-hidden="true">
+        <ArrowLeftRight className="size-3.5" />
+      </span>
+      <div className="panel__title">
+        <b>Exchange</b>
+        <span>Swap tokens instantly · powered by RaptorX</span>
+      </div>
       <button
+        type="button"
         onClick={onClose}
-        className="absolute top-3 right-3 z-[1000] p-2 rounded-lg bg-black/70 border border-white/15 hover:bg-white/5 active:bg-white/10 transition-colors"
+        className="rx-icon-btn panel-ctl"
         aria-label="Close exchange panel"
         title="Close"
       >
-        <X className="w-5 h-5 text-white/85" />
+        <X className="size-3.5" aria-hidden="true" />
       </button>
+    </div>
+  );
+
+  // Only mount SwapWidget when panel is open so it receives toTokenAddress on first mount (fixes empty "To" field)
+  const content = (
+    <div className="panel__body">
       <div className="h-full">
         {isOpen ? (
           <SwapWidget
@@ -109,45 +123,33 @@ export function CryptoSwapPanel({
 
   return (
     <>
-      {/* Desktop panel */}
+      {/* Desktop: third column */}
       <aside
-        className={`hidden lg:flex flex-col h-full min-h-0 overflow-hidden bg-[#0b0b0b] transition-all duration-300 ease-in-out ${
-          isOpen
-            ? "w-[420px] border-l border-white/10 opacity-100"
-            : "w-0 border-l-0 opacity-0 pointer-events-none"
-        }`}
+        className={clsx("claw-x hidden lg:block", isOpen && "is-open")}
+        aria-label="Exchange"
         aria-hidden={!isOpen}
       >
-        <div
-          className={`w-[420px] h-full transition-transform duration-300 ease-in-out ${
-            isOpen ? "translate-x-0" : "translate-x-full"
-          }`}
-        >
+        <div className="rx-raised claw-x__panel">
+          {head}
           {content}
         </div>
       </aside>
 
-      {/* Mobile drawer */}
+      {/* Phones and tablets: bottom sheet */}
       <div
-        className={`lg:hidden fixed inset-0 z-50 ${isOpen ? "" : "pointer-events-none"}`}
+        className={clsx("claw-sheet lg:hidden", isOpen && "is-open")}
         aria-hidden={!isOpen}
       >
-        <div
-          className={`absolute inset-0 bg-black/60 transition-opacity ${
-            isOpen ? "opacity-100" : "opacity-0"
-          }`}
-          onClick={onClose}
-        />
+        <div className="claw-sheet__scrim" onClick={onClose} />
         <aside
-          className={`absolute right-0 top-0 h-full w-[min(420px,100%)] border-l border-white/10 bg-[#0b0b0b] transform transition-transform ${
-            isOpen ? "translate-x-0" : "translate-x-full"
-          }`}
+          className="rx-raised claw-sheet__panel"
+          aria-label="Exchange"
         >
+          <span className="claw-sheet__grip" aria-hidden="true" />
+          {head}
           {content}
         </aside>
       </div>
     </>
   );
 }
-
-

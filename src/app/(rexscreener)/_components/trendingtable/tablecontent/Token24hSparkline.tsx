@@ -1,6 +1,7 @@
 "use client";
 
-import { useId, useMemo } from "react";
+import { useMemo } from "react";
+import clsx from "clsx";
 
 function syntheticNormalizedSeries(pct: number | undefined, n = 24): number[] {
   if (pct == null || !Number.isFinite(pct) || Math.abs(pct) < 0.0001) {
@@ -21,27 +22,38 @@ function syntheticNormalizedSeries(pct: number | undefined, n = 24): number[] {
   return out;
 }
 
+type Tone = "up" | "down" | "flat" | "none";
+
+function toneOf(changePct: number | undefined): Tone {
+  if (changePct == null || !Number.isFinite(changePct)) return "none";
+  if (Math.abs(changePct) < 0.005) return "flat";
+  return changePct > 0 ? "up" : "down";
+}
+
+/** RaptorX signal colours (--rx-up / --rx-down), neutral for flat or missing. */
 function strokeColor(changePct: number | undefined): string {
-  if (changePct == null || !Number.isFinite(changePct)) return "#737373";
-  if (Math.abs(changePct) < 0.005) return "#737373";
-  return changePct > 0 ? "#22c55e" : "#ef4444";
+  const tone = toneOf(changePct);
+  if (tone === "up") return "#45E3A3";
+  if (tone === "down") return "#FF7A7A";
+  return "#8A8988";
 }
 
 function format24hLabel(changePct: number | undefined): {
   text: string;
   title: string;
-  className: string;
+  tone: Tone;
 } {
-  if (changePct == null || !Number.isFinite(changePct)) {
-    return { text: "—", title: "", className: "text-white/45" };
+  const tone = toneOf(changePct);
+  if (changePct == null || tone === "none") {
+    return { text: "—", title: "", tone };
   }
   const rawAbs = Math.abs(changePct);
   const fullTitle = `${changePct > 0 ? "▲ " : "▼ "}${rawAbs.toLocaleString(undefined, {
     maximumFractionDigits: 6,
   })}%`;
 
-  if (rawAbs < 0.005) {
-    return { text: "0.00%", title: "0.00%", className: "text-white/45" };
+  if (tone === "flat") {
+    return { text: "0.00%", title: "0.00%", tone };
   }
 
   const sign = changePct > 0 ? "▲ " : "▼ ";
@@ -62,10 +74,34 @@ function format24hLabel(changePct: number | undefined): {
     display = `${sign}${t >= 100 ? t.toFixed(1) : t.toFixed(2)}T%`;
   }
 
-  if (changePct > 0) {
-    return { text: display, title: fullTitle, className: "text-green-500" };
+  return { text: display, title: fullTitle, tone };
+}
+
+/** 24h price change as an up / down badge (RexScreener "24h" column). */
+export function Token24hChangeBadge({
+  changePct24h,
+}: {
+  changePct24h: number | undefined;
+}) {
+  const label = format24hLabel(changePct24h);
+  if (label.tone === "none") {
+    return <span className="text-rx-text-3">—</span>;
   }
-  return { text: display, title: fullTitle, className: "text-red-500" };
+  return (
+    <span
+      title={label.title || undefined}
+      className={clsx(
+        "rx-badge max-w-full overflow-hidden text-ellipsis tabular-nums",
+        label.tone === "up"
+          ? "rx-badge--up"
+          : label.tone === "down"
+            ? "rx-badge--down"
+            : "rx-badge--neutral",
+      )}
+    >
+      {label.text}
+    </span>
+  );
 }
 
 type Props = {
@@ -75,31 +111,30 @@ type Props = {
   isFetching?: boolean;
 };
 
+/** 24h trend line (hourly from Birdeye; falls back to a shape drawn from the 24h %). */
 export function Token24hSparkline({
   changePct24h,
   seriesY,
   isFetching,
 }: Props) {
-  const filterId = useId().replace(/:/g, "");
   const points = useMemo(() => {
     if (seriesY && seriesY.length >= 2) return seriesY;
     return syntheticNormalizedSeries(changePct24h);
   }, [seriesY, changePct24h]);
 
   const color = strokeColor(changePct24h);
-  const label = format24hLabel(changePct24h);
+  const waiting = Boolean(isFetching && (!seriesY || seriesY.length < 2));
 
-  const w = 100;
-  const h = 34;
-  const padX = 2;
-  const padY = 5;
+  const w = 80;
+  const h = 28;
+  const padX = 1;
+  const padY = 3;
 
   const pathD = useMemo(() => {
     if (points.length < 2) return "";
     return points
       .map((y, i) => {
-        const x =
-          padX + (i / (points.length - 1)) * (w - 2 * padX);
+        const x = padX + (i / (points.length - 1)) * (w - 2 * padX);
         const yy = padY + (1 - y) * (h - 2 * padY);
         return `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${yy.toFixed(1)}`;
       })
@@ -107,52 +142,31 @@ export function Token24hSparkline({
   }, [points]);
 
   return (
-    <div className="flex h-full min-h-0 w-full min-w-0 flex-col items-end justify-center gap-0.5 py-0.5 pr-0 sm:pr-1">
-      <div className="relative h-7 w-full max-w-[104px] shrink-0">
-        {isFetching && (!seriesY || seriesY.length < 2) ? (
-          <div className="absolute inset-0 flex items-center justify-end">
-            <span className="h-1 w-8 rounded-full bg-white/10 animate-pulse" />
-          </div>
-        ) : null}
-        <svg
-          viewBox={`0 0 ${w} ${h}`}
-          className="h-full w-full"
-          preserveAspectRatio="none"
-          aria-hidden
-        >
-          <defs>
-            <filter
-              id={`glow-${filterId}`}
-              x="-40%"
-              y="-40%"
-              width="180%"
-              height="180%"
-            >
-              <feGaussianBlur stdDeviation="0.9" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
-          </defs>
-          <path
-            d={pathD}
-            fill="none"
-            stroke={color}
-            strokeWidth="1.35"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            vectorEffect="non-scaling-stroke"
-            filter={`url(#glow-${filterId})`}
-          />
-        </svg>
-      </div>
-      <span
-        title={label.title || undefined}
-        className={`block min-w-0 max-w-full text-right text-[11px] sm:text-xs font-medium tabular-nums leading-tight tracking-tight truncate ${label.className}`}
+    <div className="relative h-7 w-20 shrink-0">
+      {waiting ? (
+        <span
+          className="rx-skel absolute inset-x-2 top-1/2 h-1 -translate-y-1/2"
+          aria-hidden="true"
+        />
+      ) : null}
+      <svg
+        viewBox={`0 0 ${w} ${h}`}
+        width={w}
+        height={h}
+        className={clsx("block h-full w-full", waiting && "opacity-30")}
+        preserveAspectRatio="none"
+        aria-hidden
       >
-        {label.text}
-      </span>
+        <path
+          d={pathD}
+          fill="none"
+          stroke={color}
+          strokeWidth="1.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+          vectorEffect="non-scaling-stroke"
+        />
+      </svg>
     </div>
   );
 }

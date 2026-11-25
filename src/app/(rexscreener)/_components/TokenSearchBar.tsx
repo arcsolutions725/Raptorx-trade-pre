@@ -1,8 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState, useCallback } from "react";
-import { Search } from "lucide-react";
+import { useState, useCallback, useId } from "react";
+import { Search, X } from "lucide-react";
 
 interface TokenSearchBarProps {
   onSearch: (query: string, type: "ticker" | "address") => void;
@@ -17,6 +17,7 @@ export function TokenSearchBar({
 }: TokenSearchBarProps) {
   const [searchInput, setSearchInput] = useState("");
   const [hasActiveSearch, setHasActiveSearch] = useState(false);
+  const inputId = useId();
 
   const validateInput = (
     input: string
@@ -104,40 +105,46 @@ export function TokenSearchBar({
   };
 
   return (
-    <div className={`w-full ${className}`}>
-      <form onSubmit={handleSubmit} className="relative">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-white/60 w-5 h-5" />
-          <input
-            type="text"
-            value={searchInput}
-            onChange={(e) => setSearchInput(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder="Search here..."
-            className="w-full pl-10 pr-12 py-2.5 bg-[#262626] border-[0.5px] border-[#3c3c3c] rounded-lg text-base sm:text-sm text-[#A0A0A0] placeholder-[#A0A0A0] outline-none transition-all"
-          />
-          <div className="absolute right-2 top-1/2 transform -translate-y-1/2 flex items-center gap-1">
-            {hasActiveSearch && (
-              <button
-                type="button"
-                onClick={handleClear}
-                className="p-1.5 rounded-md bg-red-500/20 hover:bg-red-500/30 text-red-400 hover:text-red-300 transition-colors"
-                title="Clear search"
-              >
-                ✕
-              </button>
-            )}
-            <button
-              type="submit"
-              disabled={!searchInput.trim()}
-              className="p-2 rounded-md bg-white/10 hover:bg-white/20 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-              title="Search"
-            >
-              <Search className="w-4 h-4 text-white" />
-            </button>
-          </div>
-        </div>
-      </form>
-    </div>
+    <form
+      role="search"
+      onSubmit={handleSubmit}
+      className={`rx-input h-[38px] w-full gap-2.5 pr-1.5 ${className}`}
+    >
+      <Search className="size-[15px] shrink-0 text-rx-text-3" aria-hidden />
+      <label htmlFor={inputId} className="sr-only">
+        Search tokens by name, ticker or contract address
+      </label>
+      <input
+        id={inputId}
+        type="text"
+        value={searchInput}
+        onChange={(e) => setSearchInput(e.target.value)}
+        onKeyDown={handleKeyDown}
+        placeholder="Filter by name, ticker or address"
+        autoComplete="off"
+        spellCheck={false}
+        className="text-base sm:text-sm"
+      />
+      {hasActiveSearch && (
+        <button
+          type="button"
+          onClick={handleClear}
+          className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-rx-text-3 transition-colors hover:bg-white/[0.06] hover:text-rx-text"
+          title="Clear search"
+          aria-label="Clear search"
+        >
+          <X className="size-4" aria-hidden />
+        </button>
+      )}
+      <button
+        type="submit"
+        disabled={!searchInput.trim()}
+        className="rx-kbd shrink-0 cursor-pointer transition-colors hover:border-rx-gold-line hover:text-rx-text disabled:cursor-default disabled:opacity-0"
+        title="Search"
+        aria-label="Search"
+      >
+        ↵
+      </button>
+    </form>
   );
 }

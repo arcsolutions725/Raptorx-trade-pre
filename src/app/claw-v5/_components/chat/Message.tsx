@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useEffect, useMemo, useRef } from "react";
-import Image from "next/image";
 import copy from "copy-to-clipboard";
-import { Copy, User, Quote, Check, Loader2 } from "lucide-react";
+import { Copy, Quote, Check } from "lucide-react";
+import clsx from "clsx";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import remarkBreaks from "remark-breaks";
@@ -99,28 +99,32 @@ const sanitizeSchema = {
   },
 };
 
-const baseMarkdownComponents = {
+/**
+ * Answer typography (claw.css `.claw-md-*`). Classes only go on elements the markdown renders,
+ * so the market / technical-report embeds keep their own styling.
+ */
+const markdownComponents = {
   h1: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h1 className="text-white font-semibold text-lg mt-3 mb-2" {...props} />
+    <h1 className="claw-md-h1" {...props} />
   ),
   h2: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h2 className="text-white font-semibold text-base mt-3 mb-2" {...props} />
+    <h2 className="claw-md-h2" {...props} />
   ),
   h3: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
-    <h3 className="text-white font-semibold text-sm mt-3 mb-2" {...props} />
+    <h3 className="claw-md-h3" {...props} />
   ),
   p: ({ ...props }: React.HTMLAttributes<HTMLParagraphElement>) => (
-    <p className="text-white/80 leading-relaxed my-2 break-words" {...props} />
+    <p className="claw-md-p" {...props} />
   ),
   strong: ({ ...props }: React.HTMLAttributes<HTMLElement>) => (
-    <strong className="text-[#f0cf7a] font-semibold" {...props} />
+    <strong className="claw-md-strong" {...props} />
   ),
   em: ({ ...props }: React.HTMLAttributes<HTMLElement>) => (
-    <em className="text-white/80 italic" {...props} />
+    <em className="claw-md-em" {...props} />
   ),
   a: ({ ...props }: React.AnchorHTMLAttributes<HTMLAnchorElement>) => (
     <a
-      className="text-[#ffc000] underline underline-offset-2 hover:text-[#ffda44] break-all whitespace-normal"
+      className="claw-md-a"
       target="_blank"
       rel="noopener noreferrer"
       {...props}
@@ -129,25 +133,23 @@ const baseMarkdownComponents = {
   img: ({ ...props }: React.ImgHTMLAttributes<HTMLImageElement>) => (
     // Intentionally not using next/image here; sources can be arbitrary URLs in AI output.
     // Sanitization limits attributes + protocols.
-    <img className="max-w-full h-auto rounded-lg my-3" loading="lazy" {...props} />
+    // eslint-disable-next-line @next/next/no-img-element, jsx-a11y/alt-text
+    <img className="claw-md-img" loading="lazy" {...props} />
   ),
   ul: ({ ...props }: React.HTMLAttributes<HTMLUListElement>) => (
-    <ul className="list-disc list-inside my-2 space-y-1 break-words" {...props} />
+    <ul className="claw-md-ul" {...props} />
   ),
   ol: ({ ...props }: React.HTMLAttributes<HTMLOListElement>) => (
-    <ol className="list-decimal list-inside my-2 space-y-1 break-words" {...props} />
+    <ol className="claw-md-ol" {...props} />
   ),
   li: ({ ...props }: React.HTMLAttributes<HTMLLIElement>) => (
-    <li className="text-white/80 break-words" {...props} />
+    <li className="claw-md-li" {...props} />
   ),
   blockquote: ({ ...props }: React.HTMLAttributes<HTMLQuoteElement>) => (
-    <blockquote
-      className="border-l-2 border-[#ffc000]/60 pl-3 my-3 text-white/70"
-      {...props}
-    />
+    <blockquote className="claw-md-quote" {...props} />
   ),
   hr: ({ ...props }: React.HTMLAttributes<HTMLHRElement>) => (
-    <hr className="border-white/10 my-4" {...props} />
+    <hr className="claw-md-hr" {...props} />
   ),
   code: ({
     inline,
@@ -157,10 +159,7 @@ const baseMarkdownComponents = {
   }: any) => {
     if (inline) {
       return (
-        <code
-          className={`bg-white/10 px-1 py-0.5 rounded text-[13px] break-words ${className || ""}`}
-          {...props}
-        >
+        <code className={`claw-md-code ${className || ""}`} {...props}>
           {children}
         </code>
       );
@@ -168,27 +167,21 @@ const baseMarkdownComponents = {
 
     // For fenced code blocks, let <pre> handle the padding/background.
     return (
-      <code className={`text-[13px] ${className || ""}`} {...props}>
+      <code className={className || ""} {...props}>
         {children}
       </code>
     );
   },
   table: ({ ...props }: React.TableHTMLAttributes<HTMLTableElement>) => (
-    <div className="my-3 overflow-hidden">
-      <table className="w-full border-collapse table-fixed" {...props} />
+    <div className="claw-md-table">
+      <table {...props} />
     </div>
   ),
   th: ({ ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) => (
-    <th
-      className="border border-white/10 px-2 py-1 text-left text-white/80 break-words align-top"
-      {...props}
-    />
+    <th className="claw-md-th" {...props} />
   ),
   td: ({ ...props }: React.TdHTMLAttributes<HTMLTableCellElement>) => (
-    <td
-      className="border border-white/10 px-2 py-1 text-white/70 align-top break-words"
-      {...props}
-    />
+    <td className="claw-md-td" {...props} />
   ),
 };
 
@@ -303,6 +296,29 @@ function parseSourcesSection(content: string): { main: string; citations: Citati
 
 const STREAMING_COUNTDOWN_START = 20;
 
+/** Decorative "reading the markets" grid shown while Claw thinks (CSS-only motion). */
+const SCAN_CELLS = Array.from({ length: 96 }, (_, i) => {
+  const level = ["l1", "l2", "l2", "l3", "l4"][(i * 7) % 5];
+  return {
+    on: (i * 31) % 4 !== 0,
+    className: level,
+    style: {
+      "--d": `${(((i * 53) % 97) / 97) * 3.2}s`,
+      "--t": `${2.2 + ((i * 17) % 9) / 6}s`,
+    } as React.CSSProperties,
+  };
+});
+
+function ScanGrid() {
+  return (
+    <div className="scan" aria-hidden="true">
+      {SCAN_CELLS.map((c, i) => (
+        <i key={i} className={clsx(c.className, c.on && "on")} style={c.style} />
+      ))}
+    </div>
+  );
+}
+
 export function StreamingStatus({
   label,
   phase,
@@ -333,10 +349,10 @@ export function StreamingStatus({
 
   if (minimal) {
     return (
-      <div className="inline-flex items-center gap-2 text-[12px] text-[#FFC000]">
-        <span>{text}</span>
+      <div className="think__status think__status--chip" role="status">
+        <span className="shine">{text}</span>
         {typeof countdownSeconds === "number" && (
-          <span className="tabular-nums text-[#FFC000]/90 font-medium" aria-label={`${countdownSeconds} seconds remaining`}>
+          <span className="think__time" aria-label={`${countdownSeconds} seconds remaining`}>
             {countdownSeconds}s
           </span>
         )}
@@ -345,24 +361,18 @@ export function StreamingStatus({
   }
 
   return (
-    <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#FFC000]/40 bg-[#141414] px-3 py-1.5 text-[12px] text-[#FFC000]">
-      {phase === "markets" ? (
-        <Image
-          src="/images/raptorx.png"
-          alt="RaptorX"
-          width={16}
-          height={16}
-          className="w-4 h-4"
-        />
-      ) : (
-        <Loader2 className="w-4 h-4 animate-spin" />
-      )}
-      <span>{text}</span>
-      {typeof countdownSeconds === "number" && (
-        <span className="tabular-nums text-[#FFC000]/90 font-medium" aria-label={`${countdownSeconds} seconds remaining`}>
-          {countdownSeconds}s
+    <div className="think" role="status" aria-live="polite">
+      <p className="think__status">
+        <span key={text} className="shine think__word">
+          {text}
         </span>
-      )}
+        {typeof countdownSeconds === "number" && (
+          <span className="think__time" aria-label={`${countdownSeconds} seconds remaining`}>
+            {countdownSeconds}s
+          </span>
+        )}
+      </p>
+      <ScanGrid />
     </div>
   );
 }
@@ -371,10 +381,10 @@ export function StreamingStatus({
 export function ConnectingStatus({ countdownSeconds, minimal = false }: { countdownSeconds?: number; minimal?: boolean }) {
   if (minimal) {
     return (
-      <div className="inline-flex items-center gap-2 text-[12px] text-[#FFC000]">
-        <span>Connecting…</span>
+      <div className="think__status think__status--chip" role="status">
+        <span className="shine">Connecting…</span>
         {typeof countdownSeconds === "number" && (
-          <span className="tabular-nums text-[#FFC000]/90 font-medium" aria-label={`${countdownSeconds} seconds remaining`}>
+          <span className="think__time" aria-label={`${countdownSeconds} seconds remaining`}>
             {countdownSeconds}s
           </span>
         )}
@@ -383,14 +393,16 @@ export function ConnectingStatus({ countdownSeconds, minimal = false }: { countd
   }
 
   return (
-    <div className="mb-2 inline-flex items-center gap-2 rounded-full border border-[#FFC000]/40 bg-[#141414] px-3 py-1.5 text-[12px] text-[#FFC000]">
-      <Loader2 className="w-4 h-4 animate-spin" />
-      <span>Connecting…</span>
-      {typeof countdownSeconds === "number" && (
-        <span className="tabular-nums text-[#FFC000]/90 font-medium" aria-label={`${countdownSeconds} seconds remaining`}>
-          {countdownSeconds}s
-        </span>
-      )}
+    <div className="think" role="status" aria-live="polite">
+      <p className="think__status">
+        <span className="shine think__word">Connecting…</span>
+        {typeof countdownSeconds === "number" && (
+          <span className="think__time" aria-label={`${countdownSeconds} seconds remaining`}>
+            {countdownSeconds}s
+          </span>
+        )}
+      </p>
+      <ScanGrid />
     </div>
   );
 }
@@ -399,54 +411,51 @@ function CitationCards({ citations }: { citations: Citation[] }) {
   if (citations.length === 0) return null;
 
   return (
-    <div className="mt-4">
-      <div className="text-white/80 text-sm mb-2 font-medium">Sources</div>
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
+    <section className="claw-sources" aria-label="Sources">
+      <span className="rx-eyebrow">Sources</span>
+      <div className="claw-sources__grid">
         {citations.map((c) => (
           <a
             key={c.url}
             href={c.url}
             target="_blank"
             rel="noopener noreferrer"
-            className="group flex gap-3 rounded-xl border border-white/10 bg-[#141414] hover:border-[#FFC000]/60 transition-colors p-3"
+            className="claw-source"
             title={c.url}
           >
-            <div className="flex-shrink-0 w-10 h-10 rounded-lg bg-black/40 border border-white/10 flex items-center justify-center overflow-hidden">
+            <span className="claw-source__ico">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(
                   c.domain
                 )}&sz=64`}
                 alt=""
-                className="w-6 h-6"
+                width={18}
+                height={18}
                 loading="lazy"
               />
-            </div>
-            <div className="min-w-0">
-              <div
-                className="text-white/90 text-sm font-medium"
-                style={{
-                  display: "-webkit-box",
-                  WebkitLineClamp: 2,
-                  WebkitBoxOrient: "vertical",
-                  overflow: "hidden",
-                }}
-              >
-                {c.title || c.domain}
-              </div>
-              <div className="text-white/50 text-xs mt-1 truncate">
-                {c.domain}
-              </div>
-            </div>
+            </span>
+            <span className="claw-source__text">
+              <span className="claw-source__t">{c.title || c.domain}</span>
+              <span className="claw-source__d">{c.domain}</span>
+            </span>
           </a>
         ))}
       </div>
-    </div>
+    </section>
   );
 }
 
+const markdownRehypePlugins = [
+  rehypeRaw,
+  // rehype-raw enables HTML; sanitize keeps it safe.
+  // Cast keeps TS happy with the tuple signature.
+  [rehypeSanitize as any, sanitizeSchema as any],
+] as any;
+
 export default function Message({
   message,
-  onEdit,
+  onEdit: _onEdit,
   onCopy,
   onQuote,
   onCryptoReport,
@@ -488,9 +497,6 @@ export default function Message({
     isStreaming &&
     (Boolean((message.content || "").trim()) ||
       Boolean((streamingThinking || "").trim()));
-  const contentWidthClass = isUser
-    ? "max-w-[85%] md:max-w-[80%]"
-    : "w-full max-w-full";
 
   const markdownPre = useMemo(() => {
     return function MarkdownPre({
@@ -580,10 +586,7 @@ export default function Message({
       }
 
       return (
-        <pre
-          className="bg-white/10 p-3 rounded-lg overflow-x-hidden whitespace-pre-wrap break-words my-3 text-[13px] leading-relaxed max-w-full"
-          {...props}
-        >
+        <pre className="claw-md-pre" {...props}>
           {children}
         </pre>
       );
@@ -593,34 +596,7 @@ export default function Message({
   const mdComponents = useMemo(
     () =>
       ({
-        ...baseMarkdownComponents,
-        h1: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
-          <h1
-            className="text-[#ffc000] font-semibold text-lg mt-3 mb-2 scroll-mt-6"
-            {...props}
-          />
-        ),
-        h2: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
-          <h2
-            className="text-[#ffc000] font-semibold text-base mt-3 mb-2 scroll-mt-6"
-            {...props}
-          />
-        ),
-        h3: ({ ...props }: React.HTMLAttributes<HTMLHeadingElement>) => (
-          <h3
-            className="text-[#ffc000] font-semibold text-sm mt-3 mb-2 scroll-mt-6"
-            {...props}
-          />
-        ),
-        strong: ({ ...props }: React.HTMLAttributes<HTMLElement>) => (
-          <strong className="text-[#f0cf7a] font-semibold" {...props} />
-        ),
-        th: ({ ...props }: React.ThHTMLAttributes<HTMLTableCellElement>) => (
-          <th
-            className="border border-white/10 px-2 py-1 text-left text-[#f0cf7a] font-semibold break-words align-top"
-            {...props}
-          />
-        ),
+        ...markdownComponents,
         pre: markdownPre,
       }) as any,
     [markdownPre],
@@ -635,127 +611,104 @@ export default function Message({
     }
   }, [isCopied]);
 
-  return (
-    <div
-      className={`flex gap-2 md:gap-4 py-4 md:py-6 bg-black group transition-colors ${
-        isUser
-          ? "flex-row-reverse px-2 md:px-4"
-          : "flex-col md:flex-row items-stretch px-1.5 sm:px-2 md:px-4"
-      }`}
-    >
-      {/* Avatar — assistant: stacked above content on mobile so report embeds use full width */}
-      <div className={`flex-shrink-0 ${isUser ? "" : "md:self-start"}`}>
-        {isUser ? (
-          <div className="w-7 h-7 md:w-8 md:h-8 rounded-full bg-[#141414] flex items-center justify-center">
-            <User className="w-4 h-4 md:w-5 md:h-5 text-gray-400" />
-          </div>
-        ) : (
-          <div className="w-7 h-7 md:w-8 md:h-8 relative flex items-center justify-center">
-            <Image
-              src="/images/claw-v5.webp"
-              alt="Claw v5"
-              fill
-              className="object-contain rounded-full"
-            />
-          </div>
-        )}
-      </div>
-
-      {/* Content */}
-      <div
-        className={`flex flex-col ${isUser ? "items-end" : "items-stretch"} ${contentWidthClass} min-w-0 ${isUser ? "" : "w-full md:flex-1"}`}
+  // Quote + copy: only on completed messages; hidden during the whole stream.
+  const actions = !isStreaming ? (
+    <div className="msg-actions">
+      {onQuote && (
+        <button
+          type="button"
+          onClick={() => onQuote(message.content)}
+          className="rx-icon-btn rx-icon-btn--s"
+          title="Quote"
+          aria-label="Quote this message"
+        >
+          <Quote aria-hidden="true" />
+        </button>
+      )}
+      <button
+        type="button"
+        onClick={() => {
+          copy(message.content);
+          setIsCopied(true);
+          if (onCopy) {
+            onCopy(message.content);
+          }
+        }}
+        className={clsx("rx-icon-btn rx-icon-btn--s", isCopied && "is-done")}
+        title={isCopied ? "Copied!" : "Copy"}
+        aria-label={isCopied ? "Copied" : "Copy message"}
       >
-        {isUser ? (
-          // User message with gray background box - aligned right
-          <div className="bg-[#141414] rounded-lg p-2.5 md:p-3 mb-2 inline-block max-w-full break-words">
-            <div className="text-white/80 whitespace-pre-wrap text-sm leading-relaxed break-words" style={{ fontSize: "14px" }}>
-              {message.content}
-            </div>
-          </div>
-        ) : (
-          // AI message with plain text - aligned left
-          <div
-            className="text-white/80 text-sm leading-relaxed mb-2 break-words max-w-full min-w-0 w-full"
-            style={{ fontSize: "14px" }}
-          >
-            {isStreaming && streamingPhase && !hasVisibleStreamingOutput && (
-              <StreamingStatus
-                label={streamingStatusLabel}
-                phase={streamingPhase}
-                countdownSeconds={streamingCountdown}
-              />
-            )}
-            {isStreaming && !streamingPhase && !hasVisibleStreamingOutput && (
-              <ConnectingStatus countdownSeconds={streamingCountdown} />
-            )}
-            <div className="rex-markets-report-md rex-markets-report-md--fluid max-w-full">
+        {isCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
+      </button>
+    </div>
+  ) : null;
+
+  if (isUser) {
+    return (
+      <div className="msg-user-wrap">
+        <div className="msg-user">{message.content}</div>
+        {actions}
+      </div>
+    );
+  }
+
+  return (
+    <div className="msg-claw">
+      <span
+        className={clsx("claw-mark", isStreaming && "claw-mark--pulse")}
+        aria-hidden="true"
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          className="claw-ico claw-logo"
+          src="/images/claw-logo-96.webp"
+          width={19}
+          height={19}
+          alt=""
+        />
+      </span>
+
+      <div className="msg-claw__body">
+        {isStreaming && streamingPhase && !hasVisibleStreamingOutput && (
+          <StreamingStatus
+            label={streamingStatusLabel}
+            phase={streamingPhase}
+            countdownSeconds={streamingCountdown}
+          />
+        )}
+        {isStreaming && !streamingPhase && !hasVisibleStreamingOutput && (
+          <ConnectingStatus countdownSeconds={streamingCountdown} />
+        )}
+        {mainContent.trim() ? (
+          <div className="rex-markets-report-md rex-markets-report-md--fluid claw-md">
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
-              rehypePlugins={[
-                rehypeRaw,
-                // rehype-raw enables HTML; sanitize keeps it safe.
-                // Cast keeps TS happy with the tuple signature.
-                [rehypeSanitize as any, sanitizeSchema as any],
-              ]}
+              rehypePlugins={markdownRehypePlugins}
               components={mdComponents}
             >
               {mainContent}
             </ReactMarkdown>
-            </div>
-            {isStreaming && streamingThinking.trim() ? (
-              <div className="rex-markets-report-md rex-markets-report-md--fluid mt-4 max-w-full border-t border-white/10 pt-3">
-                <div className="text-[11px] font-semibold uppercase tracking-wide text-[#ffc000]/85 mb-2">
-                  Live notes
-                </div>
-                <ReactMarkdown
-                  remarkPlugins={[remarkGfm, remarkBreaks]}
-                  rehypePlugins={[
-                    rehypeRaw,
-                    [rehypeSanitize as any, sanitizeSchema as any],
-                  ]}
-                  components={mdComponents}
-                >
-                  {streamingThinking}
-                </ReactMarkdown>
-              </div>
-            ) : null}
-            {!isStreaming && <CitationCards citations={citations} />}
           </div>
-        )}
-        
-        {/* Settings buttons: only show on completed messages (on hover); hidden during entire streaming (loader2 + StreamingStatus) */}
-        {!isStreaming && (
-          <div className={`flex items-center gap-0.5 md:gap-1 opacity-0 group-hover:opacity-100 md:group-hover:opacity-100 group-active:opacity-100 transition-opacity mt-1.5 md:mt-2 ${isUser ? 'flex-row-reverse' : ''}`}>
-            {onQuote && (
-              <button
-                onClick={() => onQuote(message.content)}
-                className="p-1.5 hover:bg-[#2a2a2a] rounded transition-colors"
-                title="Quote"
+        ) : null}
+        {isStreaming && streamingThinking.trim() ? (
+          <div className="live-notes">
+            <span className="rx-eyebrow mb-2 block text-rx-gold-hi">
+              Live notes
+            </span>
+            <div className="rex-markets-report-md rex-markets-report-md--fluid claw-md">
+              <ReactMarkdown
+                remarkPlugins={[remarkGfm, remarkBreaks]}
+                rehypePlugins={markdownRehypePlugins}
+                components={mdComponents}
               >
-                <Quote className="w-4 h-4 text-gray-400" />
-              </button>
-            )}
-            <button
-              onClick={() => {
-                copy(message.content);
-                setIsCopied(true);
-                if (onCopy) {
-                  onCopy(message.content);
-                }
-              }}
-              className="p-1.5 hover:bg-[#2a2a2a] rounded transition-colors"
-              title={isCopied ? "Copied!" : "Copy"}
-            >
-              {isCopied ? (
-                <Check className="w-4 h-4 text-[#ffc000]" />
-              ) : (
-                <Copy className="w-4 h-4 text-gray-400" />
-              )}
-            </button>
+                {streamingThinking}
+              </ReactMarkdown>
+            </div>
           </div>
-        )}
+        ) : null}
+        {!isStreaming && <CitationCards citations={citations} />}
+        {actions}
       </div>
     </div>
   );
 }
-

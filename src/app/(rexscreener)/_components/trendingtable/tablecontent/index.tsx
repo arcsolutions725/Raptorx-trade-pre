@@ -35,7 +35,7 @@ import { TableRow } from "./TableRow";
 import DexscreenerView from "./DexscreenerView";
 import PageLoaderOverlay from "@/components/PageLoaderOverlay";
 import { TokenSearchBar } from "@/app/(rexscreener)/_components/TokenSearchBar";
-import { ChevronDown, Check, Search, X } from "lucide-react";
+import { ChevronDown, Check } from "lucide-react";
 import { ChainButtons } from "./ChainButtons";
 import clsx from "clsx";
 import { useGenerateRexReport } from "@/hooks/useGenerateRexReport";
@@ -131,7 +131,8 @@ function RowsPerPageSelect({
     }
   };
 
-  const popPos = direction === "up" ? "bottom-full mb-2" : "top-full mt-2";
+  const popPos =
+    direction === "up" ? "top-auto bottom-[calc(100%+8px)]" : "";
 
   return (
     <div ref={rootRef} className={`relative ${className}`}>
@@ -139,13 +140,16 @@ function RowsPerPageSelect({
         type="button"
         aria-haspopup="listbox"
         aria-expanded={open}
+        aria-label={`Rows per page: ${value}`}
         onClick={() => setOpen((v) => !v)}
         onKeyDown={onKeyDownButton}
-        className="flex items-center justify-between gap-2 w-20 sm:w-28 px-3 py-1.5 rounded-md border border-white/20 bg-black/30 hover:bg-white/10 transition text-white"
+        className="rx-btn rx-btn--secondary rx-btn--s gap-1.5 px-2.5 font-medium"
       >
-        <span className="text-sm">{value}</span>
+        <span className="tabular-nums">{value}</span>
+        <span className="hidden text-rx-text-3 sm:inline">/ page</span>
         <ChevronDown
-          className={`size-4 opacity-80 transition ${open ? "rotate-180" : ""}`}
+          className={`size-3.5 text-rx-text-3 transition ${open ? "rotate-180" : ""}`}
+          aria-hidden
         />
       </button>
 
@@ -156,7 +160,7 @@ function RowsPerPageSelect({
           tabIndex={-1}
           aria-activedescendant={`rpp-opt-${activeIndex}`}
           onKeyDown={onKeyDownList}
-          className={`absolute z-50 ${popPos} left-0 w-40 max-h-60 overflow-auto rounded-lg border border-white/15 bg-[#0A0A0A]/95 backdrop-blur supports-backdrop-filter:bg-[#0A0A0A]/70 shadow-2xl`}
+          className={`rx-menu z-50 ${popPos} min-w-[140px] max-h-60 overflow-auto outline-none`}
         >
           {options.map((opt, idx) => {
             const selected = opt === value;
@@ -170,15 +174,14 @@ function RowsPerPageSelect({
                 onMouseEnter={() => setActiveIndex(idx)}
                 onClick={() => commit(idx)}
                 className={[
-                  "flex items-center justify-between gap-3 cursor-pointer px-3 py-2 text-sm",
-                  active ? "bg-white/10" : "bg-transparent",
-                  selected ? "text-[#FFD700]" : "text-white/90",
-                  "hover:bg-white/10",
+                  "rx-menu__item justify-between",
+                  active ? "bg-[rgba(255,236,205,0.06)] text-rx-text" : "",
+                  selected ? "text-rx-gold-hi" : "",
                 ].join(" ")}
               >
-                <span>{opt}</span>
+                <span className="tabular-nums">{opt} per page</span>
                 {selected ? (
-                  <Check className="size-4" />
+                  <Check className="size-4 text-rx-gold" aria-hidden />
                 ) : (
                   <span className="size-4" />
                 )}
@@ -350,8 +353,8 @@ function GoldenReportsTooltipPortal({
                   }
             }
             className={clsx(
-              "pointer-events-none w-max max-w-[min(22rem,calc(100vw-2rem))]",
-              "rounded-lg border border-white/15 bg-[#141414] px-3 py-2.5 text-left text-xs leading-relaxed text-white/95 shadow-xl",
+              "pointer-events-none w-max max-w-[min(320px,calc(100vw-24px))]",
+              "rounded-xl border border-rx-line-strong bg-[#1D1C1B] px-3.5 py-3 text-left text-[13px] leading-normal text-rx-text shadow-[var(--rx-depth-3)]",
             )}
           >
             {infoText}
@@ -381,6 +384,128 @@ function isInGoldenInfoZone(clientX: number, el: HTMLElement): boolean {
   if (w <= 0) return false;
   const x = clientX - rect.left;
   return x >= w * GOLDEN_INFO_ZONE_RIGHT_FRACTION;
+}
+
+/* ============================ Toolbar pieces ============================ */
+
+const SCREENER_CHAIN_LABEL: Record<Chain, string> = {
+  base: "Base",
+  robinhood: "Robinhood",
+  ethereum: "Ethereum",
+  solana: "Solana",
+  bsc: "BNB Chain",
+  monad: "Monad",
+  all: "all chains",
+};
+
+type ReportShortcutProps = {
+  variant: "golden" | "pump";
+  active: boolean;
+  pillRef: RefObject<HTMLDivElement | null>;
+  buttonRef: RefObject<HTMLButtonElement | null>;
+  onPointerDown: (e: React.PointerEvent<HTMLButtonElement>) => void;
+  onClick: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  onPointerMove: (e: React.PointerEvent<HTMLButtonElement>) => void;
+  onPointerLeave: () => void;
+  describedBy?: string;
+};
+
+/**
+ * Golden / Pump Reports filter toggle. The info mark sits in the right 20% of the button,
+ * which is the zone the existing click / hover handlers treat as "show the explainer".
+ */
+function ReportShortcut({
+  variant,
+  active,
+  pillRef,
+  buttonRef,
+  onPointerDown,
+  onClick,
+  onPointerMove,
+  onPointerLeave,
+  describedBy,
+}: ReportShortcutProps) {
+  const golden = variant === "golden";
+  const label = golden ? "Golden Reports" : "Pump Reports";
+  return (
+    <div ref={pillRef} className="relative min-w-0">
+      <button
+        ref={buttonRef}
+        type="button"
+        onPointerDown={onPointerDown}
+        onClick={onClick}
+        onPointerMove={onPointerMove}
+        onPointerLeave={onPointerLeave}
+        title={`Show tokens in the ${label} program`}
+        aria-pressed={active}
+        aria-label={`${label} filter`}
+        aria-describedby={describedBy}
+        className={clsx(
+          "group/sc relative isolate flex h-11 w-full min-w-0 items-center gap-1.5 rounded-xl border pl-1 pr-1 md:gap-2 md:pr-1.5 text-left transition-[filter,box-shadow,border-color] duration-150 hover:brightness-[1.12] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rx-gold-hi md:w-auto",
+          golden
+            ? "border-[#8A6614] bg-[linear-gradient(180deg,#3A2A07,#1A1305)] shadow-[inset_0_1px_0_rgba(255,226,150,0.25),0_0_0_1px_rgba(255,184,0,0.08),0_8px_24px_rgba(255,170,0,0.14)]"
+            : "border-[#2C8A5C] bg-[linear-gradient(180deg,#0E3322,#08190F)] shadow-[inset_0_1px_0_rgba(160,255,200,0.2),0_0_0_1px_rgba(69,227,163,0.08),0_8px_24px_rgba(69,227,163,0.12)]",
+          active &&
+            (golden
+              ? "border-rx-gold-hi shadow-[inset_0_1px_0_rgba(255,226,150,0.25),0_0_0_2px_rgba(255,209,92,0.55),0_8px_24px_rgba(255,170,0,0.22)]"
+              : "border-rx-up shadow-[inset_0_1px_0_rgba(160,255,200,0.2),0_0_0_2px_rgba(69,227,163,0.5),0_8px_24px_rgba(69,227,163,0.2)]"),
+        )}
+      >
+        <span
+          className={clsx("rx-sc-sweep", !golden && "rx-sc-sweep--pump")}
+          aria-hidden="true"
+        />
+        <span className="-my-2 -ml-1 flex size-10 shrink-0 items-center justify-center md:size-11">
+          <Image
+            src={golden ? "/images/ic-golden.webp" : "/images/ic-pump.webp"}
+            alt=""
+            width={44}
+            height={44}
+            className="size-10 drop-shadow-[0_4px_8px_rgba(0,0,0,0.6)] md:size-11 transition-transform duration-200 group-hover/sc:-translate-y-0.5 group-hover/sc:-rotate-[4deg] group-hover/sc:scale-[1.06]"
+          />
+        </span>
+        <span
+          className={clsx(
+            "min-w-0 truncate text-[12.5px] font-semibold md:text-[13.5px]",
+            golden ? "text-[#FFE29A]" : "text-[#B6F5D8]",
+          )}
+        >
+          {label}
+        </span>
+        <span
+          className="ml-auto flex size-5 shrink-0 items-center justify-center rounded-lg text-rx-text-3 md:size-6 transition-colors group-hover/sc:text-rx-text-2"
+          aria-hidden="true"
+        >
+          <svg width="15" height="15" viewBox="0 0 24 24">
+            <circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" strokeWidth="2" />
+            <path d="M12 11v5M12 7.5v.5" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" />
+          </svg>
+        </span>
+      </button>
+    </div>
+  );
+}
+
+function TableEmptyState({
+  title,
+  body,
+  children,
+}: {
+  title: string;
+  body?: string;
+  children?: React.ReactNode;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-2.5 px-4 py-12 text-center">
+      <div className="font-display text-[17px] font-bold text-rx-text [font-stretch:112%]">
+        {title}
+      </div>
+      {body ? (
+        <div className="max-w-[320px] text-[13px] text-rx-text-2">{body}</div>
+      ) : null}
+      {children}
+    </div>
+  );
 }
 
 /* ============================ Main Component ============================ */
@@ -469,7 +594,6 @@ export function TrendingTableContent({
     null
   );
   const [isSearchMode, setIsSearchMode] = useState(false);
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [goldenReportsOnly, setGoldenReportsOnly] = useState(false);
   const [pumpReportsOnly, setPumpReportsOnly] = useState(false);
   const [reportListsPrefetchReady, setReportListsPrefetchReady] =
@@ -1112,7 +1236,6 @@ export function TrendingTableContent({
       }
       return turningOn;
     });
-    setMobileSearchOpen(false);
   }, [queryClient]);
 
   const togglePumpReports = useCallback(() => {
@@ -1132,7 +1255,6 @@ export function TrendingTableContent({
       }
       return turningOn;
     });
-    setMobileSearchOpen(false);
   }, [queryClient]);
 
   const handleGoldenButtonPointerDown = useCallback(
@@ -1212,6 +1334,8 @@ export function TrendingTableContent({
   const syncHeaderScrollPosition = useCallback((left: number) => {
     if (!headerContentRef.current) return;
     headerContentRef.current.style.transform = `translateX(-${left}px)`;
+    // Pinned header cells (rank + token) undo the shift so they stay over the pinned row cells.
+    headerContentRef.current.style.setProperty("--rx-hscroll", `${left}px`);
   }, []);
 
   // prevent scroll feedback loops
@@ -1362,8 +1486,32 @@ export function TrendingTableContent({
     );
   }
 
+  const showingFrom = displayRows.length > 0 ? (pageIndex - 1) * pageSize + 1 : 0;
+  const showingTo = displayRows.length > 0 ? showingFrom + displayRows.length - 1 : 0;
+  const tableCountLabel = goldenReportsOnly
+    ? goldenTableStillLoading
+      ? null
+      : `${displayRows.length} project${displayRows.length === 1 ? "" : "s"}`
+    : pumpReportsOnly
+      ? pumpTableStillLoading
+        ? null
+        : `${displayRows.length} project${displayRows.length === 1 ? "" : "s"}`
+      : isLoading && rows.length === 0
+        ? null
+        : `${displayRows.length} token${displayRows.length === 1 ? "" : "s"}`;
+
+  /* Pinned rank + token columns only turn opaque while the table actually scrolls sideways. */
+  const pinStyle = {
+    "--rx-pin-bg": hasHorizontalOverflow ? "#0C0C0C" : "transparent",
+    "--rx-pin-bg-hover": hasHorizontalOverflow ? "#14110C" : "transparent",
+    "--rx-pin-head-bg": hasHorizontalOverflow ? "#0C0C0C" : "transparent",
+    "--rx-pin-shadow": hasHorizontalOverflow
+      ? "inset -1px 0 0 var(--rx-line), 10px 0 14px -12px rgba(0,0,0,.9)"
+      : "none",
+  } as CSSProperties;
+
   return (
-    <div className="flex min-h-0 w-full flex-1 flex-col gap-1 sm:gap-3">
+    <div className="flex min-h-0 w-full flex-1 flex-col">
       <GoldenReportsTooltipPortal
         open={goldenReportsInfoOpen}
         tooltipId={goldenReportsTooltipId}
@@ -1382,284 +1530,108 @@ export function TrendingTableContent({
         infoText={PUMP_REPORTS_INFO_TEXT}
         desktopPlacement="right"
       />
-      <div className="px-4 py-3 pb-0 sm:pb-3 flex flex-col sm:flex-row items-start justify-center sm:justify-between gap-3 sm:gap-10">
-        {/* Desktop: ChainButtons + TokenSearchBar side by side */}
-        <div className="hidden sm:flex flex-1 sm:flex-row items-start justify-center sm:justify-between gap-5 sm:gap-10 w-full">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3 shrink-0 min-w-0">
-            <ChainButtons
-              selectedChain={screenerChain}
-              onChainChange={handleScreenerChainNavigate}
+
+      {/* Toolbar: search + Golden/Pump on the left, count + chain switcher on the right */}
+      <div className="mx-3 flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-b border-rx-line-strong pb-3 pt-4 sm:mx-5 sm:pt-5">
+        <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 md:w-auto">
+          <TokenSearchBar
+            onSearch={handleSearch}
+            onClear={handleClearSearch}
+            className="md:w-[300px] md:flex-none"
+          />
+          <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto">
+            <ReportShortcut
+              variant="golden"
+              active={goldenReportsOnly}
+              pillRef={goldenReportsPillDesktopRef}
+              buttonRef={goldenReportImageBtnDesktopRef}
+              onPointerDown={handleGoldenButtonPointerDown}
+              onClick={handleGoldenButtonClick}
+              onPointerMove={(e) =>
+                setGoldenInfoOpenFromPointer(
+                  e.clientX,
+                  e.currentTarget,
+                  setGoldenReportsInfoOpen,
+                )
+              }
+              onPointerLeave={() => setGoldenReportsInfoOpen(false)}
+              describedBy={
+                goldenReportsInfoOpen ? goldenReportsTooltipId : undefined
+              }
             />
-            <div className="inline-flex items-center gap-0.5 shrink-0 min-w-0 max-w-full">
-            <div
-              ref={goldenReportsPillDesktopRef}
-              className={clsx(
-                "inline-flex h-9 shrink-0 items-center rounded-xl px-0.5 transition-colors",
-                goldenReportsOnly && "bg-[#ffc000]/12",
-              )}
-            >
-              <button
-                ref={goldenReportImageBtnDesktopRef}
-                type="button"
-                onPointerDown={handleGoldenButtonPointerDown}
-                onClick={handleGoldenButtonClick}
-                onPointerMove={(e) =>
-                  setGoldenInfoOpenFromPointer(
-                    e.clientX,
-                    e.currentTarget,
-                    setGoldenReportsInfoOpen,
-                  )
-                }
-                onPointerLeave={() => setGoldenReportsInfoOpen(false)}
-                className={clsx(
-                  "relative flex h-9 shrink-0 items-center justify-center rounded-lg border-0 bg-transparent px-1 outline-none transition-colors",
-                  "focus-visible:ring-2 focus-visible:ring-[#ffc000]/40 focus-visible:ring-offset-0",
-                )}
-                title="Show tokens in the Golden Reports program"
-                aria-pressed={goldenReportsOnly}
-                aria-label="Golden Reports filter"
-                aria-describedby={
-                  goldenReportsInfoOpen ? goldenReportsTooltipId : undefined
-                }
-              >
-                <Image
-                  src="/images/btn_golden-report.webp"
-                  alt="Golden Reports"
-                  width={120}
-                  height={28}
-                  className="h-5 w-auto max-h-5 shrink-0 object-contain sm:h-8 sm:max-h-8"
-                />
-              </button>
-            </div>
-            <div
-              ref={pumpReportsPillDesktopRef}
-              className={clsx(
-                "inline-flex h-9 shrink-0 items-center rounded-xl px-0.5 transition-colors",
-                pumpReportsOnly && "bg-white/10",
-              )}
-            >
-              <button
-                ref={pumpReportImageBtnDesktopRef}
-                type="button"
-                onPointerDown={handlePumpButtonPointerDown}
-                onClick={handlePumpButtonClick}
-                onPointerMove={(e) =>
-                  setGoldenInfoOpenFromPointer(
-                    e.clientX,
-                    e.currentTarget,
-                    setPumpReportsInfoOpen,
-                  )
-                }
-                onPointerLeave={() => setPumpReportsInfoOpen(false)}
-                className={clsx(
-                  "relative flex h-9 shrink-0 items-center justify-center rounded-lg border-0 bg-transparent px-1 outline-none transition-colors",
-                  "focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-offset-0",
-                )}
-                title="Show tokens in the Pump Reports program"
-                aria-pressed={pumpReportsOnly}
-                aria-label="Pump Reports filter"
-                aria-describedby={
-                  pumpReportsInfoOpen ? pumpReportsTooltipId : undefined
-                }
-              >
-                <Image
-                  src="/images/btn_pump-report.webp"
-                  alt="Pump Reports"
-                  width={120}
-                  height={28}
-                  className="h-5 w-auto max-h-5 shrink-0 object-contain sm:h-8 sm:max-h-8"
-                />
-              </button>
-            </div>
-            </div>
-          </div>
-          <div className="w-full sm:flex-1 flex justify-center sm:justify-end">
-            <div className="w-full max-w-full sm:max-w-75">
-              <TokenSearchBar
-                onSearch={handleSearch}
-                onClear={handleClearSearch}
-                className="w-full"
-              />
-            </div>
+            <ReportShortcut
+              variant="pump"
+              active={pumpReportsOnly}
+              pillRef={pumpReportsPillDesktopRef}
+              buttonRef={pumpReportImageBtnDesktopRef}
+              onPointerDown={handlePumpButtonPointerDown}
+              onClick={handlePumpButtonClick}
+              onPointerMove={(e) =>
+                setGoldenInfoOpenFromPointer(
+                  e.clientX,
+                  e.currentTarget,
+                  setPumpReportsInfoOpen,
+                )
+              }
+              onPointerLeave={() => setPumpReportsInfoOpen(false)}
+              describedBy={
+                pumpReportsInfoOpen ? pumpReportsTooltipId : undefined
+              }
+            />
           </div>
         </div>
 
-        {/* Mobile: search icon next to ChainButtons; tap to expand full search with close (same UI as RexMarkets) */}
-        <div className="sm:hidden relative overflow-hidden min-h-[44px] w-full">
-          {/* Row 1: ChainButtons + search icon (slides left when search expanded) */}
-          <div
-            className={clsx(
-              "flex items-center justify-between gap-2 w-full transition-transform duration-300 ease-out",
-              mobileSearchOpen ? "-translate-x-full" : "translate-x-0"
-            )}
-          >
-            <div className="flex min-w-0 flex-1 items-center">
-              <div className="min-w-0 flex-1 overflow-x-auto scrollbar-none">
-                <ChainButtons
-                  selectedChain={screenerChain}
-                  onChainChange={handleScreenerChainNavigate}
-                />
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setMobileSearchOpen(true)}
-              className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-xl text-white hover:text-white hover:bg-white/20 transition-colors"
-              aria-label="Open search"
-            >
-              <Search className="w-6 h-6" />
-            </button>
-          </div>
-
-          {/* Row 2: Full-width search bar + close (slides in from right when open) */}
-          <div
-            className={clsx(
-              "absolute top-0 left-0 right-0 flex items-center gap-2 transition-transform duration-300 ease-out min-h-[44px]",
-              mobileSearchOpen ? "translate-x-0" : "translate-x-full"
-            )}
-          >
-            <div className="flex-1 min-w-0">
-              <TokenSearchBar
-                onSearch={(query, type) => {
-                  handleSearch(query, type);
-                  setMobileSearchOpen(false);
-                }}
-                onClear={handleClearSearch}
-                className="w-full"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setMobileSearchOpen(false)}
-              className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-xl bg-white/12 text-white/80 hover:text-white hover:bg-white/20 transition-colors"
-              aria-label="Close search"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
-
-        {/* Mobile: Golden + Pump — inline-flex group so buttons don’t stretch like block flex rows */}
-        <div className="sm:hidden flex w-full shrink-0 justify-center pt-0">
-          <div className="inline-flex max-w-full items-center gap-0.5 rounded-xl transition-colors">
+        <div className="flex w-full min-w-0 items-center gap-3 md:ml-auto md:w-auto">
+          {tableCountLabel ? (
             <div
-              ref={goldenReportsPillMobileRef}
-              className={clsx(
-                "inline-flex shrink-0 items-center justify-center rounded-xl transition-colors",
-                goldenReportsOnly && "bg-[#ffc000]/12",
-              )}
+              className="rx-num hidden shrink-0 text-[13px] text-rx-text-3 md:block"
+              aria-live="polite"
             >
-              <button
-                ref={goldenReportImageBtnMobileRef}
-                type="button"
-                onPointerDown={handleGoldenButtonPointerDown}
-                onClick={handleGoldenButtonClick}
-                onPointerMove={(e) =>
-                  setGoldenInfoOpenFromPointer(
-                    e.clientX,
-                    e.currentTarget,
-                    setGoldenReportsInfoOpen,
-                  )
-                }
-                onPointerLeave={() => setGoldenReportsInfoOpen(false)}
-                className={clsx(
-                  "inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-lg border-0 bg-transparent p-0 outline-none transition-colors",
-                  "focus-visible:ring-2 focus-visible:ring-[#ffc000]/40 focus-visible:ring-inset focus-visible:ring-offset-0",
-                )}
-                title="Show tokens in the Golden Reports program"
-                aria-pressed={goldenReportsOnly}
-                aria-label="Golden Reports filter"
-                aria-describedby={
-                  goldenReportsInfoOpen ? goldenReportsTooltipId : undefined
-                }
-              >
-                <Image
-                  src="/images/btn_golden-report.webp"
-                  alt="Golden Reports"
-                  width={3524}
-                  height={760}
-                  sizes="(max-width: 640px) 45vw, 200px"
-                  className="h-auto max-h-10 w-auto max-w-[11rem] object-contain"
-                />
-              </button>
+              {tableCountLabel}
             </div>
-            <div
-              ref={pumpReportsPillMobileRef}
-              className={clsx(
-                "inline-flex shrink-0 items-center justify-center rounded-xl transition-colors",
-                pumpReportsOnly && "bg-white/10",
-              )}
-            >
-              <button
-                ref={pumpReportImageBtnMobileRef}
-                type="button"
-                onPointerDown={handlePumpButtonPointerDown}
-                onClick={handlePumpButtonClick}
-                onPointerMove={(e) =>
-                  setGoldenInfoOpenFromPointer(
-                    e.clientX,
-                    e.currentTarget,
-                    setPumpReportsInfoOpen,
-                  )
-                }
-                onPointerLeave={() => setPumpReportsInfoOpen(false)}
-                className={clsx(
-                  "inline-flex min-h-[44px] shrink-0 items-center justify-center rounded-lg border-0 bg-transparent p-0 outline-none transition-colors",
-                  "focus-visible:ring-2 focus-visible:ring-white/30 focus-visible:ring-inset focus-visible:ring-offset-0",
-                )}
-                title="Show tokens in the Pump Reports program"
-                aria-pressed={pumpReportsOnly}
-                aria-label="Pump Reports filter"
-                aria-describedby={
-                  pumpReportsInfoOpen ? pumpReportsTooltipId : undefined
-                }
-              >
-                <Image
-                  src="/images/btn_pump-report.webp"
-                  alt="Pump Reports"
-                  width={3524}
-                  height={760}
-                  sizes="(max-width: 640px) 45vw, 200px"
-                  className="h-auto max-h-10 w-auto max-w-[11rem] object-contain"
-                />
-              </button>
-            </div>
-          </div>
+          ) : null}
+          <ChainButtons
+            selectedChain={screenerChain}
+            onChainChange={handleScreenerChainNavigate}
+          />
         </div>
       </div>
 
-      <div className="rexscreener-trending-table-frame relative flex min-h-0 flex-1 flex-col overflow-hidden border-b border-white/10 touch-manipulation">
+      <div
+        className="rexscreener-trending-table-frame relative flex min-h-0 flex-1 flex-col overflow-hidden touch-manipulation sm:mx-5"
+        style={pinStyle}
+      >
         {isPageLoading &&
           !goldenReportsOnly &&
           !pumpReportsOnly &&
           !deepLinkBlocksTrendingLoaders && <PageLoaderOverlay />}
 
         {pendingChartToken && (
-          <div className="absolute inset-0 z-[19] flex items-center justify-center bg-black/50">
-            <div className="flex items-center text-[#FFC000]">
-              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3" />
+          <div className="absolute inset-0 z-[19] flex items-center justify-center bg-[rgba(7,7,7,0.6)] backdrop-blur-[2px]">
+            <div className="flex items-center gap-3 text-sm text-rx-text-2" role="status">
+              <span className="rx-spin text-rx-gold" aria-hidden />
               <span>Loading chart…</span>
             </div>
           </div>
         )}
 
         {deepLinkTableOverlay !== null && !suppressDeepLinkTableOverlay && (
-          <div className="absolute inset-0 z-[18] flex items-center justify-center bg-black/50">
+          <div className="absolute inset-0 z-[18] flex items-center justify-center bg-[rgba(7,7,7,0.6)] backdrop-blur-[2px]">
             {deepLinkTableOverlay === "loading" && (
-              <div className="flex items-center text-[#FFC000]">
-                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3" />
+              <div className="flex items-center gap-3 text-sm text-rx-text-2" role="status">
+                <span className="rx-spin text-rx-gold" aria-hidden />
                 <span>Loading token…</span>
               </div>
             )}
             {deepLinkTableOverlay === "not-found" && (
               <div className="flex flex-col items-center gap-4 px-4 text-center">
-                <p className="text-white/90">
+                <p className="text-[15px] text-rx-text">
                   We couldn&apos;t load this token from the URL.
                 </p>
                 <button
                   type="button"
                   onClick={() => onScreenerChainNavigate(screenerChain)}
-                  className="px-3 py-1.5 rounded border border-white/20 text-sm text-white hover:bg-white/10 transition"
+                  className="rx-btn rx-btn--secondary rx-btn--s"
                 >
                   Back to screener
                 </button>
@@ -1670,61 +1642,61 @@ export function TrendingTableContent({
 
         {showCenteredOverlay && (
           <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-            <div className="pointer-events-auto rounded-lg shadow-2xl text-[#FFC000]">
+            <div className="pointer-events-auto text-sm text-rx-text-2">
               {goldenReportsOnly && goldenTableStillLoading && (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3" />
+                <div className="flex items-center gap-3" role="status">
+                  <span className="rx-spin text-rx-gold" aria-hidden />
                   <span>Loading Golden Reports…</span>
                 </div>
               )}
               {goldenReportsOnly && goldenScreenerError && (
-                <div className="flex flex-col items-center gap-2 px-4 text-center">
-                  <span className="text-[#FFC000]">
+                <div className="flex flex-col items-center gap-3 px-4 text-center">
+                  <span className="text-rx-down">
                     {(goldenScreenerErr as Error)?.message ?? "Failed to load"}
                   </span>
                   <button
                     type="button"
                     onClick={() => refetchGoldenScreener()}
-                    className="underline hover:opacity-80 cursor-pointer text-sm"
+                    className="rx-btn rx-btn--secondary rx-btn--s"
                   >
                     Retry
                   </button>
                 </div>
               )}
               {pumpReportsOnly && pumpTableStillLoading && (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3" />
+                <div className="flex items-center gap-3" role="status">
+                  <span className="rx-spin text-rx-gold" aria-hidden />
                   <span>Loading Pump Reports…</span>
                 </div>
               )}
               {pumpReportsOnly && pumpScreenerError && (
-                <div className="flex flex-col items-center gap-2 px-4 text-center">
-                  <span className="text-[#FFC000]">
+                <div className="flex flex-col items-center gap-3 px-4 text-center">
+                  <span className="text-rx-down">
                     {(pumpScreenerErr as Error)?.message ?? "Failed to load"}
                   </span>
                   <button
                     type="button"
                     onClick={() => refetchPumpScreener()}
-                    className="underline hover:opacity-80 cursor-pointer text-sm"
+                    className="rx-btn rx-btn--secondary rx-btn--s"
                   >
                     Retry
                   </button>
                 </div>
               )}
               {!goldenReportsOnly && !pumpReportsOnly && isLoading && rows.length === 0 && (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3" />
+                <div className="flex items-center gap-3" role="status">
+                  <span className="rx-spin text-rx-gold" aria-hidden />
                   <span>Loading trending tokens…</span>
                 </div>
               )}
               {!goldenReportsOnly && !pumpReportsOnly && isError && (
-                <div className="flex items-center">
-                  <span className="text-[#FFC000]">
+                <div className="flex flex-col items-center gap-3 px-4 text-center sm:flex-row">
+                  <span className="text-rx-down">
                     Failed to load. {(error as Error)?.message ?? ""}
                   </span>
                   <button
                     onClick={() => refetch()}
-                    className="ml-3 underline hover:opacity-80 cursor-pointer"
+                    className="rx-btn rx-btn--secondary rx-btn--s"
                   >
                     Retry
                   </button>
@@ -1763,7 +1735,7 @@ export function TrendingTableContent({
             overscrollBehaviorY: "contain",
           }}
         >
-          <div className="sticky top-0 z-40 overflow-hidden bg-black/95 backdrop-blur-sm">
+          <div className="sticky top-0 z-40 overflow-hidden bg-[rgba(9,9,9,0.86)] backdrop-blur-md">
             <div
               ref={headerContentRef}
               className="will-change-transform"
@@ -1796,7 +1768,14 @@ export function TrendingTableContent({
                 !isLoading &&
                 !isError &&
                 displayRows.length === 0 && (
-                  <div className="p-4 text-white/70">No data found.</div>
+                  <TableEmptyState
+                    title="No tokens found"
+                    body={
+                      isSearchMode
+                        ? "Check the ticker, or paste the full contract address."
+                        : "Nothing is trending on this chain right now."
+                    }
+                  />
                 )}
 
               {goldenReportsOnly &&
@@ -1805,22 +1784,19 @@ export function TrendingTableContent({
                 !goldenScreenerError &&
                 !goldenMetadataGap &&
                 goldenRegistryCount === 0 && (
-                  <div className="p-4 text-white/70">
-                    No Golden Report projects yet.
-                  </div>
+                  <TableEmptyState title="No Golden Report projects yet." />
                 )}
 
               {goldenReportsOnly && goldenMetadataGap && (
-                <div className="flex flex-col items-center gap-2 p-4 text-white/70">
-                  <span>Couldn&apos;t load market data for Golden Reports.</span>
+                <TableEmptyState title="Couldn't load market data for Golden Reports.">
                   <button
                     type="button"
                     onClick={() => refetchGoldenScreener()}
-                    className="text-sm text-[#FFC000] underline hover:opacity-80"
+                    className="rx-btn rx-btn--secondary rx-btn--s"
                   >
                     Retry
                   </button>
-                </div>
+                </TableEmptyState>
               )}
 
               {pumpReportsOnly &&
@@ -1829,22 +1805,19 @@ export function TrendingTableContent({
                 !pumpScreenerError &&
                 !pumpMetadataGap &&
                 pumpRegistryCount === 0 && (
-                  <div className="p-4 text-white/70">
-                    No Pump Report projects yet.
-                  </div>
+                  <TableEmptyState title="No Pump Report projects yet." />
                 )}
 
               {pumpReportsOnly && pumpMetadataGap && (
-                <div className="flex flex-col items-center gap-2 p-4 text-white/70">
-                  <span>Couldn&apos;t load market data for Pump Reports.</span>
+                <TableEmptyState title="Couldn't load market data for Pump Reports.">
                   <button
                     type="button"
                     onClick={() => refetchPumpScreener()}
-                    className="text-sm text-[#FFC000] underline hover:opacity-80"
+                    className="rx-btn rx-btn--secondary rx-btn--s"
                   >
                     Retry
                   </button>
-                </div>
+                </TableEmptyState>
               )}
 
               {(goldenReportsOnly
@@ -1853,7 +1826,7 @@ export function TrendingTableContent({
                   ? !pumpTableStillLoading && !pumpScreenerError
                   : !isLoading && !isError) &&
                 displayRows.length > 0 && (
-                <div className="divide-y divide-white/10 w-full">
+                <div className="w-full">
                   {displayRows.map((t, i) => {
                     const sk = trendSparklineCacheKey(t);
                     const registryKey = goldenRegistryKeyFromTrendingToken(t);
@@ -1905,6 +1878,8 @@ export function TrendingTableContent({
                       />
                     );
                   })}
+                  {/* Room for the floating Ask Claw button below the last row */}
+                  <div aria-hidden="true" className="hidden h-16 md:block" />
                 </div>
               )}
             </div>
@@ -1912,92 +1887,78 @@ export function TrendingTableContent({
         </div>
       </div>
 
-      <div className="flex flex-col gap-3 text-sm text-white/80 px-2 pb-2">
+      {/* Pager */}
+      <div className="flex shrink-0 flex-col gap-2.5 px-3 py-3 text-[13px] text-rx-text-3 sm:mx-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-0">
         {!goldenReportsOnly && !pumpReportsOnly ? (
-          <div className="flex flex-col sm:justify-between sm:flex-row lg:items-center gap-3">
-            <div className="flex flex-row justify-between sm:items-center gap-2 sm:gap-3">
-              <div className="flex items-center gap-2">
-                <button
-                  className={`px-3 py-1 rounded border border-white/20 text-sm ${
-                    hasPrev
-                      ? "hover:bg-white/10"
-                      : "opacity-40 cursor-not-allowed"
-                  }`}
-                  onClick={prevPage}
-                  disabled={!hasPrev}
-                >
-                  Prev
-                </button>
-
-                <div className="flex items-center gap-1 sm:gap-2">
-                  <span className="text-xs sm:text-sm">Page</span>
-
-                  <input
-                    type="number"
-                    min={1}
-                    value={pageIndex}
-                    onChange={(e) => setPageIndex(Number(e.target.value))}
-                    inputMode="numeric"
-                    pattern="[0-9]*"
-                    placeholder="1"
-                    className="w-16 sm:w-20 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md bg-black/30 border border-white/20 text-white placeholder-white/40 outline-none
-                             focus:border-[#FFD700]/60 focus:ring-2 focus:ring-[#FFD700]/50 transition
-                             [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                  />
-
-                  {totalPages ? (
-                    <span className="text-white/60 text-xs sm:text-sm">
-                      of {totalPages}
-                    </span>
-                  ) : null}
-                </div>
-
-                <button
-                  className={`px-3 py-1 rounded border border-white/20 text-sm ${
-                    hasNext
-                      ? "hover:bg-white/10"
-                      : "opacity-40 cursor-not-allowed"
-                  }`}
-                  onClick={nextPage}
-                  disabled={!hasNext}
-                >
-                  Next
-                </button>
-              </div>
-
-              <label className="flex items-center gap-1 sm:gap-2">
-                <RowsPerPageSelect
-                  value={pageSize}
-                  onChange={(n) => setPageSize(Number(n))}
-                  options={[25, 50]}
-                  direction="up"
-                  className="sm:ml-1"
-                />
-              </label>
-            </div>
-
-            <div className="w-full sm:w-auto flex justify-center items-center lg:ml-auto">
-              {typeof upstreamTotal === "number" && (
-                <div className="text-white/40 text-xs sm:text-sm">
-                  <div
-                    className="
-                    flex flex-row sm:items-center gap-1 sm:gap-2
-                    [@media(min-width:1024px)_and_(max-width:1170px)]:flex-col
-                  "
-                  >
-                    <span>Total: {upstreamTotal.toLocaleString()}</span>
-                    {typeof jupVerifiedTotal === "number" && (
-                      <span className="text-white/60">
-                        (Jupiter Verified: {jupVerifiedTotal.toLocaleString()})
-                      </span>
-                    )}
-                  </div>
-                </div>
+          <>
+            <div className="rx-num min-w-0" aria-live="polite">
+              {displayRows.length > 0 ? (
+                <>
+                  Showing {showingFrom}–{showingTo}
+                  {typeof upstreamTotal === "number"
+                    ? ` of ${upstreamTotal.toLocaleString()}`
+                    : ""}{" "}
+                  {isSearchMode
+                    ? "matching your search"
+                    : `on ${SCREENER_CHAIN_LABEL[screenerChain]}`}
+                  {typeof jupVerifiedTotal === "number" && (
+                    <> · Jupiter Verified: {jupVerifiedTotal.toLocaleString()}</>
+                  )}
+                </>
+              ) : isLoading ? (
+                "Loading…"
+              ) : (
+                "No tokens match that search. Try a ticker like WETH or paste a contract address."
               )}
             </div>
-          </div>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className="rx-btn rx-btn--secondary rx-btn--s"
+                onClick={prevPage}
+                disabled={!hasPrev}
+              >
+                Previous
+              </button>
+
+              <label className="rx-num flex items-center gap-1.5 text-rx-text">
+                <span className="text-rx-text-3">Page</span>
+                <input
+                  type="number"
+                  min={1}
+                  value={pageIndex}
+                  onChange={(e) => setPageIndex(Number(e.target.value))}
+                  inputMode="numeric"
+                  pattern="[0-9]*"
+                  placeholder="1"
+                  aria-label="Page number"
+                  className="h-8 w-14 rounded-[9px] border border-rx-line-strong bg-black/40 px-2 text-center text-[13px] text-rx-text outline-none transition placeholder:text-rx-text-3 focus:border-rx-gold focus:shadow-[0_0_0_3px_rgba(255,184,0,0.14)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                />
+                {totalPages ? (
+                  <span className="text-rx-text-3">of {totalPages.toLocaleString()}</span>
+                ) : null}
+              </label>
+
+              <button
+                type="button"
+                className="rx-btn rx-btn--secondary rx-btn--s"
+                onClick={nextPage}
+                disabled={!hasNext}
+              >
+                Next
+              </button>
+
+              <RowsPerPageSelect
+                value={pageSize}
+                onChange={(n) => setPageSize(Number(n))}
+                options={[25, 50]}
+                direction="up"
+              />
+            </div>
+          </>
         ) : (
-          <div className="flex justify-center sm:justify-end text-white/50 text-xs sm:text-sm px-1">
+          <div className="rx-num">
             {goldenReportsOnly &&
               (goldenTableStillLoading
                 ? "…"

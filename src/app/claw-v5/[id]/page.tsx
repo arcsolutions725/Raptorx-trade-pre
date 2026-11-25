@@ -12,12 +12,11 @@ import { flushSync } from "react-dom";
 import { useRouter, useParams } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
-import { Share2, Menu, Loader2 } from "lucide-react";
-import Image from "next/image";
+import { ArrowLeftRight, PanelLeft, Share2 } from "lucide-react";
+import clsx from "clsx";
 import copy from "copy-to-clipboard";
-import ChatSidebar, {
-  clawV5HeaderNavShiftPx,
-} from "../_components/chat/ChatSidebar";
+import ChatSidebar from "../_components/chat/ChatSidebar";
+import ClawAura from "../_components/chat/ClawAura";
 import ChatInput, {
   type PredictionMarketMode,
   type ClawSelectionContext,
@@ -1309,30 +1308,24 @@ export default function ChatDetailPage() {
   if (isLoading) {
     return (
       <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-        <div className="flex min-h-0 flex-1 overflow-hidden">
-          <div className="flex h-full min-h-0 w-full flex-col">
-            <RexHeader
-              onHistoryClick={() => {}}
-              showExchangeButton={false}
-              clawV5MainNavShiftPx={clawV5HeaderNavShiftPx(
-                isChatSidebarCollapsed,
-              )}
-            />
-            <div className="flex-1 flex overflow-hidden bg-black border-y-2 border-[#FFC000] min-h-0">
-              <ChatSidebar
-                chats={chats}
-                isLoading={false}
-                onNewChat={handleNewChat}
-                collapsed={isChatSidebarCollapsed}
-                onCollapsedChange={setIsChatSidebarCollapsed}
-              />
-              <div className="flex-1 flex items-center justify-center text-white">
-                Loading chat...
-              </div>
+        <RexHeader onHistoryClick={() => {}} showExchangeButton={false} />
+        <div className="claw has-thread">
+          <ClawAura />
+          <ChatSidebar
+            chats={chats}
+            isLoading={false}
+            onNewChat={handleNewChat}
+            collapsed={isChatSidebarCollapsed}
+            onCollapsedChange={setIsChatSidebarCollapsed}
+          />
+          <section className="claw-main" aria-label="Claw AI conversation">
+            <div className="claw-status" role="status" aria-live="polite">
+              <span className="rx-spin" aria-hidden="true" />
+              <p className="m-0">Loading chat...</p>
             </div>
-            <Footer />
-          </div>
+          </section>
         </div>
+        <Footer />
       </div>
     );
   }
@@ -1340,204 +1333,168 @@ export default function ChatDetailPage() {
   return (
     <>
     <div className="relative flex min-h-0 w-full flex-1 flex-col overflow-hidden">
-      <div className="flex min-h-0 flex-1 overflow-hidden">
-        <div className="flex h-full min-h-0 w-full flex-col">
-          {/* Header */}
-          <RexHeader
-            onHistoryClick={() => {}}
-            showExchangeButton={false}
-            clawV5MainNavShiftPx={clawV5HeaderNavShiftPx(
-              isChatSidebarCollapsed,
-            )}
-          />
+      {/* Header */}
+      <RexHeader onHistoryClick={() => {}} showExchangeButton={false} />
 
-          {/* Main Content */}
-          <div className="flex-1 flex overflow-hidden bg-black border-y-2 border-[#FFC000] relative min-h-0">
-            <ChatSidebar
-              chats={chats}
-              isLoading={false}
-              onNewChat={handleNewChat}
-              onChatRename={handleChatRename}
-              onChatDelete={handleChatDelete}
-              isMobileOpen={isSidebarOpen}
-              onMobileClose={() => setIsSidebarOpen(false)}
-              collapsed={isChatSidebarCollapsed}
-              onCollapsedChange={setIsChatSidebarCollapsed}
-            />
+      {/* Main Content */}
+      <div
+        className={clsx(
+          "claw",
+          messages.length > 0 && "has-thread",
+          isSending && "is-thinking",
+        )}
+      >
+        <ClawAura />
 
-            <div className="flex-1 flex min-h-0 min-w-0 bg-black">
-              <div className="flex-1 flex flex-col bg-black min-h-0 min-w-0">
-                {/* Chat Header */}
-                <div className="flex-shrink-0 p-3 md:p-4 flex items-center justify-between md:justify-end gap-2">
-                  {/* Mobile: Menu and Share buttons in one line */}
-                  <div className="md:hidden flex items-center justify-between gap-2 w-full">
-                    <button
-                      onClick={() => setIsSidebarOpen(true)}
-                      className="p-2 rounded-lg text-white/80 hover:text-white transition-colors"
-                      aria-label="Open sidebar"
-                    >
-                      <Menu className="w-6 h-6" />
-                    </button>
-                    <div className="flex items-center gap-3">
-                      {showClawExchangeButton && (
-                        <button
-                          onClick={handleExchange}
-                          className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors"
-                          aria-label="Open exchange"
-                          title="Exchange"
-                        >
-                          <Image
-                            src="/images/exchange.png"
-                            alt="Exchange"
-                            width={72}
-                            height={32}
-                            className="w-25 h-10"
-                          />
-                        </button>
-                      )}
-                      <button
-                        onClick={handleShare}
-                        className="flex items-center gap-1.5 text-white/80 hover:text-white transition-colors"
-                        aria-label="Share"
-                        title="Share"
-                      >
-                        <Share2 className="w-6 h-6" />
-                      </button>
-                    </div>
-                  </div>
-                  {/* Desktop: Exchange (crypto mode only) + Share */}
-                  <div className="hidden md:flex items-center gap-3">
-                    {showClawExchangeButton && (
-                      <button
-                        onClick={handleExchange}
-                        className="cursor-pointer transition hover:scale-[1.03]"
-                        aria-label="Open exchange"
-                        title="Exchange"
-                      >
-                        <Image
-                          src="/images/exchange.png"
-                          alt="Enter The Exchange."
-                          width={120}
-                          height={48}
-                          className="w-25 h-10 object-contain"
-                        />
-                      </button>
-                    )}
-                    <button
-                      onClick={handleShare}
-                      className="flex items-center gap-2 text-white/80 hover:text-white transition-colors text-sm"
-                      aria-label="Share"
-                    >
-                      <Share2 className="w-4 h-4" />
-                      <span>Share</span>
-                    </button>
-                  </div>
-                </div>
+        <ChatSidebar
+          chats={chats}
+          isLoading={false}
+          onNewChat={handleNewChat}
+          onChatRename={handleChatRename}
+          onChatDelete={handleChatDelete}
+          isMobileOpen={isSidebarOpen}
+          onMobileClose={() => setIsSidebarOpen(false)}
+          collapsed={isChatSidebarCollapsed}
+          onCollapsedChange={setIsChatSidebarCollapsed}
+        />
 
-                {/* Messages */}
-                <div className="flex-1 overflow-y-auto overflow-x-auto min-h-0 min-w-0 custom-chat-messages-scrollbar px-1.5 sm:px-2 md:px-0">
-                  <div className="mx-auto w-full max-w-4xl">
-                    {messages.length === 0 ? (
-                      isLoading ||
-                      isSending ||
-                      sessionPendingForChat ? (
-                        <div
-                          className="flex flex-col items-center justify-center min-h-[min(50vh,28rem)] gap-3 px-4 py-12"
-                          role="status"
-                          aria-live="polite"
-                          aria-busy="true"
-                        >
-                          <Loader2
-                            className="w-10 h-10 text-[#FFC000] animate-spin"
-                            aria-hidden
-                          />
-                          <p className="text-sm text-white/65 text-center max-w-sm">
-                            {isSending || sessionPendingForChat
-                              ? "Preparing your conversation…"
-                              : "Loading chat…"}
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="flex items-center justify-center h-full min-h-[min(40vh,20rem)] text-gray-400 text-sm px-4">
-                          No messages yet. Start a conversation!
-                        </div>
-                      )
-                    ) : (
-                      <div className="pb-4">
-                        {messages.map((message, index) => (
-                          <Message
-                            key={message.uiKey ?? message.id}
-                            message={message}
-                            onEdit={handleEditMessage}
-                            onCopy={handleCopyMessage}
-                            onQuote={handleQuote}
-                            onDeepAnalysisMarket={handleDeepAnalysisMarket}
-                            isStreaming={
-                              message.role === "assistant" &&
-                              isSending &&
-                              index === messages.length - 1 &&
-                              (message.content === "" ||
-                                message.id.startsWith("temp-ai-") ||
-                                !message.createdAt)
-                            }
-                            streamingPhase={
-                              message.role === "assistant" &&
-                              isSending &&
-                              index === messages.length - 1
-                                ? streamingPhase
-                                : ""
-                            }
-                            streamingStatusLabel={
-                              message.role === "assistant" &&
-                              isSending &&
-                              index === messages.length - 1
-                                ? streamingStatusLabel
-                                : ""
-                            }
-                            streamingThinking={
-                              message.role === "assistant" &&
-                              isSending &&
-                              index === messages.length - 1
-                                ? streamingThinking
-                                : ""
-                            }
-                          />
-                        ))}
-                        <div ref={messagesEndRef} />
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Chat Input */}
-                <div className="flex-shrink-0">
-                  <ChatInput
-                    onSendMessage={handleSendMessage}
-                    isLoading={isSending}
-                    onStop={handleStop}
-                    placeholder="Search Prediction Events, Arbitrage, Wallets, Cryptocurrencies and more!"
-                    quotedContent={quotedContent}
-                    onClearQuote={handleClearQuote}
-                    marketMode={marketMode}
-                    onMarketModeChange={setMarketMode}
-                    disabled={!authenticated}
-                    disabledPlaceholder="Sign in to chat"
-                  />
-                </div>
-              </div>
-
-              <CryptoSwapPanel
-                isOpen={isSwapOpen}
-                onClose={() => setIsSwapOpen(false)}
-                currentUserId={currentUserId}
-                payload={activeCryptoPayload}
-              />
+        <section
+          className={clsx("claw-main", isSending && "is-thinking")}
+          aria-label="Claw AI conversation"
+        >
+          {/* Chat toolbar: chats drawer (mobile), Exchange (crypto context) + Share */}
+          <div className="claw-bar">
+            <button
+              type="button"
+              onClick={() => setIsSidebarOpen(true)}
+              className="rx-icon-btn md:hidden"
+              aria-label="Open chats"
+              aria-expanded={isSidebarOpen}
+            >
+              <PanelLeft className="size-[18px]" aria-hidden="true" />
+            </button>
+            <div className="flex items-center gap-2">
+              {showClawExchangeButton && (
+                <button
+                  type="button"
+                  onClick={handleExchange}
+                  className="rx-btn rx-btn--exchange rx-btn--s"
+                  aria-label="Open exchange"
+                  title="Exchange"
+                >
+                  <ArrowLeftRight className="size-3.5" aria-hidden="true" />
+                  <span>Exchange</span>
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={handleShare}
+                className="rx-btn rx-btn--ghost rx-btn--s"
+                aria-label="Share"
+                title="Copy a link to this chat"
+              >
+                <Share2 className="size-3.5" aria-hidden="true" />
+                <span>Share</span>
+              </button>
             </div>
           </div>
 
-          <Footer />
-        </div>
+          {/* Messages */}
+          <div className="claw-scroll custom-chat-messages-scrollbar">
+            <div className="claw-col">
+              {messages.length === 0 ? (
+                isLoading ||
+                isSending ||
+                sessionPendingForChat ? (
+                  <div
+                    className="claw-status"
+                    role="status"
+                    aria-live="polite"
+                    aria-busy="true"
+                  >
+                    <span className="rx-spin" aria-hidden="true" />
+                    <p className="m-0 max-w-sm">
+                      {isSending || sessionPendingForChat
+                        ? "Preparing your conversation…"
+                        : "Loading chat…"}
+                    </p>
+                  </div>
+                ) : (
+                  <div className="claw-thread__empty">
+                    No messages yet. Start a conversation!
+                  </div>
+                )
+              ) : (
+                <div className="claw-thread">
+                  {messages.map((message, index) => (
+                    <Message
+                      key={message.uiKey ?? message.id}
+                      message={message}
+                      onEdit={handleEditMessage}
+                      onCopy={handleCopyMessage}
+                      onQuote={handleQuote}
+                      onDeepAnalysisMarket={handleDeepAnalysisMarket}
+                      isStreaming={
+                        message.role === "assistant" &&
+                        isSending &&
+                        index === messages.length - 1 &&
+                        (message.content === "" ||
+                          message.id.startsWith("temp-ai-") ||
+                          !message.createdAt)
+                      }
+                      streamingPhase={
+                        message.role === "assistant" &&
+                        isSending &&
+                        index === messages.length - 1
+                          ? streamingPhase
+                          : ""
+                      }
+                      streamingStatusLabel={
+                        message.role === "assistant" &&
+                        isSending &&
+                        index === messages.length - 1
+                          ? streamingStatusLabel
+                          : ""
+                      }
+                      streamingThinking={
+                        message.role === "assistant" &&
+                        isSending &&
+                        index === messages.length - 1
+                          ? streamingThinking
+                          : ""
+                      }
+                    />
+                  ))}
+                  <div ref={messagesEndRef} />
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Chat Input */}
+          <ChatInput
+            onSendMessage={handleSendMessage}
+            isLoading={isSending}
+            onStop={handleStop}
+            placeholder="Search Prediction Events, Arbitrage, Wallets, Cryptocurrencies and more!"
+            quotedContent={quotedContent}
+            onClearQuote={handleClearQuote}
+            marketMode={marketMode}
+            onMarketModeChange={setMarketMode}
+            disabled={!authenticated}
+            disabledPlaceholder="Sign in to chat"
+          />
+        </section>
+
+        <CryptoSwapPanel
+          isOpen={isSwapOpen}
+          onClose={() => setIsSwapOpen(false)}
+          currentUserId={currentUserId}
+          payload={activeCryptoPayload}
+        />
       </div>
+
+      <Footer />
     </div>
     <PaywallModal
       open={showPaywall}

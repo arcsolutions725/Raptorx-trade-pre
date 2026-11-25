@@ -32,17 +32,22 @@ import {
 import { sortLimitlessMarketsByVolumeDesc } from "@/lib/limitless/sortMarketsByVolume";
 import { useLimitlessNavigation } from "@/hooks/useLimitlessNavigation";
 import { useDataSource } from "@/contexts/DataSourceContext";
-import TableHeader from "./TableHeader";
+import TableHeader, { REX_TABLE_MIN_W } from "./TableHeader";
 import TableRow from "./TableRow";
 import MarketCategory from "./MarketCategory";
-import PageLoaderOverlay from "@/components/PageLoaderOverlay";
 import RexMarketsSearch from "../RexMarketsSearch";
 import RexMarketsCardView from "./RexMarketsCardView";
+import {
+  CardSkeleton,
+  ChevronIcon,
+  GridIcon,
+  ListIcon,
+  TableSkeleton,
+} from "./listUi";
 import {
   getRexmarketsDetailHref,
   getMarketReportGenKey,
 } from "@/lib/rexmarkets/marketRoutes";
-import { LayoutGrid, Search, Table, X } from "lucide-react";
 import PolymarketTradingInterface from "../../RexMarketsReport/RexMarketsReportData/PolymarketTradingInterface";
 
 type MarketsLayoutView = "table" | "card";
@@ -79,23 +84,34 @@ const RowsPerPageSelect = memo(function RowsPerPageSelect({
       <button
         type="button"
         onClick={handleToggle}
-        className="flex items-center justify-between gap-2 w-[80px] sm:w-[112px] px-3 py-1.5 rounded-md border border-white/20 bg-black/30 hover:bg-white/10 transition text-white"
+        className="rx-btn rx-btn--secondary rx-btn--s gap-1.5 px-2.5 sm:px-3"
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label={`Rows per page: ${value}`}
       >
-        <span className="text-sm">{value}</span>
+        <b className="font-mono font-semibold tabular-nums">{value}</b>
+        <small className="hidden text-[12px] text-rx-text-3 sm:inline">/ page</small>
+        <ChevronIcon direction="down" size={12} />
       </button>
 
       {open && (
-        <ul className="absolute z-50 bottom-full mb-2 left-0 w-[160px] max-h-60 overflow-auto rounded-lg border border-white/15 bg-[#0A0A0A]/95 backdrop-blur shadow-2xl">
+        <ul
+          className="rx-menu bottom-[calc(100%+8px)] top-auto z-50 m-0 min-w-[128px] list-none"
+          role="listbox"
+          aria-label="Rows per page"
+        >
           {options.map((opt) => (
             <li
               key={opt}
+              role="option"
+              aria-selected={opt === value}
               onClick={() => handleOptionClick(opt)}
               className={clsx(
-                "flex items-center justify-between gap-3 cursor-pointer px-3 py-2 text-sm hover:bg-white/10",
-                opt === value ? "text-[#FFD700]" : "text-white/90"
+                "rx-menu__item h-9 font-mono tabular-nums",
+                opt === value && "text-rx-gold-hi"
               )}
             >
-              <span>{opt}</span>
+              {opt} <small className="font-sans text-[12px] text-rx-text-3">/ page</small>
             </li>
           ))}
         </ul>
@@ -180,7 +196,6 @@ export default function MarketDataTable({
   const [originalCategoryName, setOriginalCategoryName] = useState<
     string | null
   >(null);
-  const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [layoutView, setLayoutView] = useState<MarketsLayoutView>("table");
 
   // Extract source and tag from tag string in "all" mode
@@ -504,11 +519,6 @@ export default function MarketDataTable({
     }
   }, [dataSource, setPageIndex]);
 
-  const showCenteredOverlay = useMemo(
-    () => (isLoading && markets.length === 0) || isError,
-    [isLoading, markets.length, isError]
-  );
-
   // --- Refs for scroll synchronization
   const topScrollRef = useRef<HTMLDivElement | null>(null);
   const mainScrollRef = useRef<HTMLDivElement | null>(null);
@@ -523,6 +533,8 @@ export default function MarketDataTable({
   const syncHeaderScrollPosition = useCallback((left: number) => {
     if (!headerContentRef.current) return;
     headerContentRef.current.style.transform = `translateX(-${left}px)`;
+    // TableHeader counter-translates its pinned "Market" cell by this amount
+    headerContentRef.current.style.setProperty("--rx-hx", `${left}px`);
   }, []);
 
   // prevent scroll feedback loops
@@ -801,229 +813,112 @@ export default function MarketDataTable({
     );
   }
 
+  const isTable = layoutView === "table";
+
+  // Refetch overlay: Kalshi on pagination and category changes; the other venues only when
+  // fetching after a category change (not pagination)
+  const showRefetchOverlay =
+    (dataSource === "kalshi" && (isPageLoading || (isFetching && markets.length > 0))) ||
+    ((dataSource === "polymarket" ||
+      dataSource === "limitless" ||
+      dataSource === "myriad" ||
+      dataSource === "predictfun") &&
+      isFetching &&
+      markets.length > 0 &&
+      !isPageLoading);
+
+  const showSkeleton = isLoading && !isError && markets.length === 0;
+  const showEmpty = !isLoading && !isError && markets.length === 0;
+  const showMarkets = !isLoading && !isError && markets.length > 0;
+
+  const layoutToggle = (
+    <div className="rx-seg shrink-0" role="group" aria-label="Markets layout">
+      <button
+        type="button"
+        onClick={() => setLayoutView("card")}
+        aria-label="Card view"
+        aria-pressed={layoutView === "card"}
+        title="Card view"
+        className={clsx("rx-seg__item px-2.5", layoutView === "card" && "is-active")}
+      >
+        <GridIcon />
+      </button>
+      <button
+        type="button"
+        onClick={() => setLayoutView("table")}
+        aria-label="Table view"
+        aria-pressed={isTable}
+        title="Table view"
+        className={clsx("rx-seg__item px-2.5", isTable && "is-active")}
+      >
+        <ListIcon />
+      </button>
+    </div>
+  );
+
   return (
     <div className="w-full h-full flex flex-col overflow-hidden min-h-0">
-      <div className="flex-shrink-0 mb-4 pt-3 px-3 sm:px-6">
-        {/* Desktop: category + search side by side */}
-        <div className="hidden sm:flex flex-col sm:flex-row items-start sm:items-start gap-4 sm:gap-6">
-          <div className="w-full sm:flex-1 sm:min-w-0">
-            <MarketCategory
-              onCategoryChange={handleCategoryChange}
-              onTagChange={handleTagChange}
-              selectedCategory={originalCategoryName}
-              selectedTag={tag}
-            />
-          </div>
-          <div className="w-full sm:w-auto sm:max-w-[320px] md:max-w-[360px] sm:shrink-0">
-            <div className="flex items-center gap-2">
-              <div className="flex-1 min-w-0">
+      {/* Bar: categories · search · layout (one row on desktop; search + layout first on phones) */}
+      <div className="flex-shrink-0 px-3 pt-4 sm:px-5 sm:pt-5">
+        <MarketCategory
+          onCategoryChange={handleCategoryChange}
+          onTagChange={handleTagChange}
+          selectedCategory={originalCategoryName}
+          selectedTag={tag}
+          toolbarEnd={
+            <>
+              <div className="min-w-0 flex-1 md:w-[300px] md:flex-none">
                 <RexMarketsSearch
                   onSearch={onSearchChange}
                   searchQuery={searchQuery}
                 />
               </div>
-              <div
-                className="flex w-fit shrink-0 rounded-md border border-white/15 p-[2px] bg-black/40"
-                role="group"
-                aria-label="Markets layout"
-              >
-                <button
-                  type="button"
-                  onClick={() => setLayoutView("card")}
-                  aria-label="Card view"
-                  title="Card view"
-                  className={clsx(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] transition",
-                    layoutView === "card"
-                      ? "bg-[#FFD700] text-black"
-                      : "text-white/70 hover:text-white"
-                  )}
-                >
-                  <LayoutGrid className="size-3.5" strokeWidth={2} aria-hidden />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setLayoutView("table")}
-                  aria-label="Table view"
-                  title="Table view"
-                  className={clsx(
-                    "flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] transition",
-                    layoutView === "table"
-                      ? "bg-[#FFD700] text-black"
-                      : "text-white/70 hover:text-white"
-                  )}
-                >
-                  <Table className="size-3.5" strokeWidth={2} aria-hidden />
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* Mobile: search icon next to category tabs; tap to expand full search with close */}
-        <div className="sm:hidden relative overflow-hidden min-h-[44px]">
-          {/* Row 1: Category tabs + search icon (slides left when search expanded) - align icon with tabs row */}
-          <div
-            className={clsx(
-              "flex items-start gap-2 transition-transform duration-300 ease-out",
-              mobileSearchOpen ? "-translate-x-full" : "translate-x-0"
-            )}
-          >
-            <div className="flex-1 min-w-0 overflow-hidden">
-              <MarketCategory
-                onCategoryChange={handleCategoryChange}
-                onTagChange={handleTagChange}
-                selectedCategory={originalCategoryName}
-                selectedTag={tag}
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => setMobileSearchOpen(true)}
-              className="flex-shrink-0 mt-1 rounded-xl text-white hover:text-white hover:bg-white/20 transition-colors h-10 w-10 flex items-center justify-center"
-              aria-label="Open search"
-            >
-              <Search className="w-6 h-6" />
-            </button>
-            <div
-              className="flex-shrink-0 mt-1 flex rounded-md border border-white/15 p-[2px] bg-black/40"
-              role="group"
-              aria-label="Markets layout"
-            >
-              <button
-                type="button"
-                onClick={() => setLayoutView("card")}
-                aria-label="Card view"
-                title="Card view"
-                className={clsx(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] transition",
-                  layoutView === "card"
-                    ? "bg-[#FFD700] text-black"
-                    : "text-white/70 hover:text-white"
-                )}
-              >
-                <LayoutGrid className="size-3.5" strokeWidth={2} aria-hidden />
-              </button>
-              <button
-                type="button"
-                onClick={() => setLayoutView("table")}
-                aria-label="Table view"
-                title="Table view"
-                className={clsx(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] transition",
-                  layoutView === "table"
-                    ? "bg-[#FFD700] text-black"
-                    : "text-white/70 hover:text-white"
-                )}
-              >
-                <Table className="size-3.5" strokeWidth={2} aria-hidden />
-              </button>
-            </div>
-          </div>
-
-          {/* Row 2: Full-width search bar + close (slides in from right when open) */}
-          <div
-            className={clsx(
-              "absolute top-0 left-0 right-0 flex items-center gap-2 transition-transform duration-300 ease-out min-h-[44px]",
-              mobileSearchOpen ? "translate-x-0" : "translate-x-full"
-            )}
-          >
-            <div className="flex-1 min-w-0">
-              <RexMarketsSearch
-                onSearch={onSearchChange}
-                searchQuery={searchQuery}
-              />
-            </div>
-            <div
-              className="flex w-fit shrink-0 rounded-md border border-white/15 p-[2px] bg-black/40"
-              role="group"
-              aria-label="Markets layout"
-            >
-              <button
-                type="button"
-                onClick={() => setLayoutView("card")}
-                aria-label="Card view"
-                title="Card view"
-                className={clsx(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] transition",
-                  layoutView === "card"
-                    ? "bg-[#FFD700] text-black"
-                    : "text-white/70 hover:text-white"
-                )}
-              >
-                <LayoutGrid className="size-3.5" strokeWidth={2} aria-hidden />
-              </button>
-              <button
-                type="button"
-                onClick={() => setLayoutView("table")}
-                aria-label="Table view"
-                title="Table view"
-                className={clsx(
-                  "flex h-8 w-8 shrink-0 items-center justify-center rounded-[5px] transition",
-                  layoutView === "table"
-                    ? "bg-[#FFD700] text-black"
-                    : "text-white/70 hover:text-white"
-                )}
-              >
-                <Table className="size-3.5" strokeWidth={2} aria-hidden />
-              </button>
-            </div>
-            <button
-              type="button"
-              onClick={() => setMobileSearchOpen(false)}
-              className="flex-shrink-0 h-10 w-10 flex items-center justify-center rounded-xl bg-white/12 text-white/80 hover:text-white hover:bg-white/20 transition-colors"
-              aria-label="Close search"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
-        </div>
+              {layoutToggle}
+            </>
+          }
+        />
       </div>
 
       <div className="flex-1 min-h-0 relative flex flex-col">
-        {/* Show PageLoaderOverlay for Kalshi (pagination and category changes) */}
-        {/* For Polymarket and Limitless, only show when fetching data after category change (not pagination) */}
-        {(dataSource === "kalshi" && (isPageLoading || (isFetching && markets.length > 0))) ||
-        ((dataSource === "polymarket" ||
-          dataSource === "limitless" ||
-          dataSource === "myriad" ||
-          dataSource === "predictfun") &&
-          isFetching &&
-          markets.length > 0 &&
-          !isPageLoading) ? (
-          <PageLoaderOverlay />
+        {showRefetchOverlay ? (
+          <div className="pointer-events-none absolute inset-0 z-[45] flex items-center justify-center bg-[rgba(7,7,7,.45)]">
+            <span
+              className="rx-spin size-8 border-[3px] text-rx-gold"
+              role="status"
+              aria-label="Loading page"
+            />
+          </div>
         ) : null}
 
-        {showCenteredOverlay && (
-          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
-            <div className="pointer-events-auto rounded-lg shadow-2xl text-[#FFC000]">
-              {isLoading && markets.length === 0 && (
-                <div className="flex items-center">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-white mr-3" />
-                  <span>Loading markets...</span>
-                </div>
-              )}
-              {isError && (
-                <div className="flex items-center">
-                  <span className="text-[#FFC000]">Failed to load.</span>
-                  <button
-                    onClick={handleRefetch}
-                    className="ml-3 underline hover:opacity-80 cursor-pointer"
-                  >
-                    Retry
-                  </button>
-                </div>
-              )}
+        {isError && (
+          <div className="pointer-events-none absolute inset-0 z-[45] flex items-center justify-center px-4">
+            <div
+              className="rx-raised pointer-events-auto flex flex-col items-center gap-3 px-6 py-5 text-center"
+              role="alert"
+            >
+              <p className="m-0 text-[14px] font-semibold text-rx-text">
+                Failed to load.
+              </p>
+              <p className="rx-small m-0">
+                The market list could not be loaded. Try again in a moment.
+              </p>
+              <button
+                type="button"
+                onClick={handleRefetch}
+                className="rx-btn rx-btn--secondary rx-btn--s"
+              >
+                Retry
+              </button>
             </div>
           </div>
         )}
 
         {/* Desktop: synced horizontal scrollbar (table only); hidden on phones like RexScreener */}
-        {layoutView === "table" ? (
+        {isTable ? (
           <div
             ref={topScrollRef}
             className={clsx(
-              "custom-hscroll-top z-10 hidden shrink-0 overflow-x-scroll overflow-y-hidden bg-black/0 lg:block lg:h-[16px]",
+              "custom-hscroll-top z-10 hidden shrink-0 overflow-x-scroll overflow-y-hidden bg-black/0 lg:mx-5 lg:block lg:h-[16px]",
               ready ? null : "pointer-events-none opacity-80"
             )}
             onScroll={onTopScroll}
@@ -1039,17 +934,23 @@ export default function MarketDataTable({
           </div>
         ) : null}
 
-        {/* Vertical outer + horizontal inner (table); single column scroll (card) */}
+        {/* Vertical outer + horizontal inner (table); single column scroll (card).
+            Table: inset to the page gutter on sm+, flush on phones (first column pinned). */}
         <div
           ref={mainScrollRef}
-          className="relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden hide-vert-scroll touch-manipulation"
+          className={clsx(
+            "relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden hide-vert-scroll touch-manipulation",
+            // same ground as the pinned first column, so the pin never reads as a separate block
+            isTable && "bg-[#0C0C0C] sm:mx-5"
+          )}
           style={{
             WebkitOverflowScrolling: "touch",
             overscrollBehaviorY: "contain",
           }}
+          aria-busy={showSkeleton || showRefetchOverlay || undefined}
         >
-          {layoutView === "table" ? (
-            <div className="sticky top-0 z-40 overflow-hidden bg-black/95 backdrop-blur-sm">
+          {isTable ? (
+            <div className="sticky top-0 z-40 overflow-hidden bg-[#0C0C0C]">
               <div
                 ref={headerContentRef}
                 className="will-change-transform"
@@ -1067,129 +968,121 @@ export default function MarketDataTable({
             ref={horizScrollRef}
             className={clsx(
               "min-w-0 w-full overflow-y-visible",
-              layoutView === "table"
+              isTable
                 ? "hide-bottom-hscroll overflow-x-auto"
                 : "hide-bottom-hscroll overflow-x-hidden"
             )}
-            onScroll={layoutView === "table" ? onHorizScroll : undefined}
+            onScroll={isTable ? onHorizScroll : undefined}
             style={{
               WebkitOverflowScrolling: "touch",
-              ...(layoutView === "table"
+              ...(isTable
                 ? { overscrollBehaviorX: "contain" as const }
                 : {}),
             }}
           >
-            <div ref={contentRef} className="align-top w-full">
-              {layoutView === "table" ? (
+            <div
+              ref={contentRef}
+              className={clsx(
+                "align-top w-full",
+                !isTable && "px-3 pb-6 pt-4 sm:px-5"
+              )}
+            >
+              {showSkeleton && (
                 <>
-                  {!isLoading && !isError && markets.length === 0 && (
-                    <div className="p-4 text-white/70">No markets found.</div>
-                  )}
-
-                  {!isLoading && !isError && markets.length > 0 && (
-                    <div className="divide-y divide-white/10 w-full">
-                      {markets.map((market, i) => (
-                        <TableRow
-                          key={`${market._source || dataSource}-${market.ticker || market.id}`}
-                          market={market}
-                          onMarketClick={handleMarketClick}
-                          onMarketSelected={onMarketSelected}
-                          onReportGenerated={onReportGenerated}
-                          currentUserId={currentUserId}
-                          index={i}
-                          showSourceColumn={false}
-                          showSourceLogo={isAllMode}
-                        />
-                      ))}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <>
-                  {!isLoading && !isError && markets.length === 0 && (
-                    <div className="p-4 text-white/70">No markets found.</div>
-                  )}
-                  {!isLoading && !isError && markets.length > 0 && (
-                    <RexMarketsCardView
-                      markets={markets as any}
-                      onMarketClick={handleMarketClick as any}
-                      onMarketSelected={onMarketSelected}
-                      onReportGenerated={onReportGenerated}
-                      currentUserId={currentUserId}
-                    />
-                  )}
+                  <span className="sr-only" role="status">
+                    Loading markets...
+                  </span>
+                  {isTable ? <TableSkeleton /> : <CardSkeleton />}
                 </>
               )}
+
+              {showEmpty && (
+                <p className="rx-small m-0 px-4 py-12 text-center">
+                  No markets found. Try another category or clear the search.
+                </p>
+              )}
+
+              {showMarkets &&
+                (isTable ? (
+                  <div className={clsx("w-full", REX_TABLE_MIN_W)}>
+                    {markets.map((market, i) => (
+                      <TableRow
+                        key={`${market._source || dataSource}-${market.ticker || market.id}`}
+                        market={market}
+                        onMarketClick={handleMarketClick}
+                        onMarketSelected={onMarketSelected}
+                        onReportGenerated={onReportGenerated}
+                        currentUserId={currentUserId}
+                        index={i}
+                        showSourceColumn={false}
+                        showSourceLogo={isAllMode}
+                      />
+                    ))}
+                  </div>
+                ) : (
+                  <RexMarketsCardView
+                    markets={markets as any}
+                    onMarketClick={handleMarketClick as any}
+                    onMarketSelected={onMarketSelected}
+                    onReportGenerated={onReportGenerated}
+                    currentUserId={currentUserId}
+                  />
+                ))}
             </div>
           </div>
         </div>
       </div>
 
-      <div className="flex-shrink-0 flex flex-col gap-3 text-sm text-white/80 px-2 sm:px-4 pt-3 pb-2">
-        <div className="flex flex-col sm:justify-between sm:flex-row lg:items-center gap-3">
-          <div className="flex flex-row justify-between sm:items-center gap-2 sm:gap-3">
-            <div className="flex items-center gap-2">
-              <button
-                className={clsx(
-                  "px-3 py-1 rounded border border-white/20 text-sm",
-                  hasPrev
-                    ? "hover:bg-white/10"
-                    : "opacity-40 cursor-not-allowed"
-                )}
-                onClick={prevPage}
-                disabled={!hasPrev}
-              >
-                Prev
-              </button>
+      {/* Pager */}
+      <nav
+        className="flex-shrink-0 flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-t border-rx-line px-3 py-2.5 text-[13px] text-rx-text-3 sm:gap-x-3 sm:px-5"
+        aria-label="Pagination"
+      >
+        <label className="flex items-center gap-2 font-mono tabular-nums">
+          <span>Page</span>
+          <input
+            type="number"
+            min={1}
+            value={pageIndex}
+            onChange={handlePageIndexChange}
+            inputMode="numeric"
+            pattern="[0-9]*"
+            placeholder="1"
+            aria-label="Page number"
+            className="h-8 w-14 rounded-lg border sm:w-16 border-rx-line-strong bg-black/40 px-2 text-center font-mono text-[13px] text-rx-text outline-none transition placeholder:text-rx-text-3
+                       focus:border-rx-gold focus:shadow-[0_0_0_3px_rgba(255,184,0,.14)]
+                       [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+          />
+          {totalPages ? <span>of {totalPages}</span> : null}
+        </label>
 
-              <div className="flex items-center gap-1 sm:gap-2">
-                <span className="text-xs sm:text-sm">Page</span>
-
-                <input
-                  type="number"
-                  min={1}
-                  value={pageIndex}
-                  onChange={handlePageIndexChange}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="1"
-                  className="w-16 sm:w-20 px-2 sm:px-3 py-1 sm:py-1.5 text-xs sm:text-sm rounded-md bg-black/30 border border-white/20 text-white placeholder-white/40 outline-none
-                             focus:border-[#FFD700]/60 focus:ring-2 focus:ring-[#FFD700]/50 transition
-                             [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-                />
-
-                {totalPages ? (
-                  <span className="text-white/60 text-xs sm:text-sm">
-                    of {totalPages}
-                  </span>
-                ) : null}
-              </div>
-
-              <button
-                className={clsx(
-                  "px-3 py-1 rounded border border-white/20 text-sm",
-                  hasNext
-                    ? "hover:bg-white/10"
-                    : "opacity-40 cursor-not-allowed"
-                )}
-                onClick={nextPage}
-                disabled={!hasNext}
-              >
-                Next
-              </button>
-            </div>
-
-            <label className="flex items-center gap-1 sm:gap-2">
-              <RowsPerPageSelect
-                value={pageSize}
-                onChange={handlePageSizeChange}
-                options={[25, 50]}
-                className="sm:ml-1"
-              />
-            </label>
-          </div>
+        <div className="flex items-center gap-2">
+          <RowsPerPageSelect
+            value={pageSize}
+            onChange={handlePageSizeChange}
+            options={[25, 50]}
+          />
+          <button
+            type="button"
+            className="rx-btn rx-btn--secondary rx-btn--s"
+            onClick={prevPage}
+            disabled={!hasPrev}
+            aria-label="Previous page"
+          >
+            <small className="text-[12px] sm:hidden">Prev</small>
+            <small className="hidden text-[12px] sm:inline">Previous</small>
+          </button>
+          <button
+            type="button"
+            className="rx-btn rx-btn--secondary rx-btn--s"
+            aria-label="Next page"
+            onClick={nextPage}
+            disabled={!hasNext}
+          >
+            Next
+          </button>
         </div>
-      </div>
+      </nav>
     </div>
   );
 }

@@ -9,6 +9,7 @@ import AccountModal from "@/components/ui/modal/AccountModal";
 import LoginModal from "@/components/ui/modal/LoginModal";
 import DepositWithdrawModal from "@/components/ui/modal/DepositWithdrawModal";
 import MarketInfoModal from "@/components/ui/modal/MarketInfoModal";
+import PredictionsTicker from "@/components/ui/layout/PredictionsTicker";
 import { User, Wallet, ClipboardList, ArrowRight } from "lucide-react";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { useTopbar } from "@/contexts/TopbarContext";
@@ -498,6 +499,8 @@ export default function RexHeader({
     <>
       <div className="w-full flex flex-col z-20">
         {/* Redesign: the green "Intelligent Terminal" strip is removed per the brief (slide 2). */}
+        {/* Live prediction odds strip above the header (hidden on phones) */}
+        <PredictionsTicker className="hidden md:flex" />
         <header className="rx-header">
           <div className="rx-header__logo">
             <Image

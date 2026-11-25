@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { X, Loader2 } from "lucide-react";
+import { X } from "lucide-react";
 
 interface RenameChatModalProps {
   isOpen: boolean;
@@ -67,55 +67,72 @@ export default function RenameChatModal({
   };
 
   const modalContent = (
-    <div 
-      className="fixed inset-0 bg-black/50 flex items-center justify-center z-50"
-      onClick={handleBackdropClick}
-    >
-      <div 
-        className="bg-[#1a1a1a] border border-[#2a2a2a] rounded-lg p-4 w-full max-w-xs"
-        onClick={(e) => e.stopPropagation()}
+    <div className="rx-claw">
+      <div
+        className="claw-modal-root"
+        onClick={handleBackdropClick}
       >
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-white text-base font-semibold">Rename Chat</h2>
-          <button
-            onClick={onClose}
-            disabled={isSaving}
-            className="text-gray-400 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit}>
-          <input
-            ref={inputRef}
-            type="text"
-            value={newTitle}
-            onChange={(e) => setNewTitle(e.target.value)}
-            disabled={isSaving}
-            className="w-full bg-[#262626] border border-[#3C3C3C] text-white px-3 py-2 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#FFC000] mb-3 text-base disabled:opacity-50 disabled:cursor-not-allowed"
-            placeholder="Enter chat title"
-          />
-
-          <div className="flex gap-2 justify-end">
+        <div
+          className="claw-modal"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="claw-rename-title"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div className="claw-modal__head">
+            <div className="min-w-0">
+              <h2 id="claw-rename-title">Rename chat</h2>
+              <p>Give this chat a name you will recognise later.</p>
+            </div>
             <button
               type="button"
               onClick={onClose}
               disabled={isSaving}
-              className="px-3 py-1.5 text-gray-400 hover:text-white transition-colors text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              className="rx-icon-btn rx-icon-btn--s disabled:opacity-50 disabled:cursor-not-allowed"
+              aria-label="Close"
             >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={!hasChanged || !isValid || isSaving}
-              className="px-3 py-1.5 bg-[#FFC000] text-black rounded hover:bg-[#FFD000] transition-colors disabled:opacity-50 disabled:cursor-not-allowed text-sm flex items-center gap-2"
-            >
-              {isSaving && <Loader2 className="w-4 h-4 animate-spin" />}
-              <span>{isSaving ? "Saving..." : "Save"}</span>
+              <X className="size-4" aria-hidden="true" />
             </button>
           </div>
-        </form>
+
+          <form onSubmit={handleSubmit}>
+            <div className="claw-modal__body">
+              <label className="rx-field">
+                <span className="rx-label">Chat name</span>
+                <span className="rx-input">
+                  <input
+                    ref={inputRef}
+                    type="text"
+                    value={newTitle}
+                    onChange={(e) => setNewTitle(e.target.value)}
+                    disabled={isSaving}
+                    className="text-base disabled:opacity-50 disabled:cursor-not-allowed"
+                    placeholder="Enter chat title"
+                  />
+                </span>
+              </label>
+            </div>
+
+            <div className="claw-modal__foot">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSaving}
+                className="rx-btn rx-btn--secondary"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={!hasChanged || !isValid || isSaving}
+                className="rx-btn rx-btn--primary"
+              >
+                {isSaving && <span className="rx-spin" aria-hidden="true" />}
+                <span>{isSaving ? "Saving..." : "Save"}</span>
+              </button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   );

@@ -10,7 +10,6 @@ import {
   memo,
   type MouseEvent,
 } from "react";
-import Image from "next/image";
 import clsx from "clsx";
 import type { KalashiMarket } from "@/hooks/useKalashiMarkets";
 import type { PolymarketMarket } from "@/hooks/usePolymarketMarkets";
@@ -22,7 +21,14 @@ import { useEventMetadata } from "@/hooks/useEventMetadata";
 import { useDataSource } from "@/contexts/DataSourceContext";
 import { PaywallModal } from "@/components/ui/modal/PaywallModal";
 import { getMarketReportGenKey } from "@/lib/rexmarkets/marketRoutes";
-import { PREDICT_FUN_LOGO_SRC } from "@/lib/predictfun/assets";
+import {
+  CheckIcon,
+  MarketThumb,
+  ReportIcon,
+  VenueBadge,
+  formatCents,
+  formatPct,
+} from "./listUi";
 
 /** Listing rows: Kalshi has no `id`; Polymarket/Limitless do. Optional `id` covers all union members. */
 type MarketWithSource = (KalashiMarket | PolymarketMarket | LimitlessMarket) & {
@@ -96,47 +102,6 @@ function normalizeImpliedSplit(
     return { yesPct: 100 - clamped, noPct: clamped };
   }
   return { yesPct: 50, noPct: 50 };
-}
-
-function ProbabilityBar({
-  yesPct,
-  noPct,
-  yesLabel,
-  noLabel,
-}: {
-  yesPct: number;
-  noPct: number;
-  yesLabel: string;
-  noLabel: string;
-}) {
-  return (
-    <div className="space-y-2">
-      <div className="flex justify-between text-[10px] font-bold tabular-nums tracking-wide">
-        <span className="text-emerald-400">Yes {yesLabel}</span>
-        <span className="text-red-400">No {noLabel}</span>
-      </div>
-      <div
-        className="relative mt-1 h-1 w-full overflow-hidden rounded-full bg-black/35 ring-1 ring-white/[0.08]"
-        role="img"
-        aria-label={`Implied probability ${yesLabel} yes versus ${noLabel} no`}
-      >
-        <div className="absolute inset-0 flex">
-          <div
-            className="h-full shrink-0 bg-emerald-500 transition-[width] duration-300 ease-out"
-            style={{ width: `${yesPct}%` }}
-          />
-          <div
-            className="h-full shrink-0 bg-red-500 transition-[width] duration-300 ease-out"
-            style={{ width: `${noPct}%` }}
-          />
-        </div>
-      </div>
-      <div className="flex justify-between text-[9px] font-medium uppercase tracking-[0.14em] text-white/40">
-        <span>Implied</span>
-        <span>Live mix</span>
-      </div>
-    </div>
-  );
 }
 
 type OutcomeRowItem = {
@@ -303,23 +268,6 @@ function buildKalshiMultiRows(markets: any[]): OutcomeRowItem[] {
   return rows.map((x) => x.row);
 }
 
-function OutcomeRowBar({ yesPct, noPct }: { yesPct: number; noPct: number }) {
-  return (
-    <div className="relative mt-1.5 h-1 w-full overflow-hidden rounded-full bg-black/35 ring-1 ring-white/[0.08]">
-      <div className="absolute inset-0 flex">
-        <div
-          className="h-full shrink-0 bg-emerald-500 transition-[width] duration-300 ease-out"
-          style={{ width: `${yesPct}%` }}
-        />
-        <div
-          className="h-full shrink-0 bg-red-500 transition-[width] duration-300 ease-out"
-          style={{ width: `${noPct}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
 type DenseCardProps = {
   market: MarketWithSource;
   onMarketNavigate: (m: MarketWithSource) => void;
@@ -389,8 +337,8 @@ const MarketDenseCard = memo(function MarketDenseCard({
       ? (market as KalashiMarket).event_ticker
       : null,
   );
-  const [imageError, setImageError] = useState(false);
   const [showPaywall, setShowPaywall] = useState(false);
+  const category = (market as KalashiMarket).category;
 
   const symbolImageUrl = useMemo(() => {
     if (isPolymarket) {
@@ -412,10 +360,6 @@ const MarketDenseCard = memo(function MarketDenseCard({
     }
     return null;
   }, [metadataImageUrl, market, isPolymarket, isKalshi, isLimitlessLike]);
-
-  useEffect(() => {
-    setImageError(false);
-  }, [market?.ticker, symbolImageUrl]);
 
   useEffect(() => {
     if (isGenerating && countdown === null) {
@@ -512,357 +456,178 @@ const MarketDenseCard = memo(function MarketDenseCard({
   const { yes, no } = parseYesNoPercent(market, source, isBinaryCard);
   const { yesPct, noPct } = normalizeImpliedSplit(yes, no);
 
-  const yesBtn =
-    yes != null ? `${yes.toFixed(1)}%` : isBinaryCard ? "Trade" : "—";
-  const noBtn = no != null ? `${no.toFixed(1)}%` : isBinaryCard ? "Trade" : "—";
-
-  const volSummary = (
-    <span className="min-w-0 truncate text-right text-[11px] leading-snug text-white/45 sm:text-xs">
-      Vol <span className="font-medium tabular-nums text-[#ffc000]">{volLabel}</span>
-    </span>
-  );
-
-  /** Match Rex header source tabs; circular badge, icon only (incl. All mode). */
-  const sourceAria =
-    source === "kalshi"
-      ? "Kalshi"
-      : source === "polymarket"
-        ? "Polymarket"
-        : source === "limitless"
-          ? "Limitless"
-          : source === "myriad"
-            ? "Myriad"
-            : source === "predictfun"
-              ? "Predict.fun"
-              : String(source);
-
-  const platformLogo = isPolymarket ? (
-    <Image
-      src="/images/polymarket.png"
-      alt=""
-      width={32}
-      height={32}
-      className="h-[14px] w-[14px] shrink-0 object-contain object-center sm:h-4 sm:w-4"
-    />
-  ) : isLimitless ? (
-    <Image
-      src="/images/limitless-logo-new.webp"
-      alt=""
-      width={40}
-      height={40}
-      className="h-[18px] w-[18px] shrink-0 object-contain sm:h-5 sm:w-5"
-    />
-  ) : isMyriad ? (
-    <Image
-      src="/images/myriad.webp"
-      alt=""
-      width={32}
-      height={32}
-      className="h-[14px] w-[14px] max-w-[85%] shrink-0 object-contain sm:h-4 sm:w-4"
-    />
-  ) : isPredictFun ? (
-    <Image
-      src={PREDICT_FUN_LOGO_SRC}
-      alt=""
-      width={32}
-      height={32}
-      className="h-[14px] w-[14px] shrink-0 object-contain sm:h-4 sm:w-4"
-    />
-  ) : (
-    <span className="shrink-0 text-xs font-bold leading-none text-white sm:text-[13px]">
-      K
-    </span>
-  );
-
-  const sourceBadgeClass = clsx(
-    "flex size-7 shrink-0 items-center justify-center rounded-full shadow-lg transition-transform duration-300 group-hover/card:scale-105 sm:size-8",
-    isPolymarket &&
-      "bg-gradient-to-br from-[#4169E1] to-[#1e3a8a] shadow-[0_0_16px_rgba(65,105,225,0.45)] ring-2 ring-white/20",
-    isKalshi &&
-      "bg-gradient-to-br from-[#17cb91] to-[#0d7a55] shadow-[0_0_16px_rgba(23,203,145,0.4)] ring-2 ring-white/20",
-    isLimitless &&
-      "bg-[#c3ff01] shadow-[0_0_14px_rgba(195,255,1,0.45)] ring-2 ring-black/20",
-    isMyriad &&
-      "bg-gradient-to-br from-zinc-900 to-black shadow-[0_0_14px_rgba(139,92,246,0.35)] ring-2 ring-violet-400/30",
-    isPredictFun &&
-      "bg-gradient-to-br from-[#7c3aed] to-[#4c1d95] shadow-[0_0_14px_rgba(168,85,247,0.45)] ring-2 ring-violet-300/30",
-  );
+  /** Outcome rows visible before the list scrolls; the rest stay reachable by scrolling or on the market page. */
+  const VISIBLE_OUTCOMES = 2;
+  const hiddenOutcomes = Math.max(0, outcomeRows.length - VISIBLE_OUTCOMES);
 
   return (
     <>
-      <div className="h-full min-h-0 min-w-0 flex flex-col">
-        <div className="group/card relative h-full min-h-0 min-w-0 flex flex-1 flex-col">
-          <div
-            className="pointer-events-none absolute -inset-[2px] rounded-2xl bg-gradient-to-br from-amber-400/35 via-fuchsia-500/15 to-cyan-400/25 opacity-30 blur-md transition-all duration-500 group-hover/card:opacity-55 group-hover/card:blur-lg"
-            aria-hidden
-          />
-          <article
-            className={clsx(
-              "relative grid h-full min-h-0 min-w-0 flex-1 grid-rows-[auto_minmax(0,1fr)]",
-              "rounded-2xl border border-white/[0.1]",
-              "bg-zinc-950/80 backdrop-blur-xl backdrop-saturate-150",
-              "shadow-[0_8px_32px_rgba(0,0,0,0.55),inset_0_1px_0_rgba(255,255,255,0.07)]",
-              "transition-all duration-300 ease-out",
-              "group-hover/card:-translate-y-1",
-              "group-hover/card:border-amber-300/25",
-              "group-hover/card:shadow-[0_16px_48px_rgba(0,0,0,0.6),0_0_32px_rgba(255,215,0,0.07),inset_0_1px_0_rgba(255,255,255,0.09)]",
-            )}
-          >
-            <div
-              className="pointer-events-none absolute inset-0 rounded-2xl bg-[radial-gradient(120%_80%_at_0%_-20%,rgba(251,191,36,0.12),transparent_55%),radial-gradient(100%_60%_at_100%_110%,rgba(59,130,246,0.08),transparent_50%)]"
-              aria-hidden
-            />
-            <header className="relative flex shrink-0 items-center gap-2.5 min-w-0 p-3 pb-0 sm:gap-3 sm:p-3.5 sm:pb-0">
-            <div
-              className={clsx(
-                "relative h-9 w-9 sm:h-10 sm:w-10 flex-shrink-0 overflow-hidden rounded-xl",
-                "bg-gradient-to-br from-white/10 to-white/[0.02] shadow-[0_0_20px_rgba(255,215,0,0.12)]",
-                "ring-2 ring-amber-400/20 ring-offset-2 ring-offset-zinc-950",
-              )}
-            >
-              {symbolImageUrl && !imageError ? (
-                <Image
-                  src={symbolImageUrl}
-                  alt=""
-                  fill
-                  className="object-cover object-center"
-                  sizes="40px"
-                  unoptimized
-                  onError={() => setImageError(true)}
-                />
-              ) : (
-                <div className="absolute inset-0 flex items-center justify-center text-white/25 text-[9px]">
-                  —
-                </div>
-              )}
-            </div>
-            <div className="min-w-0 flex-1">
-              <div className="flex items-start justify-between gap-2">
-                <h3 className="min-w-0 flex-1">
-                  <button
-                    type="button"
-                    onClick={handleTitleClick}
-                    className={clsx(
-                      "w-full text-left",
-                      "text-[13px] font-semibold leading-snug tracking-tight text-white/90 line-clamp-4 [word-break:break-word] sm:text-[14px]",
-                      "cursor-pointer rounded-md px-0.5 transition-all duration-300",
-                      "hover:text-transparent hover:bg-gradient-to-r hover:from-[#fde68a] hover:via-[#fbbf24] hover:to-[#fcd34d] hover:bg-clip-text hover:drop-shadow-[0_0_12px_rgba(251,191,36,0.35)]",
-                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-amber-400/50 focus-visible:ring-offset-2 focus-visible:ring-offset-zinc-950",
-                    )}
-                    title={market.title}
-                    aria-label={`Open market: ${market.title}`}
-                  >
-                    {market.title}
-                  </button>
-                </h3>
-                <div
-                  className={sourceBadgeClass}
-                  title={sourceAria}
-                  aria-label={`Data source: ${sourceAria}`}
-                >
-                  {platformLogo}
-                </div>
-              </div>
-            </div>
-          </header>
-
-          <div className="relative z-[1] flex min-h-0 flex-1 flex-col px-3 pb-3 pt-2.5 sm:px-3.5 sm:pt-3">
-            <div className="flex min-h-0 flex-1 flex-col gap-2.5">
-            {isBinaryCard ? (
-              <ProbabilityBar
-                yesPct={yesPct}
-                noPct={noPct}
-                yesLabel={yes != null ? `${yes.toFixed(1)}%` : "—"}
-                noLabel={no != null ? `${no.toFixed(1)}%` : "—"}
-              />
-            ) : showMultiOutcomeRows ? (
-              <div className="flex min-h-0 flex-col overflow-hidden">
-                <div
-                  className={clsx(
-                    "max-h-[7.25rem] min-h-0 touch-pan-y overflow-y-auto overscroll-y-contain scrollbar-none",
-                    "[-ms-overflow-style:none]",
-                  )}
-                  style={{ scrollbarWidth: "none" }}
-                >
-                  {outcomeRows.map((row, rowIdx) => {
-                    const split = normalizeImpliedSplit(row.yesPct, row.noPct);
-                    const pctDisplay =
-                      row.yesPct != null ? `${Math.round(row.yesPct)}%` : "—";
-                    const hasPct = row.yesPct != null;
-                    return (
-                      <div
-                        key={`${row.key}-${rowIdx}`}
-                        className="py-2.5 transition-colors last:pb-0 hover:bg-white/[0.02]"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span
-                            className="min-w-0 flex-1 text-[10px] font-medium leading-snug text-white/90 line-clamp-2"
-                            title={row.label}
-                          >
-                            {row.label}
-                          </span>
-                          <span
-                            className={clsx(
-                              "w-10 shrink-0 text-right text-[11px] font-bold tabular-nums",
-                              hasPct
-                                ? "bg-gradient-to-br from-white to-white/70 bg-clip-text text-transparent"
-                                : "text-white/35",
-                            )}
-                          >
-                            {pctDisplay}
-                          </span>
-                          <div className="flex shrink-0 gap-1">
-                            <button
-                              type="button"
-                              onClick={handleTrade}
-                              className={clsx(
-                                "rounded-lg px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-white",
-                                "bg-gradient-to-b from-emerald-400 to-emerald-700",
-                                "shadow-[0_2px_12px_rgba(16,185,129,0.35),inset_0_1px_0_rgba(255,255,255,0.25)]",
-                                "ring-1 ring-emerald-300/40 transition-all duration-200 hover:shadow-[0_4px_18px_rgba(16,185,129,0.45)]",
-                                "active:scale-[0.96]",
-                              )}
-                            >
-                              Yes
-                            </button>
-                            <button
-                              type="button"
-                              onClick={handleTrade}
-                              className={clsx(
-                                "rounded-lg px-2 py-1 text-[9px] font-bold uppercase tracking-wider text-white",
-                                "bg-gradient-to-b from-rose-500 to-red-700",
-                                "shadow-[0_2px_12px_rgba(244,63,94,0.35),inset_0_1px_0_rgba(255,255,255,0.2)]",
-                                "ring-1 ring-rose-300/35 transition-all duration-200 hover:shadow-[0_4px_18px_rgba(244,63,94,0.45)]",
-                                "active:scale-[0.96]",
-                              )}
-                            >
-                              No
-                            </button>
-                          </div>
-                        </div>
-                        <OutcomeRowBar
-                          yesPct={split.yesPct}
-                          noPct={split.noPct}
-                        />
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            ) : null}
-
-            {isBinaryCard ? (
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={handleTrade}
-                  className={clsx(
-                    "relative overflow-hidden rounded-xl py-2.5 text-xs font-bold text-white",
-                    "bg-gradient-to-br from-emerald-400 via-emerald-600 to-teal-800",
-                    "shadow-[0_4px_20px_rgba(16,185,129,0.4),inset_0_1px_0_rgba(255,255,255,0.25)]",
-                    "ring-1 ring-emerald-300/50 transition-all duration-200",
-                    "hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(16,185,129,0.5)] active:scale-[0.98]",
-                  )}
-                >
-                  <span className="relative z-10 drop-shadow-sm">
-                    Yes {yesBtn !== "—" && yesBtn !== "Trade" ? ` ${yesBtn}` : ""}
-                  </span>
-                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/25 to-transparent" />
-                </button>
-                <button
-                  type="button"
-                  onClick={handleTrade}
-                  className={clsx(
-                    "relative overflow-hidden rounded-xl py-2.5 text-xs font-bold text-white",
-                    "bg-gradient-to-br from-rose-500 via-red-600 to-red-900",
-                    "shadow-[0_4px_20px_rgba(239,68,68,0.38),inset_0_1px_0_rgba(255,255,255,0.2)]",
-                    "ring-1 ring-rose-300/45 transition-all duration-200",
-                    "hover:-translate-y-0.5 hover:shadow-[0_8px_28px_rgba(239,68,68,0.48)] active:scale-[0.98]",
-                  )}
-                >
-                  <span className="relative z-10 drop-shadow-sm">
-                    No {noBtn !== "—" && noBtn !== "Trade" ? ` ${noBtn}` : ""}
-                  </span>
-                  <span className="pointer-events-none absolute inset-0 bg-gradient-to-t from-black/30 to-transparent" />
-                </button>
-              </div>
-            ) : null}
-            </div>
-
-            <div className="shrink-0 border-0 border-transparent bg-transparent p-0 shadow-none ring-0 outline-none pt-2">
-            {isGenerating && countdown !== null ? (
+      <article
+        className={clsx(
+          "rx-raised group/card flex h-full min-h-[270px] min-w-0 flex-col gap-3.5 p-[18px]",
+          "transition-[transform,border-color] duration-150 ease-[cubic-bezier(.2,.7,.2,1)]",
+          "hover:-translate-y-0.5 hover:border-rx-gold-line motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+        )}
+      >
+        <header className="flex min-w-0 items-start gap-3">
+          <MarketThumb src={symbolImageUrl} title={market.title} size={42} />
+          <div className="min-w-0 flex-1">
+            <h3 className="m-0 min-w-0">
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  openCopilotForMarket();
-                }}
-                className="flex w-full min-w-0 cursor-pointer items-center justify-between gap-2 rounded-md py-0.5 text-left outline-none transition hover:bg-white/[0.04] focus-visible:ring-1 focus-visible:ring-[#ffc000]/40"
+                onClick={handleTitleClick}
+                className={clsx(
+                  "line-clamp-2 min-h-[2.7em] w-full text-left text-[15px] font-semibold leading-[1.35] text-rx-text [word-break:break-word]",
+                  "cursor-pointer transition-colors hover:text-rx-gold-hi",
+                  "focus-visible:rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rx-gold-hi",
+                )}
+                title={market.title}
+                aria-label={`Open market: ${market.title}`}
               >
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span
-                    className="shrink-0 text-[11px] font-semibold tracking-tight text-[#ffc000] sm:text-xs"
-                  >
-                    AI Report
-                  </span>
-                  <div className="flex min-w-0 items-center gap-2 text-[10px] font-medium tabular-nums text-[#ffc000]">
-                    <span className="truncate">{countdown}s</span>
-                  </div>
-                </div>
-                {volSummary}
+                {market.title}
               </button>
-            ) : hasGenerated ? (
-              <div className="flex min-w-0 items-center justify-between gap-2 py-0.5">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="shrink-0 text-[11px] font-semibold tracking-tight text-[#ffc000] sm:text-xs">
-                    AI Report
-                  </span>
-                  <button
-                    type="button"
-                    disabled
-                    aria-label="Report generated"
-                    className="m-0 shrink-0 cursor-not-allowed border-0 bg-transparent p-0 text-[11px] font-medium text-white/45 sm:text-xs"
-                  >
-                    Generated
-                  </button>
-                </div>
-                {volSummary}
-              </div>
-            ) : (
-              <div className="flex min-w-0 items-center justify-between gap-2 py-0.5">
-                <div className="flex min-w-0 items-center gap-2.5">
-                  <span className="shrink-0 text-[11px] font-semibold tracking-tight text-[#ffc000] sm:text-xs">
-                    AI Report
-                  </span>
-                  <button
-                    type="button"
-                    onClick={handleGenerateButtonClick}
-                    disabled={isGenerating || !ready}
-                    aria-label="Generate AI report"
-                    className={clsx(
-                      "group/gen m-0 flex shrink-0 cursor-pointer items-center justify-center border-0 bg-transparent p-0 shadow-none outline-none",
-                      "transition-opacity duration-200 hover:opacity-85",
-                      "focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[#ffc000]/35 focus-visible:ring-offset-0",
-                      "disabled:cursor-wait disabled:opacity-50",
-                    )}
-                  >
-                    <Image
-                      src="/images/generate.webp"
-                      alt=""
-                      width={72}
-                      height={28}
-                      className="h-7 w-[4.5rem] max-w-[min(100%,4.5rem)] shrink-0 object-contain object-center"
-                    />
-                  </button>
-                </div>
-                {volSummary}
-              </div>
-            )}
+            </h3>
+            <div className="mt-1.5 flex min-w-0 items-center gap-1.5 text-[11px] leading-none text-rx-text-2">
+              <VenueBadge venue={source} />
+              {category && <span className="truncate">{category}</span>}
             </div>
           </div>
-        </article>
-        </div>
-      </div>
+        </header>
+
+        {isBinaryCard ? (
+          <>
+            <div className="flex items-baseline justify-between gap-2">
+              {/* div/b/small: the global `span, button { font-family: inherit }` rule would drop the display/mono faces */}
+              <div className="font-display text-[30px] font-[750] leading-none tracking-[-.01em] text-rx-text [font-stretch:112%]">
+                {yes != null ? formatPct(yes) : "—"}
+                <small className="ml-1 font-sans text-[13px] font-medium tracking-normal text-rx-text-2 [font-stretch:100%]">
+                  chance Yes
+                </small>
+              </div>
+              <span className="rx-small whitespace-nowrap">Implied odds</span>
+            </div>
+            <div
+              className="rx-split"
+              role="img"
+              aria-label={`Implied probability ${yes != null ? formatPct(yes) : "—"} yes versus ${no != null ? formatPct(no) : "—"} no`}
+            >
+              <span
+                className="transition-[width] duration-300 ease-out"
+                style={{ width: `${yesPct}%`, background: "var(--rx-up)" }}
+              />
+              <span
+                className="transition-[width] duration-300 ease-out"
+                style={{ width: `${noPct}%`, background: "var(--rx-down)" }}
+              />
+            </div>
+            <div className="flex gap-2">
+              <button type="button" onClick={handleTrade} className="rx-yes rx-yes--l">
+                Yes
+                {yes != null && <b className="rx-num font-bold">{formatCents(yes)}</b>}
+              </button>
+              <button type="button" onClick={handleTrade} className="rx-no rx-no--l">
+                No
+                {no != null && <b className="rx-num font-bold">{formatCents(no)}</b>}
+              </button>
+            </div>
+          </>
+        ) : (
+          <div className="flex min-h-0 flex-col gap-1.5">
+            <div
+              className="flex max-h-[82px] min-h-0 touch-pan-y flex-col gap-1.5 overflow-y-auto overscroll-y-contain scrollbar-none"
+              style={{ scrollbarWidth: "none" }}
+            >
+              {outcomeRows.map((row, rowIdx) => {
+                const hasPct = row.yesPct != null;
+                return (
+                  <div key={`${row.key}-${rowIdx}`} className="flex shrink-0 flex-col gap-1.5">
+                    <div className="flex items-center gap-2">
+                      <span
+                        className="min-w-0 flex-1 truncate text-[13px] text-rx-text"
+                        title={row.label}
+                      >
+                        {row.label}
+                      </span>
+                      <b
+                        className={clsx(
+                          "w-12 shrink-0 text-right font-mono text-[15px] font-bold tabular-nums",
+                          hasPct ? "text-rx-text" : "text-rx-text-3",
+                        )}
+                      >
+                        {hasPct ? `${Math.round(row.yesPct as number)}%` : "—"}
+                      </b>
+                      <button
+                        type="button"
+                        onClick={handleTrade}
+                        className="rx-yes shrink-0"
+                        aria-label={`Buy Yes on ${row.label}`}
+                      >
+                        Yes
+                      </button>
+                      <button
+                        type="button"
+                        onClick={handleTrade}
+                        className="rx-no shrink-0"
+                        aria-label={`Buy No on ${row.label}`}
+                      >
+                        No
+                      </button>
+                    </div>
+                    <div className="rx-bar h-1" aria-hidden>
+                      <span style={{ width: `${hasPct ? row.yesPct : 0}%` }} />
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            {hiddenOutcomes > 0 && (
+              <button
+                type="button"
+                onClick={handleTrade}
+                className="self-start text-[13px] text-rx-text-2 transition-colors hover:text-rx-text"
+              >
+                + {hiddenOutcomes} more outcome{hiddenOutcomes === 1 ? "" : "s"}
+              </button>
+            )}
+          </div>
+        )}
+
+        <footer className="mt-auto flex min-w-0 items-center justify-between gap-2 border-t border-rx-line pt-3">
+          <div className="rx-small rx-num min-w-0 truncate">
+            Vol <b className="font-semibold text-rx-text">{volLabel}</b>
+          </div>
+          {isGenerating && countdown !== null ? (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                openCopilotForMarket();
+              }}
+              className="rx-btn rx-btn--report rx-btn--s tabular-nums"
+              aria-label={`Report generating, ${countdown} seconds left. Open Rex Pilot`}
+            >
+              <span className="rx-spin size-3 border-[1.5px] text-rx-gold" aria-hidden />
+              Generating {countdown}s
+            </button>
+          ) : hasGenerated ? (
+            <span className="rx-badge rx-badge--up h-8 shrink-0 gap-1.5 px-2.5 text-[12px]">
+              <CheckIcon />
+              Report generated
+            </span>
+          ) : (
+            <button
+              type="button"
+              onClick={handleGenerateButtonClick}
+              disabled={isGenerating || !ready}
+              aria-label="Generate AI report"
+              className="rx-btn rx-btn--report rx-btn--s shrink-0"
+            >
+              <ReportIcon />
+              Generate report
+            </button>
+          )}
+        </footer>
+      </article>
       <PaywallModal
         open={showPaywall}
         onClose={() => setShowPaywall(false)}
@@ -896,32 +661,28 @@ export default function RexMarketsCardView({
 }: RexMarketsCardViewProps) {
   if (markets.length === 0) {
     return (
-      <div className="rex-markets-cards flex items-center justify-center min-h-[200px] text-white/60 text-sm">
+      <p className="rx-small flex min-h-[200px] items-center justify-center text-center">
         No markets to show.
-      </div>
+      </p>
     );
   }
 
   return (
-    <div className="rex-markets-cards w-full max-w-none py-2 px-2 sm:px-3 md:px-4">
-      <div
-        className={clsx(
-          "grid w-full items-stretch gap-3 sm:gap-4",
-          // Wider minimum track so cards aren’t as skinny; tracks still grow to fill the row
-          "[grid-template-columns:repeat(auto-fill,minmax(min(100%,18rem),1fr))]",
-        )}
-      >
-        {markets.map((market) => (
+    <ul className="m-0 grid w-full list-none items-stretch gap-4 p-0 [grid-template-columns:repeat(auto-fill,minmax(min(100%,300px),1fr))]">
+      {markets.map((market) => (
+        <li
+          key={`${(market as any)._source || "x"}-${market.ticker || market.id}`}
+          className="min-w-0"
+        >
           <MarketDenseCard
-            key={`${(market as any)._source || "x"}-${market.ticker || market.id}`}
             market={market}
             onMarketNavigate={onMarketClick}
             onMarketSelected={onMarketSelected}
             onReportGenerated={onReportGenerated}
             currentUserId={currentUserId}
           />
-        ))}
-      </div>
-    </div>
+        </li>
+      ))}
+    </ul>
   );
 }
