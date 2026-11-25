@@ -1532,7 +1532,7 @@ export function TrendingTableContent({
           <TokenSearchBar
             onSearch={handleSearch}
             onClear={handleClearSearch}
-            className="md:w-[300px] md:flex-none"
+            className="md:w-[270px] md:flex-none min-[1536px]:w-[300px]"
           />
           <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto">
             <ReportShortcut

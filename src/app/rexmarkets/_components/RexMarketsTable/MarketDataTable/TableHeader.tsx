@@ -3,14 +3,14 @@ import clsx from "clsx";
 
 /** Column grid shared by the header, the rows and the loading rows (phones pin a narrower first column). */
 export const REX_TABLE_GRID =
-  "[grid-template-columns:minmax(190px,2.8fr)_minmax(76px,1fr)_minmax(76px,1fr)_minmax(150px,1.15fr)_minmax(82px,1fr)_minmax(82px,1fr)_minmax(96px,1fr)] sm:[grid-template-columns:minmax(300px,3fr)_minmax(88px,1fr)_minmax(88px,1fr)_minmax(156px,1.15fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(104px,1fr)]";
+  "[grid-template-columns:minmax(190px,2.8fr)_minmax(76px,1fr)_minmax(76px,1fr)_minmax(156px,1.15fr)_minmax(82px,1fr)_minmax(82px,1fr)_minmax(96px,1fr)] sm:[grid-template-columns:minmax(300px,3fr)_minmax(88px,1fr)_minmax(88px,1fr)_minmax(156px,1.15fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(104px,1fr)]";
 
 export const REX_TABLE_GRID_WITH_SOURCE =
-  "[grid-template-columns:minmax(190px,2.8fr)_minmax(76px,1fr)_minmax(76px,1fr)_minmax(150px,1.15fr)_minmax(82px,1fr)_minmax(82px,1fr)_minmax(96px,1fr)_minmax(100px,1fr)] sm:[grid-template-columns:minmax(300px,3fr)_minmax(88px,1fr)_minmax(88px,1fr)_minmax(156px,1.15fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(104px,1fr)_minmax(100px,1fr)]";
+  "[grid-template-columns:minmax(190px,2.8fr)_minmax(76px,1fr)_minmax(76px,1fr)_minmax(156px,1.15fr)_minmax(82px,1fr)_minmax(82px,1fr)_minmax(96px,1fr)_minmax(100px,1fr)] sm:[grid-template-columns:minmax(300px,3fr)_minmax(88px,1fr)_minmax(88px,1fr)_minmax(156px,1.15fr)_minmax(92px,1fr)_minmax(92px,1fr)_minmax(104px,1fr)_minmax(100px,1fr)]";
 
 /** Sum of the grid's minimum tracks. Rows must be at least this wide so the pinned cell
     (sticky, clamped to its row box) stays put across the whole horizontal scroll. */
-export const REX_TABLE_MIN_W = "min-w-[752px] sm:min-w-[920px]";
+export const REX_TABLE_MIN_W = "min-w-[758px] sm:min-w-[920px]";
 
 /** Pinned first column: solid ground so scrolled cells pass underneath; hairline on phones like the prototype. */
 export const REX_TABLE_PIN =

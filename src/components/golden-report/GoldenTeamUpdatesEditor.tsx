@@ -56,7 +56,7 @@ function GoldenTeamUpdatesEditorCore({
     editorProps: {
       attributes: {
         class:
-          "golden-team-updates-prose min-h-[200px] px-3 py-2 text-base sm:text-sm text-white focus:outline-none max-w-none",
+          "golden-team-updates-prose min-h-[180px] px-3.5 py-3 text-base leading-[1.55] sm:text-[15px] text-rx-text focus:outline-none max-w-none",
       },
     },
     onUpdate: ({ editor: ed }) => {
@@ -81,20 +81,19 @@ function GoldenTeamUpdatesEditorCore({
 
   if (!editor) {
     return (
-      <div className="min-h-[220px] rounded-md border border-white/15 bg-black/40" />
+      <div className="rx-editor min-h-[230px]" />
     );
   }
 
+  /* RaptorX editor toolbar (rx-editor__bar): gold tint marks the active format */
   const btn = (active: boolean) =>
-    `rounded p-1.5 transition ${
-      active
-        ? "bg-[#ffc000] text-black"
-        : "text-white/80 hover:bg-white/10 hover:text-white"
+    `transition-colors ${
+      active ? "bg-rx-gold-tint text-rx-gold-hi" : ""
     } ${disabled ? "pointer-events-none opacity-50" : ""}`;
 
   return (
-    <div className="rounded-md border border-[#ffc000]/35 bg-black/40 overflow-hidden">
-      <div className="flex flex-wrap gap-0.5 border-b border-white/10 bg-black/30 px-1.5 py-1.5">
+    <div className="rx-editor">
+      <div className="rx-editor__bar flex-wrap">
         <button
           type="button"
           className={btn(editor.isActive("bold"))}
@@ -122,7 +121,7 @@ function GoldenTeamUpdatesEditorCore({
         >
           <UnderlineIcon className="h-4 w-4" />
         </button>
-        <span className="mx-0.5 w-px self-stretch bg-white/15" aria-hidden />
+        <span className="mx-0.5 my-0.5 w-px self-stretch bg-rx-line" aria-hidden />
         <button
           type="button"
           className={btn(editor.isActive("heading", { level: 2 }))}
@@ -145,7 +144,7 @@ function GoldenTeamUpdatesEditorCore({
         >
           <Heading3 className="h-4 w-4" />
         </button>
-        <span className="mx-0.5 w-px self-stretch bg-white/15" aria-hidden />
+        <span className="mx-0.5 my-0.5 w-px self-stretch bg-rx-line" aria-hidden />
         <button
           type="button"
           className={btn(editor.isActive("bulletList"))}
@@ -173,10 +172,10 @@ function GoldenTeamUpdatesEditorCore({
         >
           <Quote className="h-4 w-4" />
         </button>
-        <span className="mx-0.5 w-px self-stretch bg-white/15" aria-hidden />
+        <span className="mx-0.5 my-0.5 w-px self-stretch bg-rx-line" aria-hidden />
         <button
           type="button"
-          className={`rounded p-1.5 text-white/80 transition hover:bg-white/10 hover:text-white ${
+          className={`transition-colors ${
             disabled || !editor.can().undo()
               ? "cursor-not-allowed opacity-35"
               : ""
@@ -190,7 +189,7 @@ function GoldenTeamUpdatesEditorCore({
         </button>
         <button
           type="button"
-          className={`rounded p-1.5 text-white/80 transition hover:bg-white/10 hover:text-white ${
+          className={`transition-colors ${
             disabled || !editor.can().redo()
               ? "cursor-not-allowed opacity-35"
               : ""
@@ -204,7 +203,7 @@ function GoldenTeamUpdatesEditorCore({
         </button>
       </div>
       <EditorContent editor={editor} />
-      <div className="border-t border-white/10 bg-black/30 px-3 py-1.5 text-right text-xs text-white/65">
+      <div className="rx-help rx-num border-t border-rx-line px-3.5 py-2 text-right">
         {wordsUsed}/{GOLDEN_TEAM_UPDATES_MAX_WORDS} words
       </div>
     </div>

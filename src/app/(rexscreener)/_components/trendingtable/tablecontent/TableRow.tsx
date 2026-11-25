@@ -18,6 +18,8 @@ import {
 } from "@/components/ui/modal/WhatsNewModal";
 import { Token24hChangeBadge, Token24hSparkline } from "./Token24hSparkline";
 import { dexScreenerTokenImageUrl } from "@/lib/api/dexscreener";
+import { resolveSwapChain } from "@/lib/swapChain";
+import { requestShellAction } from "@/components/ui/layout/shellActions";
 import {
   SCREENER_GRID_COLS,
   SCREENER_ORDER,
@@ -705,6 +707,25 @@ export function TableRow({
         error={whatsNewError}
         result={whatsNewResult}
         imageUrl={token?.logo}
+        symbol={token?.symbol}
+        trade={
+          token?.tokenAddress && token.symbol
+            ? {
+                symbol: token.symbol,
+                name: token.name,
+                logo: logoSrc ?? token.logo,
+                chain: resolveSwapChain({
+                  swapTokenAddress: token.tokenAddress,
+                  token,
+                }),
+                // Same page: chart this token, then open the panel's Exchange on it.
+                onTrade: () => {
+                  openChart();
+                  requestShellAction("exchange");
+                },
+              }
+            : null
+        }
       />
     </>
   );

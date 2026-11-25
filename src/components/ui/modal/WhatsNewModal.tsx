@@ -1,11 +1,17 @@
+/* eslint-disable @next/next/no-img-element */
 "use client";
 
-import { useEffect, useCallback } from "react";
+import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import Image from "next/image";
-import { X, Repeat2, Eye, BadgeCheck } from "lucide-react";
+import Link from "next/link";
 import type { WhatsNewTweet } from "@/lib/api/tweetQuality";
 import type { ProjectSocialLinks } from "@/lib/api/projectSocials";
+import type { SwapChain } from "@/lib/swapChain";
+import {
+  REX_SCREENER_EXCHANGE_HREF,
+  requestShellAction,
+} from "@/components/ui/layout/shellActions";
+import "@/styles/pages/reports.css";
 
 export type WhatsNewParagraph = { title: string; body: string };
 
@@ -23,6 +29,23 @@ export type WhatsNewResult = {
   };
 };
 
+/**
+ * The "Trade <SYM>" card (design b7fb8bb). It does not mount a second swap widget: Li.Fi's
+ * widget events are one module-level emitter and SwapWidget clears every listener on unmount,
+ * so a swap inside this popup would unhook the screener panel's swap (see the report). The card
+ * opens that panel's Exchange with this token instead, on the same page.
+ */
+export type WhatsNewTrade = {
+  symbol: string;
+  name?: string | null;
+  logo?: string | null;
+  chain?: SwapChain | null;
+  /** Open the screener's Exchange with this token selected. The popup closes itself. */
+  onTrade: () => void;
+  /** "Full Exchange" link. Default: the page's Exchange (shell action), else RexScreener's Exchange. */
+  onFullExchange?: () => void;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -31,45 +54,39 @@ type Props = {
   result: WhatsNewResult | null;
   fallbackLinks?: ProjectSocialLinks | null;
   imageUrl?: string | null;
+  /** Ticker for the title while the mini-report loads. */
+  symbol?: string | null;
+  /** Trade card: shown when the popup is about a tradable token. */
+  trade?: WhatsNewTrade | null;
 };
 
-const GOLD = "#FFD700";
+/** Source icons (design/assets/whats-new). */
+const WN = (k: string) => `/images/whats-new/${k}.webp`;
+const MASCOT = encodeURI("/images/what'snew/Orange Rex Logo.png");
 
-/** Icons from `public/images/what'snew` (spaces + apostrophe encoded). */
-const wn = (file: string) => encodeURI(`/images/what'snew/${file}`);
-
-const ICONS = {
-  browser: wn("Browser Logo.png"),
-  telegram: wn("Telegram Logo.png"),
-  x: wn("X Logo.png"),
-  reddit: wn("Reddit Logo.png"),
-  check: wn("Green Check mark Logo.png"),
-  cross: wn("Red Cross Logo.png"),
-  hand: wn("Hand Emoji.png"),
-  heart: wn("Heart Button Logo.png"),
-  link: wn("Orange Color Link Logo.png"),
-  rexTwitter: wn("Rex Twitter Logo.png"),
-  rex: wn("Orange Rex Logo.png"),
-};
-
-const SOCIAL_SLOTS: {
-  key: keyof ProjectSocialLinks;
-  label: string;
-  icon: string;
-}[] = [
-  { key: "website", label: "Website", icon: ICONS.browser },
-  { key: "telegram", label: "Telegram", icon: ICONS.telegram },
-  { key: "twitter", label: "X", icon: ICONS.x },
-  { key: "reddit", label: "Reddit", icon: ICONS.reddit },
+const SOCIALS: { key: keyof ProjectSocialLinks; label: string }[] = [
+  { key: "website", label: "Website" },
+  { key: "telegram", label: "Telegram" },
+  { key: "twitter", label: "X" },
+  { key: "reddit", label: "Reddit" },
 ];
 
-function WhatsNewHeading({ className }: { className?: string }) {
-  return (
-    <span className={className}>
-      What&apos;s <span className="text-[#FFD700]">New</span>
-    </span>
-  );
-}
+const CHAIN_LABEL: Record<SwapChain, string> = {
+  solana: "Solana",
+  ethereum: "Ethereum",
+  base: "Base",
+  bsc: "BNB Chain",
+  monad: "Monad",
+  robinhood: "Robinhood",
+};
+const CHAIN_ICON: Record<SwapChain, string> = {
+  solana: "/images/solana.png",
+  ethereum: "/images/ETH_light_logo.webp",
+  base: "/images/brands/base.webp",
+  bsc: "/images/bnbchain.png",
+  monad: "/images/monad.png",
+  robinhood: "/images/robinhood.png",
+};
 
 function formatCount(n: number): string {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -77,36 +94,44 @@ function formatCount(n: number): string {
   return String(n);
 }
 
-function parseTweetDate(raw: string): Date | null {
+function parseDate(raw?: string | null): Date | null {
   if (!raw) return null;
   const numeric = Number(raw);
   if (Number.isFinite(numeric) && numeric > 0) {
-    const ms = numeric > 1e12 ? numeric : numeric * 1000;
-    const fromNumber = new Date(ms);
-    if (!Number.isNaN(fromNumber.getTime())) return fromNumber;
+    const d = new Date(numeric > 1e12 ? numeric : numeric * 1000);
+    if (!Number.isNaN(d.getTime())) return d;
   }
-  const fromString = new Date(raw);
-  return Number.isNaN(fromString.getTime()) ? null : fromString;
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime()) ? null : d;
 }
 
-/** Relative tweet age: "22 mins ago", "1 hr ago". */
-function formatTweetAge(createdAt: string): string {
-  const date = parseTweetDate(createdAt);
-  if (!date) return "";
-  const seconds = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-  if (seconds < 60) return "just now";
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return minutes === 1 ? "1 min ago" : `${minutes} mins ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return hours === 1 ? "1 hr ago" : `${hours} hrs ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 7) return days === 1 ? "1 day ago" : `${days} days ago`;
-  const weeks = Math.floor(days / 7);
-  if (weeks < 5) return weeks === 1 ? "1 wk ago" : `${weeks} wks ago`;
-  const months = Math.floor(days / 30);
-  if (months < 12) return months === 1 ? "1 mo ago" : `${months} mos ago`;
-  const years = Math.floor(days / 365);
-  return years === 1 ? "1 yr ago" : `${years} yrs ago`;
+/** Compact age, as in the prototype list: "now", "22m", "1h", "3d", "2w", "4mo", "1y". */
+function compactAge(raw: string): string {
+  const d = parseDate(raw);
+  if (!d) return "";
+  const s = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000));
+  if (s < 60) return "now";
+  const m = Math.floor(s / 60);
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `${h}h`;
+  const days = Math.floor(h / 24);
+  if (days < 7) return `${days}d`;
+  if (days < 35) return `${Math.floor(days / 7)}w`;
+  if (days < 365) return `${Math.floor(days / 30)}mo`;
+  return `${Math.floor(days / 365)}y`;
+}
+
+/** "updated just now" / "updated 5 min ago" / "updated 2 h ago" from the API's generatedAt. */
+function updatedLabel(raw?: string): string | null {
+  const d = parseDate(raw);
+  if (!d) return null;
+  const m = Math.max(0, Math.floor((Date.now() - d.getTime()) / 60000));
+  if (m < 1) return "updated just now";
+  if (m < 60) return `updated ${m} min ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `updated ${h} h ago`;
+  return `updated ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
 }
 
 function paragraphsFromResult(result: WhatsNewResult): WhatsNewParagraph[] {
@@ -116,52 +141,145 @@ function paragraphsFromResult(result: WhatsNewResult): WhatsNewParagraph[] {
   return [{ title: "What's happening", body: text }];
 }
 
-function SocialStatusBar({ links }: { links?: ProjectSocialLinks | null }) {
+function monogramBackground(seed: string): string {
+  let h = 0;
+  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
+  return `hsl(${h % 360} 38% 34%)`;
+}
+
+/** Token avatar: logo when it loads, else initials on a stable muted hue. */
+function TokenAvatar({
+  src,
+  symbol,
+  className,
+  chain,
+}: {
+  src?: string | null;
+  symbol: string;
+  className?: string;
+  chain?: SwapChain | null;
+}) {
+  const [failed, setFailed] = useState(false);
+  useEffect(() => setFailed(false), [src]);
+  const show = !!src && !failed;
   return (
-    <div className="flex items-center justify-center gap-[10px]">
-      {SOCIAL_SLOTS.map((slot) => {
-        const href = links?.[slot.key];
-        const present = Boolean(href);
-        const inner = (
-          <span className="relative inline-flex h-6 w-6 items-center justify-center">
-            <Image
-              src={slot.icon}
-              alt={slot.label}
-              width={24}
-              height={24}
-              className={`h-6 w-6 object-contain ${present ? "" : "opacity-55"}`}
-            />
-            <Image
-              src={present ? ICONS.check : ICONS.cross}
-              alt={present ? "Available" : "Missing"}
-              width={12}
-              height={12}
-              className="absolute -right-1 -top-1 h-3 w-3 object-contain"
-            />
-          </span>
-        );
-        if (!href) {
-          return (
-            <span key={slot.key} title={`${slot.label} not listed`}>
-              {inner}
-            </span>
-          );
-        }
-        return (
-          <a
-            key={slot.key}
-            href={href}
-            target="_blank"
-            rel="noopener noreferrer"
-            title={slot.label}
-            aria-label={slot.label}
-            className="rounded-md transition hover:opacity-90"
-          >
-            {inner}
-          </a>
-        );
-      })}
-    </div>
+    <span
+      className={`rx-avatar rx-avatar--token ${className ?? ""}`}
+      style={{ background: show ? "var(--rx-surface-3)" : monogramBackground(symbol || "?") }}
+    >
+      {show ? (
+        <img className="rx-avatar__img" src={src!} alt="" onError={() => setFailed(true)} />
+      ) : (
+        <small aria-hidden="true">{(symbol || "?").slice(0, 2).toUpperCase()}</small>
+      )}
+      {chain ? (
+        <span className="rx-avatar__chain overflow-hidden bg-rx-surface-3" title={CHAIN_LABEL[chain]}>
+          <img src={CHAIN_ICON[chain]} alt="" className="block size-full object-cover" />
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+const IconClose = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 5l14 14M19 5L5 19" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
+  </svg>
+);
+const IconExt = ({ size = 12 }: { size?: number }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M7 17L17 7M9 7h8v8" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const IconSwap = () => (
+  <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M7 7h12l-3-3M17 17H5l3 3" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const IconHeart = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M12 20s-7-4.4-9-9a4.8 4.8 0 0 1 9-3 4.8 4.8 0 0 1 9 3c-2 4.6-9 9-9 9z" fill="currentColor" />
+  </svg>
+);
+const IconRepost = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M7 7h11v5M17 17H6v-5M15 4l3 3-3 3M9 20l-3-3 3-3" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+const IconEye = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z" fill="none" stroke="currentColor" strokeWidth="2" />
+    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="2" />
+  </svg>
+);
+const IconVerified = () => (
+  <svg className="rx-wn__verified" viewBox="0 0 24 24" aria-label="Verified account" role="img">
+    <path d="M12 2l2.4 1.8 3-.2.9 2.9 2.5 1.7-.9 2.9.9 2.9-2.5 1.7-.9 2.9-3-.2L12 22l-2.4-1.8-3 .2-.9-2.9-2.5-1.7.9-2.9-.9-2.9 2.5-1.7.9-2.9 3 .2z" fill="currentColor" />
+    <path d="M8 12.2l2.6 2.6L16.2 9" fill="none" stroke="#fff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+/** "Trade <SYM>" card: the token, a swap button and the small Full Exchange link. */
+export function WhatsNewTradeCard({
+  trade,
+  onClose,
+  className = "",
+}: {
+  trade: WhatsNewTrade;
+  onClose: () => void;
+  className?: string;
+}) {
+  const titleId = useId();
+  const sym = trade.symbol.replace(/^\$/, "").toUpperCase();
+  const chain = trade.chain ?? null;
+  const sub = [trade.name && trade.name !== sym ? trade.name : null, chain ? CHAIN_LABEL[chain] : null]
+    .filter(Boolean)
+    .join(" · ");
+
+  return (
+    <section className={`rx-raised rx-wn-trade ${className}`} aria-labelledby={titleId}>
+      <div className="rx-wn-trade__head">
+        <h3 id={titleId}>Trade {sym}</h3>
+        <Link
+          className="rx-wn-trade__ex"
+          href={REX_SCREENER_EXCHANGE_HREF}
+          onClick={(e) => {
+            if (trade.onFullExchange) {
+              e.preventDefault();
+              trade.onFullExchange();
+              onClose();
+              return;
+            }
+            if (requestShellAction("exchange")) {
+              e.preventDefault();
+              onClose();
+            }
+          }}
+        >
+          Full Exchange
+          <IconExt />
+        </Link>
+      </div>
+      <div className="rx-well rx-wn-trade__tok">
+        <TokenAvatar src={trade.logo} symbol={sym} chain={chain} />
+        <span>
+          <b>{sym}</b>
+          {sub ? <small>{sub}</small> : null}
+        </span>
+      </div>
+      <button
+        type="button"
+        className="rx-btn rx-btn--primary rx-btn--l rx-btn--block"
+        onClick={() => {
+          trade.onTrade();
+          onClose();
+        }}
+      >
+        <IconSwap />
+        Swap {sym}
+      </button>
+      <p className="rx-help">Opens the swap beside the chart with {sym} already selected.</p>
+    </section>
   );
 }
 
@@ -173,278 +291,246 @@ export function WhatsNewModal({
   result,
   fallbackLinks = null,
   imageUrl = null,
+  symbol = null,
+  trade = null,
 }: Props) {
+  const titleId = useId();
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const closeRef = useRef<HTMLButtonElement>(null);
+
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !dialogRef.current) return;
+      // keep focus inside the dialog
+      const f = Array.from(
+        dialogRef.current.querySelectorAll<HTMLElement>("a[href],button:not([disabled]),input,[tabindex='0']"),
+      ).filter((el) => el.offsetParent !== null);
+      if (!f.length) return;
+      const first = f[0];
+      const last = f[f.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     },
     [onClose],
   );
 
   useEffect(() => {
     if (!open) return;
+    const lastFocus = document.activeElement as HTMLElement | null;
     document.addEventListener("keydown", onKeyDown);
     const prev = document.body.style.overflow;
     document.body.style.overflow = "hidden";
+    const t = window.setTimeout(() => closeRef.current?.focus({ preventScroll: true }), 0);
     return () => {
+      window.clearTimeout(t);
       document.removeEventListener("keydown", onKeyDown);
       document.body.style.overflow = prev;
+      if (lastFocus && document.contains(lastFocus)) lastFocus.focus({ preventScroll: true });
     };
   }, [open, onKeyDown]);
 
   if (!open || typeof document === "undefined") return null;
 
-  const projectName = result?.metadata?.projectName || "";
-  const ticker = result?.metadata?.ticker || "";
-  const logoSrc = result?.metadata?.imageUrl || imageUrl || "";
-  const links = result?.metadata?.links || fallbackLinks || undefined;
+  const meta = result?.metadata;
+  const ticker = (meta?.ticker || symbol || trade?.symbol || "").replace(/^\$/, "");
+  const projectName = meta?.projectName || trade?.name || "";
+  const logoSrc = meta?.imageUrl || imageUrl || trade?.logo || "";
+  const links = meta?.links || fallbackLinks || undefined;
   const paragraphs = result ? paragraphsFromResult(result) : [];
+  const updated = updatedLabel(meta?.generatedAt);
+  const subtitle = loading
+    ? "Reading the latest posts on X…"
+    : result
+      ? ["Mini-report from top posts on X", updated].filter(Boolean).join(" · ")
+      : "Mini-report from top posts on X";
+
+  const tradeInline = trade ? (
+    <WhatsNewTradeCard trade={trade} onClose={onClose} className="rx-wn__trade-inline" />
+  ) : null;
 
   return createPortal(
-    <div
-      className="fixed inset-0 z-[200] flex items-center justify-center p-3 sm:p-6"
-      role="dialog"
-      aria-modal="true"
-      aria-label="What's New report"
-    >
-      <button
-        type="button"
-        className="absolute inset-0 bg-black/75 backdrop-blur-[2px]"
-        aria-label="Close"
-        onClick={onClose}
-      />
-      <div className="whats-new-modal relative z-10 flex max-h-[min(88dvh,760px)] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/10 bg-[#121212] shadow-2xl shadow-black/60">
-        {loading ? (
-          <div className="relative flex items-center justify-center border-b border-white/10 px-4 py-3.5">
-            <h2 className="whats-new-title text-white">
-              <WhatsNewHeading />
-            </h2>
+    <div className="rx-wn">
+      <button type="button" className="rx-wn__scrim" aria-label="Close What's New" tabIndex={-1} onClick={onClose} />
+      <div
+        ref={dialogRef}
+        className={`rx-wn__modal${trade ? " rx-wn__modal--rail" : ""}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
+      >
+        <div className="rx-wn__head">
+          <div className="rx-wn__id">
+            <TokenAvatar src={logoSrc} symbol={ticker || projectName || "?"} className="rx-wn__ava" />
+            <div className="min-w-0">
+              <h2 id={titleId}>
+                <img className="rx-emo" src="/images/emoji/bolt.webp" alt="" width={18} height={18} />
+                <span>What&apos;s New{ticker ? ` · ${ticker}` : ""}</span>
+              </h2>
+              <p>{subtitle}</p>
+            </div>
+          </div>
+          <div className="rx-wn__acts">
             <button
+              ref={closeRef}
               type="button"
               onClick={onClose}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
+              className="rx-icon-btn rx-icon-btn--s"
               aria-label="Close What's New"
             >
-              <X className="h-5 w-5" />
+              <IconClose />
             </button>
           </div>
-        ) : result ? (
-          <div className="border-b border-white/10 px-3.5 py-3">
-            <div className="flex items-center gap-3">
-              {logoSrc ? (
-                <Image
-                  src={logoSrc}
-                  alt=""
-                  width={90}
-                  height={90}
-                  className="h-[90px] w-[90px] shrink-0 rounded-lg object-cover"
-                />
-              ) : (
-                <div className="flex h-[90px] w-[90px] shrink-0 items-center justify-center rounded-lg bg-white/10 text-2xl font-bold text-white/70">
-                  {(ticker || projectName || "?").slice(0, 1).toUpperCase()}
-                </div>
-              )}
-              <div className="min-w-0 flex-1 text-center">
-                <div className="whats-new-title truncate leading-tight">
-                  <span className="text-white">
-                    {projectName || ticker || "What's New"}
-                  </span>
-                  {ticker ? (
-                    <span className="ml-1.5" style={{ color: GOLD }}>
-                      ${ticker}
-                    </span>
-                  ) : null}
-                </div>
-                <div className="mt-4">
-                  <SocialStatusBar links={links} />
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={onClose}
-                className="self-start shrink-0 rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
-                aria-label="Close What's New"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-          </div>
-        ) : (
-          <div className="relative flex items-center justify-center border-b border-white/10 px-4 py-3.5">
-            <h2 className="whats-new-title text-white">
-              <WhatsNewHeading />
-            </h2>
-            <button
-              type="button"
-              onClick={onClose}
-              className="absolute right-3 top-1/2 -translate-y-1/2 rounded-lg p-1.5 text-white/60 transition hover:bg-white/10 hover:text-white"
-              aria-label="Close What's New"
-            >
-              <X className="h-5 w-5" />
-            </button>
-          </div>
-        )}
+        </div>
 
-        <div className="min-h-0 flex-1 overflow-y-auto py-4">
-          {loading ? (
-            <div className="flex min-h-[220px] flex-col items-center justify-center gap-3 px-4 py-10">
-              <Image
-                src={ICONS.rex}
-                alt="Rex reviewing the market"
-                width={88}
-                height={94}
-                className="whats-new-mascot-bounce h-auto w-[72px] object-contain"
-                priority
-              />
-              <p className="text-center text-[16px] font-bold text-[#FFD700]">
-                We&apos;re digging into what the market is saying
-                <span className="whats-new-ellipsis" aria-hidden />
-              </p>
-            </div>
-          ) : error ? (
-            <div className="mx-4 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-200">
-              {error}
-            </div>
-          ) : result ? (
-            <div className="flex flex-col">
-              <section className="flex flex-col gap-3.5 px-4">
-                {paragraphs.map((p, i) => (
-                  <div key={`${p.title}-${i}`} className="flex items-start gap-2">
-                    <Image
-                      src={ICONS.hand}
-                      alt=""
-                      width={22}
-                      height={18}
-                      className="mt-0.5 h-[18px] w-[22px] shrink-0 object-contain"
-                    />
-                    <p className="min-w-0 text-[13.5px] leading-relaxed text-white">
-                      <span className="font-bold" style={{ color: GOLD }}>
-                        {p.title.replace(/\.*$/, ".")}
-                      </span>
-                      <span className="text-white"> {p.body}</span>
-                    </p>
-                  </div>
-                ))}
-              </section>
-
-              <div className="mt-6 border-t border-white/15" />
-
-              <section className="flex flex-col items-center gap-2 px-4 pt-6">
-                <div className="relative flex w-full items-center justify-center py-1">
-                  <Image
-                    src={ICONS.rexTwitter}
-                    alt=""
-                    width={56}
-                    height={56}
-                    className="absolute left-0 h-14 w-14 object-contain"
-                  />
-                  <h3 className="whats-new-title">
-                    <span style={{ color: GOLD }}>Top</span>{" "}
-                    <span className="text-white">Tweets</span>
-                  </h3>
-                </div>
-                {result.tweets.length === 0 ? (
-                  <p className="text-sm text-white/50">
-                    No recent tweets found for this ticker right now.
+        <div className="rx-wn__body">
+          <div className="rx-wn__main">
+            {loading ? (
+              <>
+                <div className="rx-wn__state" role="status">
+                  <img src={MASCOT} alt="" width={72} height={77} className="whats-new-mascot-bounce" />
+                  <p>
+                    We&apos;re digging into what the market is saying
+                    <span className="whats-new-ellipsis" aria-hidden />
                   </p>
+                </div>
+                {tradeInline}
+              </>
+            ) : error ? (
+              <>
+                <div className="rx-wn__error" role="alert">
+                  {error}
+                </div>
+                {tradeInline}
+              </>
+            ) : result ? (
+              <>
+                <p className="rx-wn__lead">
+                  Here&apos;s the latest on{" "}
+                  {projectName ? (
+                    <>
+                      <b>{projectName}</b>
+                      {ticker && ticker.toLowerCase() !== projectName.toLowerCase() ? ` (${ticker})` : ""}
+                    </>
+                  ) : (
+                    <b>{ticker || "this token"}</b>
+                  )}
+                  , from the top posts on X.
+                </p>
+
+                {/* phones and tablets: trade first, then the updates */}
+                {tradeInline}
+
+                {paragraphs.length ? (
+                  <ol className="rx-wn__list" aria-label="Summary">
+                    {paragraphs.map((p, i) => (
+                      <li key={`${p.title}-${i}`} className="rx-wn__item rx-wn__item--point">
+                        <img className="rx-wn__src" src="/images/emoji/bolt.webp" alt="" width={18} height={18} />
+                        <p>
+                          <b>{p.title.replace(/\.*$/, ".")}</b> {p.body}
+                        </p>
+                      </li>
+                    ))}
+                  </ol>
+                ) : null}
+
+                <h3 className="rx-wn__sub">Top posts on X</h3>
+                {result.tweets.length === 0 ? (
+                  <p className="rx-wn__empty">No recent posts found for this ticker right now.</p>
                 ) : (
-                  <ul className="mt-1 flex w-full flex-col gap-3">
+                  <ol className="rx-wn__list" aria-label="Top posts on X">
                     {result.tweets.map((t) => {
-                      const tweetAge = formatTweetAge(t.createdAt);
-                      const avatar = t.tweeter.publicImageUrl;
+                      const age = compactAge(t.createdAt);
+                      const pfp = t.tweeter.publicImageUrl;
                       return (
-                        <li
-                          key={t.id || t.url || t.text.slice(0, 24)}
-                          className="rounded-xl border border-white/10 bg-black/40 px-3 py-3"
-                        >
-                          <div className="mb-1.5 flex items-start justify-between gap-2">
-                            <div className="flex min-w-0 items-start gap-2">
-                              {avatar ? (
-                                <Image
-                                  src={avatar}
-                                  alt=""
-                                  width={36}
-                                  height={36}
-                                  className="h-9 w-9 shrink-0 rounded-full object-cover"
-                                />
-                              ) : (
-                                <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-white/10 text-xs font-bold text-white/70">
-                                  {(t.tweeter.name || "?").slice(0, 1).toUpperCase()}
-                                </div>
-                              )}
-                              <div className="min-w-0">
-                                <div className="flex min-w-0 items-center gap-1.5 text-sm font-semibold text-white">
-                                  <span className="truncate">{t.tweeter.name}</span>
-                                  {t.tweeter.isBlueVerified ? (
-                                    <BadgeCheck className="h-3.5 w-3.5 shrink-0 fill-sky-400 text-white" />
-                                  ) : null}
-                                  {t.tweeter.followers > 0 ? (
-                                    <span className="shrink-0 text-[11px] font-medium text-[#FFD700]">
-                                      {formatCount(t.tweeter.followers)} followers
-                                    </span>
-                                  ) : null}
-                                </div>
-                                <div className="truncate text-xs text-white/45">
-                                  @{t.tweeter.username}
-                                </div>
-                              </div>
+                        <li key={t.id || t.url || t.text.slice(0, 24)} className="rx-wn__item">
+                          <img className="rx-wn__src" src={WN("x")} alt="" width={18} height={18} />
+                          <div className="min-w-0">
+                            <div className="rx-wn__by">
+                              {pfp ? <img className="rx-wn__pfp" src={pfp} alt="" loading="lazy" /> : null}
+                              <b>{t.tweeter.name || `@${t.tweeter.username}`}</b>
+                              {t.tweeter.isBlueVerified ? <IconVerified /> : null}
+                              {t.tweeter.username ? <span>@{t.tweeter.username}</span> : null}
+                              {t.tweeter.followers > 0 ? (
+                                <span className="rx-wn__fol">{formatCount(t.tweeter.followers)} followers</span>
+                              ) : null}
                             </div>
-                            <div className="flex shrink-0 items-center gap-1 pt-0.5">
-                              {tweetAge ? (
-                                <span className="whitespace-nowrap text-[11px] font-medium text-[#FFD700]">
-                                  {tweetAge}
+                            <p className="rx-wn__text">{t.text}</p>
+                            <div className="rx-wn__meta">
+                              <span className="rx-wn__likes" aria-label={`${t.likeCount} likes`}>
+                                <IconHeart />
+                                {formatCount(t.likeCount)}
+                              </span>
+                              <span aria-label={`${t.retweetCount} reposts`}>
+                                <IconRepost />
+                                {formatCount(t.retweetCount)}
+                              </span>
+                              {t.viewCount > 0 ? (
+                                <span aria-label={`${t.viewCount} views`}>
+                                  <IconEye />
+                                  {formatCount(t.viewCount)}
                                 </span>
                               ) : null}
-                              {t.url ? (
-                                <a
-                                  href={t.url}
-                                  target="_blank"
-                                  rel="noopener noreferrer"
-                                  className="rounded-md p-0.5 hover:bg-white/5"
-                                  aria-label="Open tweet"
-                                >
-                                  <Image
-                                    src={ICONS.link}
-                                    alt=""
-                                    width={22}
-                                    height={22}
-                                    className="h-[22px] w-[22px] object-contain"
-                                  />
-                                </a>
-                              ) : null}
                             </div>
                           </div>
-                          <p className="whitespace-pre-wrap text-[13px] leading-snug text-white">
-                            {t.text}
-                          </p>
-                          <div className="mt-2 flex flex-wrap items-center gap-3 text-[11px] text-white/45">
-                            <span className="inline-flex items-center gap-1 font-medium text-red-500">
-                              <Image
-                                src={ICONS.heart}
-                                alt=""
-                                width={14}
-                                height={14}
-                                className="h-3.5 w-3.5 object-contain"
-                              />
-                              {formatCount(t.likeCount)}
+                          {t.url ? (
+                            <a
+                              className="rx-wn__open"
+                              href={t.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              aria-label={`Open the post by @${t.tweeter.username} on X${age ? `, ${age} ago` : ""}`}
+                            >
+                              {age ? <time dateTime={parseDate(t.createdAt)?.toISOString()}>{age}</time> : null}
+                              <IconExt />
+                            </a>
+                          ) : age ? (
+                            <span className="rx-wn__open">
+                              <time dateTime={parseDate(t.createdAt)?.toISOString()}>{age}</time>
                             </span>
-                            <span className="inline-flex items-center gap-1">
-                              <Repeat2 className="h-3.5 w-3.5" />
-                              {formatCount(t.retweetCount)}
-                            </span>
-                            {t.viewCount > 0 ? (
-                              <span className="inline-flex items-center gap-1">
-                                <Eye className="h-3.5 w-3.5" />
-                                {formatCount(t.viewCount)}
-                              </span>
-                            ) : null}
-                          </div>
+                          ) : null}
                         </li>
                       );
                     })}
-                  </ul>
+                  </ol>
                 )}
-              </section>
+
+                <ul className="rx-wn__checks" aria-label="Project links">
+                  {SOCIALS.map((s) => {
+                    const href = links?.[s.key];
+                    return (
+                      <li key={s.key}>
+                        {href ? (
+                          <a className="rx-wn__check" href={href} target="_blank" rel="noopener noreferrer">
+                            <img src={WN("check")} alt="" width={14} height={14} />
+                            {s.label}
+                            <IconExt size={10} />
+                          </a>
+                        ) : (
+                          <span className="rx-wn__check">
+                            <img src={WN("cross")} alt="" width={14} height={14} />
+                            No {s.label} listed
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </>
+            ) : null}
+          </div>
+
+          {trade ? (
+            <div className="rx-wn__rail">
+              <WhatsNewTradeCard trade={trade} onClose={onClose} />
             </div>
           ) : null}
         </div>

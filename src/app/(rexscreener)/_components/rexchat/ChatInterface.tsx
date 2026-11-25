@@ -51,6 +51,7 @@ import {
 } from "./rexPilotReportMarkdown";
 import { PilotReportHistoryButton } from "./PilotReportHistoryButton";
 import { hrefForScreenerToken } from "@/lib/rexscreenerRoutes";
+import { resolveSwapChain } from "@/lib/swapChain";
 
 export interface DexScreenerPair {
   chainId: string;
@@ -99,6 +100,8 @@ type Props = {
   reportHistoryCount?: number;
   /** When set, shows close in the top bar (same row as Back / history) instead of only the floating shell control. */
   onCloseSidebar?: () => void;
+  /** Bring up the panel's swap for this report's token (What's New "Trade" card); `full` = Exchange only. */
+  onOpenExchange?: (opts?: { full?: boolean }) => void;
 };
 
 function PilotSessionTopChrome({
@@ -134,7 +137,7 @@ function PilotSessionTopChrome({
           <PilotReportHistoryButton
             count={reportHistoryCount}
             onOpen={onViewHistory}
-            className="shrink-0 [&_img]:!h-9 [&_img]:!w-auto [&_img]:max-h-9"
+            className="shrink-0"
           />
         ) : null}
         {onCloseSidebar ? (
@@ -165,6 +168,7 @@ export default function ChatInterface({
   onViewHistory,
   reportHistoryCount = 0,
   onCloseSidebar,
+  onOpenExchange,
 }: Props) {
   const {
     data: reportData,
@@ -1524,6 +1528,29 @@ export default function ChatInterface({
       result={whatsNewResult}
       fallbackLinks={projectLinks}
       imageUrl={logo}
+      symbol={reportData?.ticker}
+      trade={
+        onOpenExchange && reportData?.ticker && reportData?.contractAddress
+          ? {
+              symbol: String(reportData.ticker),
+              name: reportData.projectName,
+              logo,
+              chain: resolveSwapChain({
+                swapTokenAddress: String(reportData.contractAddress),
+                token: dexData?.chainId
+                  ? {
+                      tokenAddress: String(reportData.contractAddress),
+                      chainId: dexData.chainId,
+                    }
+                  : null,
+                reportChain: reportData.chain,
+                reportContractAddress: String(reportData.contractAddress),
+              }),
+              onTrade: () => onOpenExchange(),
+              onFullExchange: () => onOpenExchange({ full: true }),
+            }
+          : null
+      }
     />
   </>
   );

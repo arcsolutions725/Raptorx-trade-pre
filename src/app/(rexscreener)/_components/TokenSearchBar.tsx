@@ -120,7 +120,8 @@ export function TokenSearchBar({
         value={searchInput}
         onChange={(e) => setSearchInput(e.target.value)}
         onKeyDown={handleKeyDown}
-        placeholder="Filter by name, ticker or address"
+        placeholder="Filter by name, ticker or CA"
+        title="Filter by name or ticker, or paste a contract address"
         autoComplete="off"
         spellCheck={false}
         className="text-base sm:text-sm"

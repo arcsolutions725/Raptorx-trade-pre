@@ -562,6 +562,13 @@ export function GenerateRexscreenerReport({
     forceShowExchange,
   ]);
 
+  /** The panel's swap is set to the token of the report Rex Pilot shows. */
+  const swapMatchesPilotReport =
+    !!currentTokenAddress &&
+    !!activeReport?.contractAddress &&
+    currentTokenAddress.trim().toLowerCase() ===
+      String(activeReport.contractAddress).trim().toLowerCase();
+
   /** RexChat shows Back / history / close in one bar; hide duplicate floating close. */
   const integratedPilotCloseBar =
     !!onClose &&
@@ -626,10 +633,13 @@ export function GenerateRexscreenerReport({
         </div>
       )}
 
+      {/* Report history: covers the whole panel (cards on phones, table rows in the 700px desktop panel) */}
       <div
-        className={`absolute top-0 left-0 h-full z-[60] transform transition-transform duration-300 ${
+        className={`absolute top-0 left-0 h-full w-full z-[60] transform transition-transform duration-300 ${
           showHistory ? "translate-x-0" : "-translate-x-full"
         }`}
+        aria-hidden={!showHistory}
+        inert={!showHistory}
       >
         <div className="h-full relative">
           {authenticated && userId ? (
@@ -652,9 +662,10 @@ export function GenerateRexscreenerReport({
                     setSwapMinimized(false);
                     setShowHistory(false);
                   }}
-                  className="absolute bottom-3 left-3 z-50 px-2 py-1 text-xs rounded border border-white/20 bg-black/80 text-white hover:bg-black"
+                  className="rx-btn rx-btn--secondary rx-btn--s absolute bottom-3 left-3 z-50 shadow-[0_8px_20px_rgba(0,0,0,0.5)] max-md:h-10"
                   aria-label="Show only Swap"
                 >
+                  <Minimize width={14} height={14} aria-hidden />
                   minimize
                 </button>
               )}
@@ -756,7 +767,7 @@ export function GenerateRexscreenerReport({
                       <PilotReportHistoryButton
                         count={serverReports.length}
                         onOpen={() => setShowHistory(true)}
-                        className="w-full sm:w-auto flex items-center justify-center"
+                        className="mt-2"
                       />
                     </div>
                   </header>
@@ -790,6 +801,18 @@ export function GenerateRexscreenerReport({
                       onViewHistory={() => setShowHistory(true)}
                       onCloseSidebar={
                         integratedPilotCloseBar ? onClose : undefined
+                      }
+                      onOpenExchange={
+                        // What's New "Trade" card: bring the swap up under this report; its
+                        // "Full Exchange" link shows the Exchange on its own. Only when the
+                        // swap targets this report's token (the chart can be another token).
+                        swapMatchesPilotReport
+                          ? (opts) => {
+                              setShowHistory(false);
+                              setSwapMinimized(false);
+                              if (opts?.full) setContentMinimized(true);
+                            }
+                          : undefined
                       }
                     />
                   </div>
@@ -847,7 +870,7 @@ export function GenerateRexscreenerReport({
                       <PilotReportHistoryButton
                         count={serverReports.length}
                         onOpen={() => setShowHistory(true)}
-                        className="max-w-[80%] sm:max-w-full w-full sm:w-auto flex items-center justify-center"
+                        className="mt-2"
                       />
                     </div>
                   </header>
@@ -874,7 +897,7 @@ export function GenerateRexscreenerReport({
                       />
                     </div>
                     {/* Report history (hidden while AI report is streaming — same as Technical Analysis) */}
-                    <div className="pt-2 pl-2">
+                    <div className="px-3 pt-2">
                       {!reportGenActive && (
                         <PilotReportHistoryButton
                           count={serverReports.length}

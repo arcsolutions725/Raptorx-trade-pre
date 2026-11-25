@@ -225,6 +225,20 @@
   background:radial-gradient(circle at 50% 38%,#2E100D,#0A0404 74%);box-shadow:0 0 0 1px rgba(255,214,170,.28)}
 .rx-btn--claw .claw-ico{width:20px;height:20px;margin-left:-2px}
 
+/* ---------- text fit (design/css/raptorx-ds.css "TEXT FIT RULE") ----------
+   Fixed-height components (buttons, chips, tabs, segments) keep one line and end in "…";
+   card titles may use two lines, then "…". The full text stays in the title attribute. */
+.rx-truncate{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rx-clamp-2{min-width:0;overflow:hidden;display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;line-clamp:2}
+.rx-t{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rx-btn,.rx-chip,.rx-seg__item,.rx-yes,.rx-no,.rx-check{max-width:100%}
+.rx-btn,.rx-chip,.rx-seg__item{overflow:hidden}
+.rx-chip{flex-shrink:0}
+.rx-seg__item{white-space:nowrap}
+.rx-seg{max-width:100%;min-width:0}
+/* no page may ever be wider than the screen: phones would zoom the whole layout out */
+html{overflow-x:clip}
+
 /* ---------- scroll areas + tap targets (WCAG 2.5.8) ---------- */
 /* Scroll areas that keyboard users can focus and scroll with the arrow keys */
 [role="region"][tabindex="0"]:focus-visible,ol[tabindex="0"]:focus-visible,ul[tabindex="0"]:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:4px;border-radius:12px}

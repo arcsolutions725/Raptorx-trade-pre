@@ -10,6 +10,7 @@ import AccountModal from "@/components/ui/modal/AccountModal";
 import LoginModal from "@/components/ui/modal/LoginModal";
 import DepositWithdrawModal from "@/components/ui/modal/DepositWithdrawModal";
 import MarketInfoModal from "@/components/ui/modal/MarketInfoModal";
+import type { OrdersTabKey } from "@/components/ui/modal/accountUi";
 import PredictionsTicker from "@/components/ui/layout/PredictionsTicker";
 import { User, Wallet, ClipboardList, ArrowRight } from "lucide-react";
 import { useDataSource } from "@/contexts/DataSourceContext";
@@ -311,6 +312,10 @@ export default function RexHeader({
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showPolymarketModal, setShowPolymarketModal] = useState(false);
+  /** Tab My orders opens on (account links). Unset: the dialog's own default. */
+  const [ordersTab, setOrdersTab] = useState<OrdersTabKey | undefined>(
+    undefined,
+  );
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   // Redesign: the green topbar strip is no longer rendered. Report it as hidden so
   // layouts that size around it (e.g. the screener table height) use the no-strip values.
@@ -421,6 +426,8 @@ export default function RexHeader({
     if (isRexMarketsPage) {
       const searchParams = new URLSearchParams(window.location.search);
       if (searchParams.get("openPolymarketModal") === "true") {
+        const tab = searchParams.get("ordersTab");
+        if (tab === "positions" || tab === "trades") setOrdersTab(tab);
         setShowPolymarketModal(true);
         // Remove query parameter from URL without page reload
         router.replace("/rexmarkets", { scroll: false });
@@ -456,6 +463,22 @@ export default function RexHeader({
       setIsLoggingOut(false);
     }
   };
+
+  /** My orders and positions / Trade history. The dialog needs the Rex Predictions trading
+   *  context, so other pages go to /rexmarkets first and it opens there (on the same tab). */
+  const openOrders = useCallback(
+    (tab: OrdersTabKey) => {
+      setShowUserDropdown(false);
+      setShowAccountModal(false);
+      if (!isRexMarketsPage) {
+        router.push(`/rexmarkets?openPolymarketModal=true&ordersTab=${tab}`);
+        return;
+      }
+      setOrdersTab(tab);
+      setShowPolymarketModal(true);
+    },
+    [isRexMarketsPage, router],
+  );
 
   const handleHistoryClick = () => {
     if (onHistoryClick) {
@@ -668,19 +691,11 @@ export default function RexHeader({
                       <button
                         type="button"
                         role="menuitem"
-                        onClick={() => {
-                          setShowUserDropdown(false);
-                          // If not on rexmarkets page, redirect first, then open modal
-                          if (!isRexMarketsPage) {
-                            router.push("/rexmarkets?openPolymarketModal=true");
-                          } else {
-                            setShowPolymarketModal(true);
-                          }
-                        }}
+                        onClick={() => openOrders("positions")}
                         className="rx-menu__item"
                       >
                         <ClipboardList aria-hidden="true" />
-                        My Orders
+                        My orders and positions
                       </button>
                     </div>
                   </>
@@ -718,6 +733,7 @@ export default function RexHeader({
         isLoadingUser={isLoadingUser}
         isLoggingOut={isLoggingOut}
         onLogout={handleLogout}
+        onOpenOrders={openOrders}
       />
 
       <LoginModal
@@ -744,6 +760,7 @@ export default function RexHeader({
       <MarketInfoModal
         isOpen={showPolymarketModal}
         onClose={() => setShowPolymarketModal(false)}
+        initialTab={ordersTab}
       />
     </>
   );

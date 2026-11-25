@@ -30,6 +30,17 @@ import {
   readPredictFunRedeemHistory,
   redeemHistoryToTradeRows,
 } from "@/lib/predictfun/predictFunRedeemHistory";
+import clsx from "clsx";
+import {
+  BusyLabel,
+  MarketName,
+  OrdersLoading,
+  OrdersState,
+  RecordTable,
+  SideTag,
+  StatusBadge,
+  type Tone,
+} from "@/components/ui/modal/ordersUi";
 
 type PredictFunMarketInfoPanelProps = {
   isOpen: boolean;
@@ -40,7 +51,6 @@ type PredictFunMarketInfoPanelProps = {
   signer: ProvidersType.JsonRpcSigner | null;
 };
 
-const ACCENT = "#A855F7";
 const REDEEM_LOCK_TTL_MS = 5 * 60 * 1000;
 
 export default function PredictFunMarketInfoPanel({
@@ -356,344 +366,230 @@ export default function PredictFunMarketInfoPanel({
     ]
   );
 
-  const signInBlock = (
-    <div className="text-center py-12 space-y-4">
-      <p className="text-gray-400">
-        Sign in to Predict.fun to view orders and trade history (BNB Chain).
-      </p>
-      {!eoaAddress ? (
-        <p className="text-sm text-amber-400">Connect your wallet first.</p>
-      ) : !effectiveSigner ? (
-        <p className="text-sm text-amber-400">Wallet signer loading…</p>
-      ) : (
-        <>
-          <button
-            type="button"
-            onClick={() => void predictFunAuth()}
-            disabled={authLoading}
-            className="px-6 py-3 rounded-lg font-semibold text-white disabled:opacity-50"
-            style={{ backgroundColor: ACCENT }}
-          >
-            {authLoading ? "Signing in…" : "Sign in to Predict.fun"}
-          </button>
-          {authError && <p className="text-sm text-red-400">{authError}</p>}
-        </>
-      )}
-    </div>
+  const signInActions =
+    eoaAddress && effectiveSigner ? (
+      <>
+        <button
+          type="button"
+          onClick={() => void predictFunAuth()}
+          disabled={authLoading}
+          aria-busy={authLoading || undefined}
+          className="rx-btn rx-btn--primary"
+        >
+          <BusyLabel busy={authLoading} busyText="Signing in…">
+            Sign in to Predict.fun
+          </BusyLabel>
+        </button>
+        {authError && <p className="rx-help rx-help--error">{authError}</p>}
+      </>
+    ) : null;
+
+  const signInHint = !eoaAddress ? (
+    <p className="text-rx-gold-hi">Connect your wallet first.</p>
+  ) : !effectiveSigner ? (
+    <p className="text-rx-gold-hi">Wallet signer loading…</p>
+  ) : null;
+
+  const openMarket = (slug: string) => {
+    const href = `/rexmarkets/predict-fun/${encodeURIComponent(slug)}`;
+    onClose();
+    router.push(href);
+  };
+
+  const marketName = (title: string, slug: string | null | undefined) => (
+    <MarketName
+      title={title}
+      venue="predictfun"
+      href={slug ? `/rexmarkets/predict-fun/${encodeURIComponent(slug)}` : undefined}
+      onNavigate={slug ? () => openMarket(slug) : undefined}
+    />
   );
 
+  /* View tabs (Positions / Trade history) live in the dialog's bar (MarketInfoModal). */
   return (
     <>
-      <div className="flex border-b border-white/10 sticky top-[73px] bg-[#0D0D0D] z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 mb-0">
-        <button
-          type="button"
-          onClick={() => setActiveTab("trades")}
-          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
-            activeTab === "trades"
-              ? "border-[#A855F7] text-[#A855F7]"
-              : "border-transparent text-gray-400 hover:text-white"
-          }`}
-        >
-          Trades
-        </button>
-        <button
-          type="button"
-          onClick={() => setActiveTab("positions")}
-          className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
-            activeTab === "positions"
-              ? "border-[#A855F7] text-[#A855F7]"
-              : "border-transparent text-gray-400 hover:text-white"
-          }`}
-        >
-          Positions
-        </button>
-      </div>
-
-      {activeTab === "trades" && (
-        <>
-          {!eoaAddress ? (
-            <div className="text-center py-12">
-              <p className="text-gray-400">Connect your wallet to view Predict.fun activity.</p>
-            </div>
-          ) : tradesLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div
-                className="animate-spin rounded-full h-8 w-8 border-b-2"
-                style={{ borderColor: ACCENT }}
-              />
-            </div>
-          ) : tradesError ? (
-            <div className="text-center py-8">
-              <p className="text-red-400">
-                {tradesError instanceof Error
-                  ? tradesError.message
-                  : "Failed to load Predict.fun trades."}
-              </p>
-            </div>
-          ) : tradeRows.length === 0 ? (
-            <div className="text-center py-12 space-y-4">
-              <p className="text-gray-400 text-lg">No trades found.</p>
-              {!jwt && (
-                <>
-                  <p className="text-gray-500 text-sm max-w-md mx-auto">
-                    Sign in to also load your open orders from{" "}
-                    <span className="text-white/70">GET /orders</span>.
-                  </p>
-                  {signInBlock}
-                </>
-              )}
-            </div>
-          ) : (
-            <>
-              {!jwt && (
-                <p className="text-gray-500 text-xs text-center mb-3 px-4">
-                  Showing fills for your wallet. Sign in to include open orders.
+      {activeTab === "trades" &&
+        (!eoaAddress ? (
+          <OrdersState icon="wallet" title="Connect your wallet">
+            <p>Connect your wallet to view Predict.fun activity.</p>
+          </OrdersState>
+        ) : tradesLoading ? (
+          <OrdersLoading label="Loading Predict.fun trades" />
+        ) : tradesError ? (
+          <OrdersState icon="error" title="Couldn't load this list">
+            <p className="rx-help rx-help--error">
+              {tradesError instanceof Error
+                ? tradesError.message
+                : "Failed to load Predict.fun trades."}
+            </p>
+          </OrdersState>
+        ) : tradeRows.length === 0 ? (
+          <OrdersState
+            icon="trades"
+            title="No trades found"
+            actions={!jwt ? signInActions : null}
+          >
+            {!jwt ? (
+              <>
+                <p>
+                  Sign in to Predict.fun to view orders and trade history (BNB
+                  Chain). Signing in also loads your open orders from GET
+                  /orders.
                 </p>
-              )}
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse min-w-[720px]">
-                <thead>
-                  <tr className="border-b border-white/10">
-                    <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                      Market
-                    </th>
-                    <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                      Side
-                    </th>
-                    <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                      Price
-                    </th>
-                    <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                      Size
-                    </th>
-                    <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                      Role
-                    </th>
-                    <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                      Status
-                    </th>
-                    <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                      Time
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tradeRows.map((row) => {
-                    const sideClass =
-                      row.sideTone === "buy"
-                        ? "bg-green-500/20 text-green-400"
-                        : row.sideTone === "sell"
-                          ? "bg-red-500/20 text-red-400"
-                          : "bg-white/10 text-white/90";
-                    const statusClass =
-                      row.statusStyle === "confirmed"
-                        ? "bg-green-500/20 text-green-400"
-                        : row.statusStyle === "open"
-                          ? "bg-blue-500/20 text-blue-300"
-                          : row.statusStyle === "cancelled"
-                            ? "bg-red-500/20 text-red-400"
-                            : "bg-gray-500/20 text-gray-400";
-
-                    return (
-                      <tr
-                        key={row.key}
-                        className="border-b border-white/5 hover:bg-white/5"
-                      >
-                        <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                          {row.slugForLink ? (
-                            <a
-                              href={`/rexmarkets/predict-fun/${encodeURIComponent(row.slugForLink)}`}
-                              onClick={(e) => {
-                                e.preventDefault();
-                                onClose();
-                                router.push(
-                                  `/rexmarkets/predict-fun/${encodeURIComponent(row.slugForLink)}`
-                                );
-                              }}
-                              className="max-w-[200px] truncate block hover:text-[#A855F7] underline decoration-dotted"
-                              title={row.marketTitle}
-                            >
-                              {row.marketTitle}
-                            </a>
-                          ) : (
-                            row.marketTitle
-                          )}
-                        </td>
-                        <td className="py-3 px-2 sm:px-4">
-                          <span
-                            className={`inline-block px-2 py-1 rounded text-xs font-medium ${sideClass}`}
-                          >
-                            {row.sideLabel}
-                          </span>
-                        </td>
-                        <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm tabular-nums">
-                          {row.priceDisplay}
-                        </td>
-                        <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm tabular-nums">
-                          {row.sizeDisplay}
-                        </td>
-                        <td className="py-3 px-2 sm:px-4">
-                          {row.role === "—" ? (
-                            <span className="text-gray-500 text-xs">—</span>
-                          ) : (
-                            <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400">
-                              {row.role}
-                            </span>
-                          )}
-                        </td>
-                        <td className="py-3 px-2 sm:px-4">
-                          <span
-                            className={`inline-block px-2 py-1 rounded text-xs font-medium ${statusClass}`}
-                          >
-                            {row.statusLabel}
-                          </span>
-                        </td>
-                        <td className="py-3 px-2 sm:px-4 text-gray-400 text-xs whitespace-nowrap">
-                          {row.timeStr}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-            </>
-          )}
-        </>
-      )}
-
-      {activeTab === "positions" && (
-        <>
-          {!eoaAddress ? (
-            <div className="text-center py-12">
-              <p className="text-gray-400">Connect your wallet to view Predict.fun positions.</p>
-            </div>
-          ) : jwtLoading || positionsLoading || positionMarketMetaLoading ? (
-            <div className="flex items-center justify-center py-12">
-              <div
-                className="animate-spin rounded-full h-8 w-8 border-b-2"
-                style={{ borderColor: ACCENT }}
-              />
-            </div>
-          ) : positionsError ? (
-            <div className="text-center py-8">
-              <p className="text-red-400">
-                {positionsError instanceof Error
-                  ? positionsError.message
-                  : "Failed to load positions."}
+                {signInHint}
+              </>
+            ) : (
+              <p>Orders you fill on this venue show here, newest first.</p>
+            )}
+          </OrdersState>
+        ) : (
+          <>
+            {!jwt && (
+              <p className="o-note m-0 text-center">
+                Showing fills for your wallet. Sign in to include open orders.
               </p>
-            </div>
-          ) : positionRows.length === 0 ? (
-            <div className="text-center py-12">
-              <p className="text-gray-400 text-lg">No positions found.</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="border-b border-white/10">
-                    <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                      Market
-                    </th>
-                    <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                      Outcome
-                    </th>
-                    <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                      Size
-                    </th>
-                    <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                      Action
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {positionRows.map((row) => (
-                    <tr key={row.key} className="border-b border-white/5 hover:bg-white/5">
-                      <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                        {row.slugForLink ? (
-                          <a
-                            href={`/rexmarkets/predict-fun/${encodeURIComponent(row.slugForLink)}`}
-                            onClick={(e) => {
-                              e.preventDefault();
-                              onClose();
-                              router.push(
-                                `/rexmarkets/predict-fun/${encodeURIComponent(row.slugForLink)}`
-                              );
-                            }}
-                            className="max-w-[200px] truncate block hover:text-[#A855F7] underline decoration-dotted"
-                            title={row.marketTitle}
-                          >
-                            {row.marketTitle}
-                          </a>
-                        ) : (
-                          row.marketTitle
-                        )}
-                      </td>
-                      <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                        {row.outcome}
-                      </td>
-                      <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm tabular-nums">
-                        {row.key === "usdt-collateral"
-                          ? `${row.sharesDisplay} USDT`
-                          : row.sharesDisplay}
-                      </td>
-                      <td className="py-3 px-2 sm:px-4">
-                        {row.key === "usdt-collateral" || !row.redeemParams ? (
-                          <span className="text-gray-500 text-xs">—</span>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => void handleRedeemPosition(row)}
-                            data-redeem-state={
-                              isRedeeming(row.key)
-                                ? "redeeming"
-                                : redeemedKeys.has(buildRedeemKey(row))
-                                  ? "redeemed"
-                                  : "idle"
-                            }
-                            disabled={
-                              isRedeeming(row.key) ||
-                              redeemedKeys.has(buildRedeemKey(row)) ||
-                              !row.redeemEligible ||
-                              !effectiveSigner
-                            }
-                            title={
-                              !effectiveSigner
-                                ? "Connect wallet to redeem"
-                                : redeemedKeys.has(buildRedeemKey(row))
-                                  ? "Redeem submitted. Waiting for positions to sync."
-                                : row.redeemEligible
-                                  ? "Redeem winning shares for USDT (on-chain via Predict.fun SDK)"
-                                  : "Redeem is available after the market resolves"
-                            }
-                            className={`min-w-[72px] px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                              isRedeeming(row.key)
-                                ? "bg-[#A855F7]/70 cursor-wait text-white"
-                                : row.redeemEligible && effectiveSigner
-                                  ? "bg-[#A855F7] hover:bg-[#9333EA] text-white"
-                                  : "bg-white/10 text-gray-500 cursor-not-allowed"
-                            }`}
-                          >
-                            {isRedeeming(row.key) ? (
-                              <span className="flex items-center justify-center">
-                                <span className="inline-block w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                              </span>
-                            ) : redeemedKeys.has(buildRedeemKey(row)) ? (
-                              "Redeemed"
-                            ) : (
-                              "Redeem"
-                            )}
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </>
-      )}
+            )}
+            <RecordTable
+              label="Predict.fun trades"
+              columns={[
+                { key: "side", label: "Side" },
+                { key: "price", label: "Price", num: true },
+                { key: "size", label: "Size", num: true },
+                { key: "role", label: "Role" },
+                { key: "status", label: "Status", card: false },
+                { key: "time", label: "Time", muted: true, card: "wide" },
+              ]}
+              rows={tradeRows.map((row) => {
+                const sideTone: Tone =
+                  row.sideTone === "buy"
+                    ? "up"
+                    : row.sideTone === "sell"
+                      ? "down"
+                      : "neutral";
+                const statusTone: Tone =
+                  row.statusStyle === "confirmed"
+                    ? "up"
+                    : row.statusStyle === "open"
+                      ? "gold"
+                      : row.statusStyle === "cancelled"
+                        ? "down"
+                        : "neutral";
+                const status = (
+                  <StatusBadge tone={statusTone}>{row.statusLabel}</StatusBadge>
+                );
+                return {
+                  key: row.key,
+                  market: marketName(row.marketTitle, row.slugForLink),
+                  tag: status,
+                  cells: {
+                    side: <SideTag tone={sideTone}>{row.sideLabel}</SideTag>,
+                    price: row.priceDisplay,
+                    size: row.sizeDisplay,
+                    role:
+                      row.role === "—" ? (
+                        "—"
+                      ) : (
+                        <StatusBadge tone="neutral">{row.role}</StatusBadge>
+                      ),
+                    status,
+                    time: row.timeStr,
+                  },
+                };
+              })}
+            />
+          </>
+        ))}
+
+      {activeTab === "positions" &&
+        (!eoaAddress ? (
+          <OrdersState icon="wallet" title="Connect your wallet">
+            <p>Connect your wallet to view Predict.fun positions.</p>
+          </OrdersState>
+        ) : jwtLoading || positionsLoading || positionMarketMetaLoading ? (
+          <OrdersLoading label="Loading Predict.fun positions" />
+        ) : positionsError ? (
+          <OrdersState icon="error" title="Couldn't load this list">
+            <p className="rx-help rx-help--error">
+              {positionsError instanceof Error
+                ? positionsError.message
+                : "Failed to load positions."}
+            </p>
+          </OrdersState>
+        ) : positionRows.length === 0 ? (
+          <OrdersState icon="positions" title="No positions found">
+            <p>Buy Yes or No on any market and your shares appear here.</p>
+          </OrdersState>
+        ) : (
+          <RecordTable
+            label="Predict.fun positions"
+            actionLabel="Actions"
+            columns={[
+              { key: "outcome", label: "Outcome", card: false },
+              { key: "size", label: "Size", num: true, card: "full" },
+            ]}
+            rows={positionRows.map((row) => {
+              const redeemKey = buildRedeemKey(row);
+              const redeeming = isRedeeming(row.key);
+              const redeemed = redeemedKeys.has(redeemKey);
+              const o = (row.outcome ?? "").toString().trim().toLowerCase();
+              const outcome = (
+                <SideTag tone={o === "yes" ? "up" : o === "no" ? "down" : "neutral"}>
+                  {row.outcome}
+                </SideTag>
+              );
+              return {
+                key: row.key,
+                market: marketName(row.marketTitle, row.slugForLink),
+                tag: outcome,
+                cells: {
+                  outcome,
+                  size:
+                    row.key === "usdt-collateral"
+                      ? `${row.sharesDisplay} USDT`
+                      : row.sharesDisplay,
+                },
+                action:
+                  row.key === "usdt-collateral" || !row.redeemParams ? undefined : (
+                    <button
+                      type="button"
+                      onClick={() => void handleRedeemPosition(row)}
+                      data-redeem-state={
+                        redeeming ? "redeeming" : redeemed ? "redeemed" : "idle"
+                      }
+                      disabled={
+                        redeeming ||
+                        redeemed ||
+                        !row.redeemEligible ||
+                        !effectiveSigner
+                      }
+                      aria-busy={redeeming || undefined}
+                      title={
+                        !effectiveSigner
+                          ? "Connect wallet to redeem"
+                          : redeemed
+                            ? "Redeem submitted. Waiting for positions to sync."
+                            : row.redeemEligible
+                              ? "Redeem winning shares for USDT (on-chain via Predict.fun SDK)"
+                              : "Redeem is available after the market resolves"
+                      }
+                      className={clsx(
+                        "rx-btn rx-btn--s",
+                        redeemed
+                          ? "o-btn-ok"
+                          : row.redeemEligible && effectiveSigner
+                            ? "rx-btn--primary"
+                            : "rx-btn--secondary",
+                      )}
+                    >
+                      <BusyLabel busy={redeeming} busyText="Redeeming…">
+                        {redeemed ? "Redeemed" : "Redeem"}
+                      </BusyLabel>
+                    </button>
+                  ),
+              };
+            })}
+          />
+        ))}
     </>
   );
 }

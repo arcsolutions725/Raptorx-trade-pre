@@ -8,6 +8,7 @@ import type { MarketReport } from "@/hooks/useGenerateMarketReport";
 import { useMarketDetails } from "@/hooks/useMarketDetails";
 import { useReports } from "@/hooks/useReports";
 import ChatSidebar from "@/app/(rexscreener)/_components/rexchat/ChatSidebar";
+import { PilotReportHistoryButton } from "@/app/(rexscreener)/_components/rexchat/PilotReportHistoryButton";
 
 import AIGeneratedMarketsReport from "./AIGeneratedMarketsReport";
 import MarketsData from "./MarketsData";
@@ -268,11 +269,14 @@ export default function RexMarketsReportData({
         </div>
       )}
 
-      {/* Chat Sidebar — z above header controls (z-51/z-60) so history covers close/back/minimize */}
+      {/* Report history — z above header controls (z-51/z-60) so history covers close/back/minimize.
+          Covers the whole panel: cards on phones, table rows in the 700px desktop panel. */}
       <div
-        className={`absolute top-0 left-0 h-full z-[70] transform transition-transform duration-300 ${
+        className={`absolute top-0 left-0 h-full w-full z-[70] transform transition-transform duration-300 ${
           showHistory ? "translate-x-0" : "-translate-x-full"
         }`}
+        aria-hidden={!showHistory}
+        inert={!showHistory}
       >
         <div className="h-full relative">
           {userId && (
@@ -409,24 +413,11 @@ export default function RexMarketsReportData({
                     </div>
                     {userId ? (
                       <div className="mt-6 flex w-full justify-center sm:mt-8">
-                        <button
-                          type="button"
-                          onClick={() => setShowHistory(true)}
-                          className="pointer-events-auto flex min-h-[44px] cursor-pointer items-center justify-center border-0 bg-transparent px-1 py-1 transition hover:opacity-90 hover:scale-[1.03] sm:min-h-[50px]"
-                          aria-label={
-                            serverReports.length > 0
-                              ? `View Report History (${serverReports.length})`
-                              : "View Report History"
-                          }
-                        >
-                          <Image
-                            src="/images/history.webp"
-                            alt=""
-                            width={180}
-                            height={96}
-                            className="h-[36px] w-auto max-w-[min(100%,108px)] object-contain sm:h-[42px] sm:max-w-[min(100%,126px)]"
-                          />
-                        </button>
+                        <PilotReportHistoryButton
+                          count={serverReports.length}
+                          onOpen={() => setShowHistory(true)}
+                          className="pointer-events-auto"
+                        />
                       </div>
                     ) : null}
                   </header>
@@ -493,24 +484,11 @@ export default function RexMarketsReportData({
               </div>
               <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                 {userId ? (
-                  <button
-                    type="button"
-                    onClick={() => setShowHistory(true)}
-                    className="pointer-events-auto flex cursor-pointer items-center justify-center border-0 bg-transparent p-0 transition hover:opacity-90 hover:scale-[1.03]"
-                    aria-label={
-                      serverReports.length > 0
-                        ? `View Report History (${serverReports.length})`
-                        : "View Report History"
-                    }
-                  >
-                    <Image
-                      src="/images/history.webp"
-                      alt=""
-                      width={140}
-                      height={80}
-                      className="h-[28px] w-auto max-w-[76px] object-contain sm:h-[30px] sm:max-w-[88px]"
-                    />
-                  </button>
+                  <PilotReportHistoryButton
+                    count={serverReports.length}
+                    onOpen={() => setShowHistory(true)}
+                    className="pointer-events-auto"
+                  />
                 ) : null}
                 <button
                   onClick={handleMinimizeAiReport}

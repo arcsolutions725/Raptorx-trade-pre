@@ -8,7 +8,8 @@ import {
   useState,
   useCallback,
 } from "react";
-import { X } from "lucide-react";
+import { Check } from "lucide-react";
+import clsx from "clsx";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePrivy, useWallets as usePrivyEvmWallets } from "@privy-io/react-auth";
@@ -55,12 +56,31 @@ import { formatCurrency, formatShares, formatPercentage } from "@/utils/format";
 import { DUST_THRESHOLD } from "@/utils/validation";
 import { POLLING_DURATION, POLLING_INTERVAL } from "@/constants/query";
 import { createPollingInterval } from "@/utils/polling";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   showErrorNotification,
   showSuccessNotification,
 } from "@/components/ui/notification";
 import PredictFunMarketInfoPanel from "@/components/ui/modal/PredictFunMarketInfoPanel";
+import {
+  AcctModal,
+  AcctModalHead,
+  AcctTabs,
+} from "@/components/ui/modal/accountUi";
+import {
+  BusyLabel,
+  MarketName,
+  OrdersLoading,
+  OrdersState,
+  RecordTable,
+  RxToggle,
+  SideTag,
+  StatusBadge,
+  SuccessNote,
+  VenueSeg,
+  type OrdersVenue,
+  type RecordColumn,
+  type Tone,
+} from "@/components/ui/modal/ordersUi";
 import bs58 from "bs58";
 import {
   Connection,
@@ -84,6 +104,8 @@ const SOLANA_RPC =
 interface MarketInfoModalProps {
   isOpen: boolean;
   onClose: () => void;
+  /** Tab to show when the dialog opens (account links: "My orders and positions", "Trade history"). */
+  initialTab?: "trades" | "positions";
 }
 
 const formatDate = (timestamp: number | string) => {
@@ -130,6 +152,7 @@ const formatKalshiFillTime = (createdTime: string | undefined): string => {
 export default function MarketInfoModal({
   isOpen,
   onClose,
+  initialTab,
 }: MarketInfoModalProps) {
   const modalRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
@@ -172,6 +195,10 @@ export default function MarketInfoModal({
     "polymarket" | "kalshi" | "limitless" | "myriad" | "predictfun"
   >("polymarket");
   const [activeTab, setActiveTab] = useState<"trades" | "positions">("trades");
+  // Opened from an account link: start on the tab it names.
+  useEffect(() => {
+    if (isOpen && initialTab) setActiveTab(initialTab);
+  }, [isOpen, initialTab]);
   const [hideDust, setHideDust] = useState(true);
   const [redeemingAsset, setRedeemingAsset] = useState<string | null>(null);
   const [sellingAsset, setSellingAsset] = useState<string | null>(null);
@@ -1250,1615 +1277,981 @@ export default function MarketInfoModal({
 
   if (!isOpen) return null;
 
+  /** Venue picker: same switching as before (every venue but Polymarket opens on Trades). */
+  const selectVenue = (venue: OrdersVenue) => {
+    setPlatformTab(venue);
+    if (venue !== "polymarket") setActiveTab("trades");
+  };
+  /** Market links inside the dialog close it, then route in-app. */
+  const openMarket = (href: string) => {
+    onClose();
+    router.push(href);
+  };
+
+  const tradesEmptyCopy = (
+    <p>Orders you fill on this venue show here, newest first.</p>
+  );
+  const positionsEmptyCopy = (
+    <p>Buy Yes or No on any market and your shares appear here.</p>
+  );
+
+  /** Limitless needs its own session for portfolio data. */
+  const limitlessSignIn = (what: string) => (
+    <OrdersState
+      icon="wallet"
+      title="Sign in to Limitless"
+      actions={
+        eoaAddress ? (
+          <>
+            <button
+              type="button"
+              onClick={async () => {
+                const result = await limitlessLogin();
+                if (result) {
+                  queryClient.invalidateQueries({ queryKey: ["limitless-portfolio-trades"] });
+                  queryClient.invalidateQueries({ queryKey: ["limitless-portfolio-positions"] });
+                }
+              }}
+              disabled={isLimitlessLoginLoading || !ethersSigner}
+              aria-busy={isLimitlessLoginLoading || undefined}
+              className="rx-btn rx-btn--primary"
+            >
+              <BusyLabel busy={isLimitlessLoginLoading} busyText="Signing in...">
+                Sign in to Limitless
+              </BusyLabel>
+            </button>
+            {limitlessAuthError && (
+              <p className="rx-help rx-help--error">{limitlessAuthError.message}</p>
+            )}
+          </>
+        ) : null
+      }
+    >
+      <p>Sign in to Limitless to view your {what}.</p>
+      {!eoaAddress ? (
+        <p className="text-rx-gold-hi">
+          Connect your wallet first to sign in to Limitless.
+        </p>
+      ) : null}
+    </OrdersState>
+  );
+
+  const errorState = (message: string) => (
+    <OrdersState icon="error" title="Couldn't load this list">
+      <p className="rx-help rx-help--error">{message}</p>
+    </OrdersState>
+  );
+
   return (
-    <>
-      <div className="absolute inset-0 bg-black/50 z-40" onClick={onClose} />
-      <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
-        <div
-          ref={modalRef}
-          className="w-[90%] max-w-4xl bg-[#0D0D0D] rounded-xl shadow-2xl border border-white/10 pointer-events-auto max-h-[85vh] overflow-y-auto custom-sidebar-scrollbar"
-        >
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 sm:p-6 border-b border-white/10 sticky top-0 bg-[#0D0D0D] z-10">
-            <h2 className="text-xl sm:text-2xl font-bold text-white">
-              Open Orders
-            </h2>
-            <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-800 rounded-lg transition text-gray-400 hover:text-white"
-              aria-label="Close modal"
-            >
-              <X className="w-5 h-5 sm:w-6 sm:h-6" />
-            </button>
-          </div>
+    <AcctModal labelledBy="orders-title" variant="orders" modalRef={modalRef}>
+      <AcctModalHead
+        id="orders-title"
+        eyebrow="Account"
+        title="My orders and positions"
+        description="Your positions and trade history on Polymarket, Kalshi, Limitless, Myriad and Predict.fun."
+        onClose={onClose}
+      />
 
-          {/* Platform tabs */}
-          <div className="grid grid-cols-5 border-b border-white/10 sticky top-[73px] bg-[#0D0D0D] z-10 px-4 sm:px-6">
-            <button
-              type="button"
-              onClick={() => setPlatformTab("polymarket")}
-              className={`px-1 sm:px-2 py-3 text-[10px] sm:text-sm font-medium transition-colors border-b-2 text-center ${
-                platformTab === "polymarket"
-                  ? "border-[#2C59F7] text-[#2C59F7]"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              Polymarket
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPlatformTab("kalshi");
-                setActiveTab("trades");
-              }}
-              className={`px-1 sm:px-2 py-3 text-[10px] sm:text-sm font-medium transition-colors border-b-2 text-center ${
-                platformTab === "kalshi"
-                  ? "border-[#17cb91] text-[#17cb91]"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              Kalshi
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPlatformTab("limitless");
-                setActiveTab("trades");
-              }}
-              className={`px-1 sm:px-2 py-3 text-[10px] sm:text-sm font-medium transition-colors border-b-2 text-center ${
-                platformTab === "limitless"
-                  ? "border-white text-white"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              Limitless
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPlatformTab("myriad");
-                setActiveTab("trades");
-              }}
-              className={`px-1 sm:px-2 py-3 text-[10px] sm:text-sm font-medium transition-colors border-b-2 text-center ${
-                platformTab === "myriad"
-                  ? "border-[#ffc000] text-[#ffc000]"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              Myriad
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setPlatformTab("predictfun");
-                setActiveTab("trades");
-              }}
-              className={`px-1 sm:px-2 py-3 text-[10px] sm:text-sm font-medium transition-colors border-b-2 text-center leading-tight ${
-                platformTab === "predictfun"
-                  ? "border-[#A855F7] text-[#A855F7]"
-                  : "border-transparent text-gray-400 hover:text-white"
-              }`}
-            >
-              <span className="sm:hidden">Predict</span>
-              <span className="hidden sm:inline">Predict.fun</span>
-            </button>
-          </div>
+      {/* View tabs left, venue picker right (phones: venue picker on top) */}
+      <div className="o-bar">
+        <AcctTabs
+          idPrefix="orders"
+          label="View"
+          tabs={ORDERS_TABS}
+          active={activeTab}
+          onChange={setActiveTab}
+        />
+        <VenueSeg value={platformTab} onChange={selectVenue} />
+      </div>
 
-          {/* Content */}
-          <div className="p-4 sm:p-6">
-            {/* Kalshi tab: Trades (fills) + Positions (DFlow) like Polymarket */}
-            {platformTab === "kalshi" ? (
-              <>
-                {/* Kalshi sub-tabs: Trades | Positions */}
-                <div className="flex border-b border-white/10 sticky top-[73px] bg-[#0D0D0D] z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 mb-0">
-                  <button
-                    onClick={() => setActiveTab("trades")}
-                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
-                      activeTab === "trades"
-                        ? "border-[#17cb91] text-[#17cb91]"
-                        : "border-transparent text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    Trades
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("positions")}
-                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
-                      activeTab === "positions"
-                        ? "border-[#17cb91] text-[#17cb91]"
-                        : "border-transparent text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    Positions
-                  </button>
-                </div>
-
-                {/* Kalshi Trades Tab: user's fill history (PortfolioApi.getFills) */}
-                {platformTab === "kalshi" && activeTab === "trades" && (
-                  <>
-                    {isLoadingKalshiFills ? (
-                      <div className="flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#17cb91]"></div>
-                      </div>
-                    ) : kalshiFillsError ? (
-                      <div className="text-center py-8">
-                        <p className="text-red-400">
-                          Failed to load trade history. Please try again later.
-                        </p>
-                      </div>
-                    ) : kalshiFills.length === 0 ? (
-                      <div className="text-center py-12">
-                        <p className="text-gray-400 text-lg">
-                          No trades found.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full border-collapse">
-                          <thead>
-                            <tr className="border-b border-white/10">
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Market{" "}
-                                <span className="text-gray-500 text-xs font-normal">
-                                  (Click to view)
-                                </span>
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Side
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Price
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Size
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Role
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Time
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {kalshiFills.map((fill: KalshiFill) => {
-                              const sideLabel =
-                                fill.action === "buy"
-                                  ? `BUY ${(fill.side ?? "").toUpperCase()}`
-                                  : `SELL ${(fill.side ?? "").toUpperCase()}`;
-                              const role = fill.is_taker ? "TAKER" : "MAKER";
-                              const ticker = fill.ticker ?? "—";
-                              return (
-                                <tr
-                                  key={fill.fill_id ?? fill.order_id ?? String(Math.random())}
-                                  className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                                >
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    {ticker !== "—" ? (
-                                      <a
-                                        href={`/rexmarkets/kalshi/${encodeURIComponent(ticker)}`}
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          onClose();
-                                          router.push(`/rexmarkets/kalshi/${encodeURIComponent(ticker)}`);
-                                        }}
-                                        className="max-w-[200px] truncate block text-left hover:text-[#17cb91] transition-colors cursor-pointer underline decoration-dotted underline-offset-2 hover:decoration-solid"
-                                        title={`View ${ticker} on RexMarkets`}
-                                      >
-                                        {ticker}
-                                      </a>
-                                    ) : (
-                                      ticker
-                                    )}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    <span
-                                      className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                                        fill.action === "buy"
-                                          ? "bg-green-500/20 text-green-400"
-                                          : "bg-red-500/20 text-red-400"
-                                      }`}
-                                    >
-                                      {sideLabel}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    {formatKalshiFillPrice(fill.price)}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    {(fill.count ?? 0).toLocaleString(undefined, {
-                                      maximumFractionDigits: 4,
-                                    })}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400">
-                                      {role}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-gray-400 text-xs">
-                                    {formatKalshiFillTime(fill.created_time)}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Kalshi Positions Tab: DFlow positions + reclaim rent */}
-                {platformTab === "kalshi" && activeTab === "positions" && (
-                  <>
-                    {!solanaAddress ? (
-                      <div className="text-center py-12">
-                        <p className="text-gray-400">
-                          Connect your Solana wallet to view Kalshi positions.
-                        </p>
-                      </div>
-                    ) : isLoadingKalshiPositions ? (
-                      <div className="flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#17cb91]"></div>
-                      </div>
-                    ) : kalshiPositionsError ? (
-                      <div className="text-center py-8">
-                        <p className="text-red-400">
-                          Failed to load Kalshi positions. Please try again later.
-                        </p>
-                      </div>
-                    ) : kalshiPositions.length === 0 ? (
-                      <div className="text-center py-12">
-                        <p className="text-gray-400 text-lg">
-                          No Kalshi positions found.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full border-collapse">
-                          <thead>
-                            <tr className="border-b border-white/10">
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Market
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Outcome
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Balance
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Redemption
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Open
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Close
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Status
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Redeem
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {kalshiPositions.map((pos) => {
-                              const ticker = pos.market?.eventTicker;
-                              const title =
-                                pos.market?.title ??
-                                pos.market?.question ??
-                                ticker ??
-                                "—";
-                              const marketHref = ticker
-                                ? `/rexmarkets/kalshi/${encodeURIComponent(ticker)}`
-                                : null;
-                              const redeemable = isKalshiRedeemable(pos);
-                              const isRedeeming = redeemingKalshiMint === pos.mint;
-                              return (
-                                <tr
-                                  key={pos.mint}
-                                  className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                                >
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    {marketHref ? (
-                                      <a
-                                        href={marketHref}
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        className="max-w-[220px] block truncate hover:text-[#17cb91] transition-colors underline decoration-dotted underline-offset-2"
-                                        title={`Open ${title} in new tab`}
-                                      >
-                                        {title}
-                                      </a>
-                                    ) : (
-                                      title
-                                    )}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    <span
-                                      className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                                        pos.position === "YES"
-                                          ? "bg-green-500/20 text-green-400"
-                                          : pos.position === "NO"
-                                            ? "bg-red-500/20 text-red-400"
-                                            : "bg-gray-500/20 text-gray-400"
-                                    }`}
-                                    >
-                                      {pos.position}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    {pos.balance.toLocaleString(undefined, {
-                                      maximumFractionDigits: 4,
-                                    })}{" "}
-                                    shares
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-gray-300 text-xs sm:text-sm">
-                                    {pos.redemptionStatus ?? "—"}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-gray-300 text-xs sm:text-sm whitespace-nowrap">
-                                    {formatKalshiDate(pos.market?.openTime)}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-gray-300 text-xs sm:text-sm whitespace-nowrap">
-                                    {formatKalshiDate(pos.market?.closeTime)}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-white/10 text-gray-300">
-                                      {pos.market?.status ?? "—"}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    {redeemable ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleKalshiRedeem(pos)}
-                                        disabled={isRedeeming}
-                                        className={`min-w-[80px] px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                                          isRedeeming
-                                            ? "bg-yellow-600/70 cursor-wait text-white"
-                                            : "bg-[#17cb91] hover:bg-[#14b87d] text-black disabled:opacity-50 disabled:cursor-not-allowed"
-                                        }`}
-                                      >
-                                        {isRedeeming ? (
-                                          <span className="flex items-center gap-1.5 justify-center">
-                                            <span className="inline-block w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                                            Redeeming...
-                                          </span>
-                                        ) : (
-                                          "Redeem"
-                                        )}
-                                      </button>
-                                    ) : (
-                                      <span className="text-gray-500 text-xs">
-                                        Not Yet
-                                      </span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-
-                    {/* Reclaim rent from empty outcome token accounts (DFlow: close-outcome-token-accounts) */}
-                    {emptyOutcomeAccounts.length > 0 &&
-                      solanaAddress &&
-                      !isLoadingKalshiPositions &&
-                      !kalshiPositionsError && (
-                    <div className="mt-6 pt-6 border-t border-white/10">
-                      <h3 className="text-sm font-medium text-gray-300 mb-2">
-                        Reclaim rent from closed positions
-                      </h3>
-                      <p className="text-xs text-gray-500 mb-3">
-                        Empty outcome token accounts can be closed to reclaim
-                        SOL rent.
-                      </p>
-                      <div className="space-y-2">
-                        {emptyOutcomeAccounts.map((empty) => {
-                          const isClosing =
-                            closingAccountAddress === empty.tokenAccountAddress;
-                          return (
-                            <div
-                              key={empty.tokenAccountAddress}
-                              className="flex items-center justify-between gap-3 py-2 px-3 rounded-lg bg-white/5"
-                            >
-                              <span
-                                className="text-gray-400 text-xs font-mono truncate max-w-[200px] sm:max-w-[320px]"
-                                title={empty.tokenAccountAddress}
-                              >
-                                {empty.tokenAccountAddress.slice(0, 8)}...
-                                {empty.tokenAccountAddress.slice(-6)}
-                              </span>
-                              <button
-                                type="button"
-                                onClick={() => handleCloseEmptyAccount(empty)}
-                                disabled={isClosing}
-                                className="shrink-0 px-3 py-1.5 rounded text-xs font-medium bg-[#17cb91] hover:bg-[#14b87d] text-black disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                              >
-                                {isClosing ? (
-                                  <span className="flex items-center gap-1.5">
-                                    <span className="inline-block w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                                    Closing...
-                                  </span>
-                                ) : (
-                                  "Reclaim rent"
-                                )}
-                              </button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    </div>
-                  )}
-                  </>
-                )}
-              </>
-            ) : platformTab === "limitless" ? (
-              <>
-                {/* Limitless sub-tabs: Trades | Positions */}
-                <div className="flex border-b border-white/10 sticky top-[73px] bg-[#0D0D0D] z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 mb-0">
-                  <button
-                    onClick={() => setActiveTab("trades")}
-                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
-                      activeTab === "trades"
-                        ? "border-[#ffc000] text-[#ffc000]"
-                        : "border-transparent text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    Trades
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("positions")}
-                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
-                      activeTab === "positions"
-                        ? "border-[#ffc000] text-[#ffc000]"
-                        : "border-transparent text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    Positions
-                  </button>
-                </div>
-
-                {/* Limitless Trades */}
-                {platformTab === "limitless" && activeTab === "trades" && (
-                  <>
-                    {!limitlessUser?.sessionCookie ? (
-                      <div className="text-center py-12 space-y-4">
-                        <p className="text-gray-400">
-                          Sign in to Limitless to view your trade history.
-                        </p>
-                        {!eoaAddress ? (
-                          <p className="text-sm text-amber-400">
-                            Connect your wallet first to sign in to Limitless.
-                          </p>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const result = await limitlessLogin();
-                                if (result) {
-                                  queryClient.invalidateQueries({ queryKey: ["limitless-portfolio-trades"] });
-                                  queryClient.invalidateQueries({ queryKey: ["limitless-portfolio-positions"] });
-                                }
-                              }}
-                              disabled={isLimitlessLoginLoading || !ethersSigner}
-                              className="px-6 py-3 rounded-lg font-semibold text-black bg-[#ffc000] hover:bg-[#ffd000] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                              {isLimitlessLoginLoading ? (
-                                <span className="flex items-center justify-center gap-2">
-                                  <span className="inline-block w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                                  Signing in...
-                                </span>
-                              ) : (
-                                "Sign in to Limitless"
-                              )}
-                            </button>
-                            {limitlessAuthError && (
-                              <p className="text-sm text-red-400">
-                                {limitlessAuthError.message}
-                              </p>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    ) : isLoadingLimitlessTrades ? (
-                      <div className="flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffc000]"></div>
-                      </div>
-                    ) : limitlessTradesError ? (
-                      <div className="text-center py-8">
-                        <p className="text-red-400">
-                          Failed to load Limitless trades. Please try again.
-                        </p>
-                      </div>
-                    ) : limitlessTrades.length === 0 ? (
-                      <div className="text-center py-12">
-                        <p className="text-gray-400 text-lg">No trades found.</p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full border-collapse">
-                          <thead>
-                            <tr className="border-b border-white/10">
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Market</th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Side</th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Action</th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Price</th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Size</th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Amount</th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Time</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {limitlessTrades.map((t: LimitlessTrade, i: number) => {
-                              const slugForLink = t.marketSlug ?? t.market ?? "—";
-                              const displayTitle = t.market ?? t.marketSlug ?? "—";
-                              const side = (t.side ?? t.outcome ?? "—").toString();
-                              const actionRaw = (t.action ?? t.strategy ?? "—") as string;
-                              const actionLower = actionRaw.toLowerCase();
-                              const actionBadgeClass =
-                                actionLower === "won"
-                                  ? "bg-green-500/20 text-green-300"
-                                  : actionLower === "lose" || actionLower === "lost"
-                                    ? "bg-red-500/20 text-red-300"
-                                    : "bg-white/10 text-white/90";
-                              const price = t.price != null ? String(t.price) : "—";
-                              const size = t.size ?? "—";
-                              const amountRaw = t.amount;
-                              const amountStr =
-                                amountRaw != null && amountRaw !== ""
-                                  ? (() => {
-                                      const n = typeof amountRaw === "string" ? parseFloat(amountRaw) : Number(amountRaw);
-                                      return Number.isFinite(n) ? `$${n.toFixed(2)}` : String(amountRaw);
-                                    })()
-                                  : "—";
-                              const ts = t.timestamp ?? t.createdAt;
-                              const timeStr =
-                                ts != null
-                                  ? (() => {
-                                      const num = typeof ts === "string" && /^\d+$/.test(ts) ? Number(ts) : Number(ts);
-                                      if (Number.isFinite(num)) return new Date(num * 1000).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
-                                      const d = typeof ts === "string" ? new Date(ts) : new Date(Number(ts) * 1000);
-                                      return !Number.isNaN(d.getTime()) ? d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "—";
-                                    })()
-                                  : "—";
-                              return (
-                                <tr key={t.id ?? `limitless-trade-${i}`} className="border-b border-white/5 hover:bg-white/5">
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    {slugForLink !== "—" ? (
-                                      <a
-                                        href={`/rexmarkets/limitless/${encodeURIComponent(slugForLink)}`}
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          onClose();
-                                          router.push(`/rexmarkets/limitless/${encodeURIComponent(slugForLink)}`);
-                                        }}
-                                        className="max-w-[200px] truncate block hover:text-[#ffc000] transition-colors underline decoration-dotted"
-                                        title={displayTitle}
-                                      >
-                                        {displayTitle}
-                                      </a>
-                                    ) : (
-                                      displayTitle
-                                    )}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-white/10 text-white">
-                                      {side}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    <span className={`inline-block px-2 py-1 rounded text-xs font-medium ${actionBadgeClass}`}>
-                                      {actionRaw}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">{price}</td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm" title="Outcome tokens (shares) bought or sold">{String(size)}</td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm" title="USDC spent or received (after fees)">{amountStr}</td>
-                                  <td className="py-3 px-2 sm:px-4 text-gray-400 text-xs">{timeStr}</td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Limitless Positions */}
-                {platformTab === "limitless" && activeTab === "positions" && (
-                  <>
-                    {!limitlessUser?.sessionCookie ? (
-                      <div className="text-center py-12 space-y-4">
-                        <p className="text-gray-400">
-                          Sign in to Limitless to view your positions.
-                        </p>
-                        {!eoaAddress ? (
-                          <p className="text-sm text-amber-400">
-                            Connect your wallet first to sign in to Limitless.
-                          </p>
-                        ) : (
-                          <>
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const result = await limitlessLogin();
-                                if (result) {
-                                  queryClient.invalidateQueries({ queryKey: ["limitless-portfolio-trades"] });
-                                  queryClient.invalidateQueries({ queryKey: ["limitless-portfolio-positions"] });
-                                }
-                              }}
-                              disabled={isLimitlessLoginLoading || !ethersSigner}
-                              className="px-6 py-3 rounded-lg font-semibold text-black bg-[#ffc000] hover:bg-[#ffd000] disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                            >
-                              {isLimitlessLoginLoading ? (
-                                <span className="flex items-center justify-center gap-2">
-                                  <span className="inline-block w-4 h-4 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                                  Signing in...
-                                </span>
-                              ) : (
-                                "Sign in to Limitless"
-                              )}
-                            </button>
-                            {limitlessAuthError && (
-                              <p className="text-sm text-red-400">
-                                {limitlessAuthError.message}
-                              </p>
-                            )}
-                          </>
-                        )}
-                      </div>
-                    ) : isLoadingLimitlessPositions ? (
-                      <div className="flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffc000]"></div>
-                      </div>
-                    ) : limitlessPositionsError ? (
-                      <div className="text-center py-8">
-                        <p className="text-red-400">
-                          Failed to load Limitless positions. Please try again.
-                        </p>
-                      </div>
-                    ) : limitlessPositions.length === 0 ? (
-                      <div className="text-center py-12">
-                        <p className="text-gray-400 text-lg">No positions found.</p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full border-collapse">
-                          <thead>
-                            <tr className="border-b border-white/10">
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Market</th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Outcome</th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Size</th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Closed</th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Expiration</th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">Claim</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {limitlessPositions.map((p: LimitlessPosition, i: number) => {
-                              const slugForLink = p.marketSlug ?? p.market ?? "—";
-                              const displayTitle = p.market ?? p.marketSlug ?? "—";
-                              const outcome = (p.outcome ?? "—").toString();
-                              const size = p.size ?? p.balance ?? "—";
-                              const closed = p.marketClosed === true ? "Yes" : p.marketClosed === false ? "No" : "—";
-                              const exp = p.expirationDate;
-                              const expiration =
-                                exp != null && exp !== ""
-                                  ? (() => {
-                                      const d = typeof exp === "string" ? new Date(exp) : null;
-                                      return d && !Number.isNaN(d.getTime())
-                                        ? d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })
-                                        : String(exp);
-                                    })()
-                                  : "—";
-                              const canClaim =
-                                closed === "Yes" &&
-                                slugForLink !== "—" &&
-                                !!eoaAddress;
-                              const isClaiming =
-                                redeemingLimitlessSlug === slugForLink ||
-                                isLimitlessRedeemLoading;
-                              return (
-                                <tr key={p.id ?? p.tokenId ?? `limitless-pos-${i}`} className="border-b border-white/5 hover:bg-white/5">
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    {slugForLink !== "—" ? (
-                                      <a
-                                        href={`/rexmarkets/limitless/${encodeURIComponent(slugForLink)}`}
-                                        onClick={(e) => {
-                                          e.preventDefault();
-                                          onClose();
-                                          router.push(`/rexmarkets/limitless/${encodeURIComponent(slugForLink)}`);
-                                        }}
-                                        className="max-w-[200px] truncate block hover:text-[#ffc000] transition-colors underline decoration-dotted"
-                                        title={displayTitle}
-                                      >
-                                        {displayTitle}
-                                      </a>
-                                    ) : (
-                                      displayTitle
-                                    )}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-white/10 text-white">
-                                      {outcome}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">{String(size)}</td>
-                                  <td className="py-3 px-2 sm:px-4 text-white/80 text-xs sm:text-sm">{closed}</td>
-                                  <td className="py-3 px-2 sm:px-4 text-white/80 text-xs sm:text-sm">{expiration}</td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    {canClaim ? (
-                                      <button
-                                        type="button"
-                                        onClick={() => handleLimitlessClaim(slugForLink)}
-                                        disabled={isClaiming}
-                                        className={`min-w-[80px] px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                                          isClaiming
-                                            ? "bg-amber-600/70 cursor-wait text-white"
-                                            : "bg-[#ffc000] hover:bg-[#ffd000] text-black disabled:opacity-50 disabled:cursor-not-allowed"
-                                        }`}
-                                      >
-                                        {isClaiming ? (
-                                          <span className="flex items-center gap-1.5 justify-center">
-                                            <span className="inline-block w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                                            Claiming...
-                                          </span>
-                                        ) : (
-                                          "Claim"
-                                        )}
-                                      </button>
-                                    ) : (
-                                      <span className="text-gray-500 text-xs">
-                                        {closed !== "Yes" ? "—" : "—"}
-                                      </span>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
-                )}
-              </>
-            ) : platformTab === "myriad" ? (
-              <>
-                <div className="flex border-b border-white/10 sticky top-[73px] bg-[#0D0D0D] z-10 -mx-4 sm:-mx-6 px-4 sm:px-6 mb-0">
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("trades")}
-                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
-                      activeTab === "trades"
-                        ? "border-[#ffc000] text-[#ffc000]"
-                        : "border-transparent text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    Trades
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setActiveTab("positions")}
-                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
-                      activeTab === "positions"
-                        ? "border-[#ffc000] text-[#ffc000]"
-                        : "border-transparent text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    Positions
-                  </button>
-                </div>
-
-                {activeTab === "trades" && (
-                  <>
-                    {!eoaAddress ? (
-                      <div className="text-center py-12">
-                        <p className="text-gray-400">
-                          Connect your wallet to view Myriad activity and order-book orders (BNB Chain).
-                        </p>
-                      </div>
-                    ) : isLoadingMyriadOrders && isLoadingMyriadUserEvents ? (
-                      <div className="flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffc000]" />
-                      </div>
-                    ) : myriadOrdersError && myriadUserEventsError ? (
-                      <div className="text-center py-8">
-                        <p className="text-red-400">
-                          {myriadUserEventsError instanceof Error
-                            ? myriadUserEventsError.message
-                            : myriadOrdersError instanceof Error
-                              ? myriadOrdersError.message
-                              : "Failed to load Myriad data."}
-                        </p>
-                      </div>
-                    ) : myriadUserEventsSorted.length === 0 && myriadOrdersSorted.length === 0 ? (
-                      <div className="text-center py-12">
-                        <p className="text-gray-400 text-lg">No trades or activity yet.</p>
-                        <p className="text-gray-500 text-sm mt-2 max-w-md mx-auto">
-                          <span className="text-white/70">GET /users/…/events</span> lists AMM and other
-                          on-chain actions. <span className="text-white/70">GET /orders</span> lists signed
-                          order-book orders (resting and filled).
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full border-collapse min-w-[720px]">
-                          <thead>
-                            <tr className="border-b border-white/10">
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Market{" "}
-                                <span className="text-gray-500 text-xs font-normal">
-                                  (Click to view)
-                                </span>
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Side
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Price
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Size
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Role
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Status
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Time
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {myriadUnifiedTradesRows.map((row) => {
-                              const sideClass =
-                                row.kind === "order"
-                                  ? row.isBuySide
-                                    ? "bg-green-500/20 text-green-400"
-                                    : "bg-red-500/20 text-red-400"
-                                  : row.sideTone === "buy"
-                                    ? "bg-green-500/20 text-green-400"
-                                    : row.sideTone === "sell"
-                                      ? "bg-red-500/20 text-red-400"
-                                      : row.sideTone === "claim"
-                                        ? "bg-amber-500/20 text-amber-300"
-                                        : "bg-gray-500/20 text-gray-400";
-
-                              const statusClass =
-                                row.statusStyle === "confirmed"
-                                  ? "bg-green-500/20 text-green-400"
-                                  : row.statusStyle === "open"
-                                    ? "bg-blue-500/20 text-blue-300"
-                                    : row.statusStyle === "pending"
-                                      ? "bg-yellow-500/20 text-yellow-400"
-                                      : row.statusStyle === "cancelled"
-                                        ? "bg-red-500/20 text-red-400"
-                                        : row.statusStyle === "expired"
-                                          ? "bg-amber-500/15 text-amber-300"
-                                          : "bg-gray-500/20 text-gray-400";
-
-                              return (
-                                <tr
-                                  key={row.key}
-                                  className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                                >
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    <a
-                                      href={`/rexmarkets/myriad/${encodeURIComponent(row.slugForLink)}`}
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        onClose();
-                                        router.push(
-                                          `/rexmarkets/myriad/${encodeURIComponent(row.slugForLink)}`
-                                        );
-                                      }}
-                                      className="max-w-[200px] truncate block text-left hover:text-[#ffc000] transition-colors cursor-pointer underline decoration-dotted underline-offset-2 hover:decoration-solid"
-                                      title={row.marketTitle}
-                                    >
-                                      {row.marketTitle}
-                                    </a>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    <span
-                                      className={`inline-block px-2 py-1 rounded text-xs font-medium ${sideClass}`}
-                                    >
-                                      {row.sideLabel}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm tabular-nums font-medium">
-                                    {row.priceDisplay}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm tabular-nums font-semibold">
-                                    {row.sizeDisplay}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    {row.role === "—" ? (
-                                      <span className="text-gray-500 text-xs">—</span>
-                                    ) : (
-                                      <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400">
-                                        {row.role}
-                                      </span>
-                                    )}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    <span
-                                      className={`inline-block px-2 py-1 rounded text-xs font-medium ${statusClass}`}
-                                    >
-                                      {row.statusLabel}
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-gray-400 text-xs whitespace-nowrap">
-                                    {row.timeStr}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {activeTab === "positions" && (
-                  <>
-                    {!eoaAddress ? (
-                      <div className="text-center py-12">
-                        <p className="text-gray-400">
-                          Connect your wallet to view Myriad positions and claim on BNB Chain.
-                        </p>
-                      </div>
-                    ) : isLoadingMyriadUserMarkets ? (
-                      <div className="flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffc000]" />
-                      </div>
-                    ) : myriadUserMarketsError ? (
-                      <div className="text-center py-8">
-                        <p className="text-red-400">
-                          {myriadUserMarketsError instanceof Error
-                            ? myriadUserMarketsError.message
-                            : "Failed to load Myriad positions."}
-                        </p>
-                      </div>
-                    ) : myriadUserMarketsVisible.length === 0 ? (
-                      <div className="text-center py-12">
-                        <p className="text-gray-400 text-lg">No positions found.</p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full border-collapse">
-                          <thead>
-                            <tr className="border-b border-white/10">
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Market
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Yes (shares)
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                No (shares)
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                State
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Claim
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {myriadUserMarketsVisible.map((row) => {
-                              const slugForLink = row.slug?.trim() || String(row.marketId);
-                              const isRedeeming = redeemingMyriadMarketId === row.marketId;
-                              return (
-                                <tr
-                                  key={row.marketId}
-                                  className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                                >
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    <a
-                                      href={`/rexmarkets/myriad/${encodeURIComponent(slugForLink)}`}
-                                      onClick={(e) => {
-                                        e.preventDefault();
-                                        onClose();
-                                        router.push(
-                                          `/rexmarkets/myriad/${encodeURIComponent(slugForLink)}`
-                                        );
-                                      }}
-                                      className="max-w-[200px] truncate block hover:text-[#ffc000] transition-colors underline decoration-dotted"
-                                      title={row.title}
-                                    >
-                                      {row.title}
-                                    </a>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm tabular-nums">
-                                    {row.yesShares.toLocaleString(undefined, {
-                                      maximumFractionDigits: 4,
-                                    })}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm tabular-nums">
-                                    {row.noShares.toLocaleString(undefined, {
-                                      maximumFractionDigits: 4,
-                                    })}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-gray-300 text-xs sm:text-sm capitalize">
-                                    {row.state || "—"}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    <button
-                                      type="button"
-                                      onClick={() => void handleMyriadClaim(row.marketId)}
-                                      disabled={isRedeeming || !row.redeemEligible}
-                                      title={
-                                        row.redeemEligible
-                                          ? "POST /markets/claim — submit calldata on BNB Smart Chain (fallback: order-book redeem)."
-                                          : "Claim is only available when the market is resolved and you have winnings or voided proceeds to claim (per API)."
-                                      }
-                                      className={`min-w-[88px] px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                                        isRedeeming
-                                          ? "bg-amber-600/70 cursor-wait text-white"
-                                          : row.redeemEligible
-                                            ? "bg-[#ffc000] hover:bg-[#ffd000] text-black"
-                                            : "bg-white/10 text-gray-500 cursor-not-allowed"
-                                      }`}
-                                    >
-                                      {isRedeeming ? (
-                                        <span className="flex items-center gap-1.5 justify-center">
-                                          <span className="inline-block w-3 h-3 border-2 border-black/30 border-t-black rounded-full animate-spin" />
-                                          …
-                                        </span>
-                                      ) : (
-                                        "Claim"
-                                      )}
-                                    </button>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
-                )}
-              </>
-            ) : platformTab === "predictfun" ? (
-              <PredictFunMarketInfoPanel
-                isOpen={isOpen}
-                onClose={onClose}
-                activeTab={activeTab}
-                setActiveTab={setActiveTab}
-                eoaAddress={eoaAddress}
-                signer={ethersSigner}
-              />
-            ) : !tradingContext ? (
-              <div className="text-center py-8">
-                <p className="text-gray-400">
-                  Trading provider not available. Please navigate to the trading
-                  page to view data.
-                </p>
-              </div>
-            ) : !clobClient || !safeAddress || !isTradingSessionComplete ? (
-              <div className="text-center py-8 space-y-4">
-                <p className="text-gray-400">
-                  {!eoaAddress
-                    ? "Please connect your wallet to view trading data."
-                    : "Please initialize trading session to view data."}
-                </p>
-                {eoaAddress && initializeTradingSession && (
-                  <div className="space-y-3">
-                    <button
-                      onClick={async () => {
-                        if (!initializeTradingSession) return;
-                        setIsInitializing(true);
-                        try {
-                          await initializeTradingSession();
-                        } catch (error) {
-                          console.error("Failed to initialize trading:", error);
-                        } finally {
-                          setIsInitializing(false);
-                        }
-                      }}
-                      disabled={
-                        isInitializing ||
-                        currentStep !== "idle" ||
-                        isTradingSessionComplete
-                      }
-                      className="px-6 py-3 bg-[#ffc000] text-black font-semibold rounded-lg hover:bg-[#ffd633] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#ffc000]"
-                    >
-                      {isInitializing || currentStep !== "idle" ? (
-                        <span className="flex items-center gap-2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black"></div>
-                          {currentStep === "checking"
-                            ? "Checking..."
-                            : currentStep === "deploying"
-                              ? "Deploying Safe..."
-                              : currentStep === "credentials"
-                                ? "Setting up credentials..."
-                                : currentStep === "approvals"
-                                  ? "Setting approvals..."
-                                  : "Initializing..."}
-                        </span>
-                      ) : (
-                        "Initialize Trading"
-                      )}
-                    </button>
-                    {sessionError && (
-                      <p className="text-red-400 text-sm mt-2">
-                        {sessionError.message ||
-                          "Failed to initialize trading session"}
-                      </p>
-                    )}
-                  </div>
-                )}
-              </div>
-            ) : (
-              <>
-                {/* Tabs */}
-                <div className="flex border-b border-white/10 sticky top-[73px] bg-[#0D0D0D] z-10 -mx-4 sm:-mx-6 px-4 sm:px-6">
-                  <button
-                    onClick={() => setActiveTab("trades")}
-                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
-                      activeTab === "trades"
-                        ? "border-[#ffc000] text-[#ffc000]"
-                        : "border-transparent text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    Trades
-                  </button>
-                  <button
-                    onClick={() => setActiveTab("positions")}
-                    className={`flex-1 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
-                      activeTab === "positions"
-                        ? "border-[#ffc000] text-[#ffc000]"
-                        : "border-transparent text-gray-400 hover:text-white"
-                    }`}
-                  >
-                    Positions
-                  </button>
-                </div>
-
-                {/* Trades Tab */}
-                {activeTab === "trades" && (
-                  <>
-                    {isLoadingTrades ? (
-                      <div className="flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffc000]"></div>
-                      </div>
-                    ) : tradesError ? (
-                      <div className="text-center py-8">
-                        <p className="text-red-400">
-                          Failed to load trades. Please try again later.
-                        </p>
-                      </div>
-                    ) : trades.length === 0 ? (
-                      <div className="text-center py-12">
-                        <p className="text-gray-400 text-lg">
-                          No trades found.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full border-collapse">
-                          <thead>
-                            <tr className="border-b border-white/10">
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Market{" "}
-                                <span className="text-gray-500 text-xs font-normal">
-                                  (Click to view)
-                                </span>
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Side
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Price
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Size
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Role
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Status
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Time
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {tradesWithTitles.map(
-                              (
-                                trade: PolymarketTrade & {
-                                  marketTitle?: string;
-                                },
-                              ) => {
-                                const isMaker =
-                                  (trade.maker_address || "").toLowerCase() ===
-                                  (safeAddress || "").toLowerCase();
-                                const role =
-                                  trade.trader_side ||
-                                  (isMaker ? "MAKER" : "TAKER");
-
-                                return (
-                                  <tr
-                                    key={trade.id}
-                                    className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                                  >
-                                    <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                      <button
-                                        onClick={() =>
-                                          handleMarketClick(
-                                            trade.market ||
-                                              trade.asset_id ||
-                                              "",
-                                            trade.marketTitle ||
-                                              trade.market ||
-                                              trade.asset_id ||
-                                              "N/A",
-                                          )
-                                        }
-                                        disabled={
-                                          loadingMarketId ===
-                                          (trade.market || trade.asset_id || "")
-                                        }
-                                        className="max-w-[200px] truncate text-left hover:text-[#ffc000] transition-colors cursor-pointer underline decoration-dotted underline-offset-2 hover:decoration-solid disabled:opacity-50 disabled:cursor-wait flex items-center gap-2"
-                                        title={`Click to view ${
-                                          trade.marketTitle ||
-                                          trade.market ||
-                                          trade.asset_id ||
-                                          "N/A"
-                                        }`}
-                                      >
-                                        {loadingMarketId ===
-                                        (trade.market ||
-                                          trade.asset_id ||
-                                          "") ? (
-                                          <>
-                                            <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[#ffc000] flex-shrink-0"></div>
-                                            <span className="truncate">
-                                              {trade.marketTitle ||
-                                                trade.market ||
-                                                trade.asset_id ||
-                                                "N/A"}
-                                            </span>
-                                          </>
-                                        ) : (
-                                          trade.marketTitle ||
-                                          trade.market ||
-                                          trade.asset_id ||
-                                          "N/A"
-                                        )}
-                                      </button>
-                                    </td>
-                                    <td className="py-3 px-2 sm:px-4">
-                                      <span
-                                        className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                                          trade.side === "BUY"
-                                            ? "bg-green-500/20 text-green-400"
-                                            : "bg-red-500/20 text-red-400"
-                                        }`}
-                                      >
-                                        {trade.side}
-                                      </span>
-                                    </td>
-                                    <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                      {formatPrice(trade.price)}
-                                    </td>
-                                    <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                      {formatSize(trade.size)}
-                                    </td>
-                                    <td className="py-3 px-2 sm:px-4">
-                                      <span className="inline-block px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-400">
-                                        {role}
-                                      </span>
-                                    </td>
-                                    <td className="py-3 px-2 sm:px-4">
-                                      <span
-                                        className={`inline-block px-2 py-1 rounded text-xs font-medium ${
-                                          trade.status === "CONFIRMED"
-                                            ? "bg-green-500/20 text-green-400"
-                                            : trade.status === "PENDING"
-                                              ? "bg-yellow-500/20 text-yellow-400"
-                                              : "bg-gray-500/20 text-gray-400"
-                                        }`}
-                                      >
-                                        {trade.status || "N/A"}
-                                      </span>
-                                    </td>
-                                    <td className="py-3 px-2 sm:px-4 text-gray-400 text-xs">
-                                      {formatDate(trade.match_time)}
-                                    </td>
-                                  </tr>
-                                );
-                              },
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
-                )}
-
-                {/* Positions Tab */}
-                {activeTab === "positions" && (
-                  <>
-                    {/* Position Filters with Dust Warning */}
-                    <div className="flex items-center justify-between gap-3 mb-4 mt-4">
-                      {hideDust &&
-                        positions &&
-                        positions.length > activePositions.length && (
-                          <span className="text-yellow-300 text-sm">
-                            Hiding {positions.length - activePositions.length}{" "}
-                            dust position(s) (value &lt; $
-                            {DUST_THRESHOLD.toFixed(2)})
-                          </span>
-                        )}
-                      <div className="ml-auto">
-                        <Checkbox
-                          checked={!hideDust}
-                          onChange={(checked) => setHideDust(!checked)}
-                          label="Show All"
+      <div
+        className="acct-modal__body"
+        role="tabpanel"
+        aria-labelledby={`orders-tab-${activeTab}`}
+      >
+        {platformTab === "kalshi" ? (
+          <>
+            {/* Kalshi Trades: user's fill history (PortfolioApi.getFills) */}
+            {activeTab === "trades" &&
+              (isLoadingKalshiFills ? (
+                <OrdersLoading label="Loading Kalshi trades" />
+              ) : kalshiFillsError ? (
+                errorState("Failed to load trade history. Please try again later.")
+              ) : kalshiFills.length === 0 ? (
+                <OrdersState icon="trades" title="No trades found">
+                  {tradesEmptyCopy}
+                </OrdersState>
+              ) : (
+                <RecordTable
+                  label="Kalshi trades"
+                  columns={TRADE_COLUMNS_ROLE}
+                  rows={kalshiFills.map((fill: KalshiFill) => {
+                    const sideLabel =
+                      fill.action === "buy"
+                        ? `BUY ${(fill.side ?? "").toUpperCase()}`
+                        : `SELL ${(fill.side ?? "").toUpperCase()}`;
+                    const role = fill.is_taker ? "TAKER" : "MAKER";
+                    const ticker = fill.ticker ?? "—";
+                    const href =
+                      ticker !== "—"
+                        ? `/rexmarkets/kalshi/${encodeURIComponent(ticker)}`
+                        : undefined;
+                    const side = (
+                      <SideTag tone={fill.action === "buy" ? "up" : "down"}>
+                        {sideLabel}
+                      </SideTag>
+                    );
+                    return {
+                      key: fill.fill_id ?? fill.order_id ?? String(Math.random()),
+                      market: (
+                        <MarketName
+                          title={ticker}
+                          venue="kalshi"
+                          href={href}
+                          onNavigate={href ? () => openMarket(href) : undefined}
+                          tooltip={`View ${ticker} on RexMarkets`}
                         />
-                      </div>
-                    </div>
+                      ),
+                      tag: side,
+                      cells: {
+                        side,
+                        price: formatKalshiFillPrice(fill.price),
+                        size: (fill.count ?? 0).toLocaleString(undefined, {
+                          maximumFractionDigits: 4,
+                        }),
+                        role: <StatusBadge tone="neutral">{role}</StatusBadge>,
+                        time: formatKalshiFillTime(fill.created_time),
+                      },
+                    };
+                  })}
+                />
+              ))}
 
-                    {isLoadingPositions ? (
-                      <div className="flex items-center justify-center py-12">
-                        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#ffc000]"></div>
-                      </div>
-                    ) : positionsError ? (
-                      <div className="text-center py-8">
-                        <p className="text-red-400">
-                          Failed to load positions. Please try again later.
+            {/* Kalshi Positions: DFlow positions + reclaim rent */}
+            {activeTab === "positions" && (
+              <>
+                {!solanaAddress ? (
+                  <OrdersState icon="wallet" title="Connect your Solana wallet">
+                    <p>Connect your Solana wallet to view Kalshi positions.</p>
+                  </OrdersState>
+                ) : isLoadingKalshiPositions ? (
+                  <OrdersLoading label="Loading Kalshi positions" />
+                ) : kalshiPositionsError ? (
+                  errorState("Failed to load Kalshi positions. Please try again later.")
+                ) : kalshiPositions.length === 0 ? (
+                  <OrdersState icon="positions" title="No Kalshi positions found">
+                    {positionsEmptyCopy}
+                  </OrdersState>
+                ) : (
+                  <RecordTable
+                    label="Kalshi positions"
+                    actionLabel="Actions"
+                    columns={[
+                      { key: "outcome", label: "Outcome", card: false },
+                      { key: "balance", label: "Shares", num: true },
+                      { key: "redemption", label: "Redemption" },
+                      { key: "status", label: "Status" },
+                      { key: "open", label: "Opens", muted: true, card: "half" },
+                      { key: "close", label: "Closes", muted: true, card: "half" },
+                    ]}
+                    rows={kalshiPositions.map((pos) => {
+                      const ticker = pos.market?.eventTicker;
+                      const title =
+                        pos.market?.title ??
+                        pos.market?.question ??
+                        ticker ??
+                        "—";
+                      const marketHref = ticker
+                        ? `/rexmarkets/kalshi/${encodeURIComponent(ticker)}`
+                        : undefined;
+                      const redeemable = isKalshiRedeemable(pos);
+                      const isRedeeming = redeemingKalshiMint === pos.mint;
+                      const outcome = (
+                        <SideTag
+                          tone={
+                            pos.position === "YES"
+                              ? "up"
+                              : pos.position === "NO"
+                                ? "down"
+                                : "neutral"
+                          }
+                        >
+                          {pos.position}
+                        </SideTag>
+                      );
+                      return {
+                        key: pos.mint,
+                        market: (
+                          <MarketName
+                            title={title}
+                            venue="kalshi"
+                            href={marketHref}
+                            newTab
+                            tooltip={`Open ${title} in new tab`}
+                          />
+                        ),
+                        tag: outcome,
+                        cells: {
+                          outcome,
+                          balance: pos.balance.toLocaleString(undefined, {
+                            maximumFractionDigits: 4,
+                          }),
+                          redemption: pos.redemptionStatus ?? "—",
+                          open: formatKalshiDate(pos.market?.openTime),
+                          close: formatKalshiDate(pos.market?.closeTime),
+                          status: (
+                            <StatusBadge tone="neutral">
+                              {pos.market?.status ?? "—"}
+                            </StatusBadge>
+                          ),
+                        },
+                        action: redeemable ? (
+                          <button
+                            type="button"
+                            onClick={() => handleKalshiRedeem(pos)}
+                            disabled={isRedeeming}
+                            aria-busy={isRedeeming || undefined}
+                            className="rx-btn rx-btn--primary rx-btn--s"
+                          >
+                            <BusyLabel busy={isRedeeming} busyText="Redeeming...">
+                              Redeem
+                            </BusyLabel>
+                          </button>
+                        ) : (
+                          <span className="o-note">Not yet</span>
+                        ),
+                      };
+                    })}
+                  />
+                )}
+
+                {/* Reclaim rent from empty outcome token accounts (DFlow: close-outcome-token-accounts) */}
+                {emptyOutcomeAccounts.length > 0 &&
+                  solanaAddress &&
+                  !isLoadingKalshiPositions &&
+                  !kalshiPositionsError && (
+                    <section className="o-rent" aria-labelledby="orders-rent-title">
+                      <div>
+                        <h3 id="orders-rent-title" className="rx-h3">
+                          Reclaim rent from closed positions
+                        </h3>
+                        <p className="rx-small mb-0 mt-1">
+                          Empty outcome token accounts can be closed to reclaim
+                          SOL rent.
                         </p>
                       </div>
-                    ) : activePositions.length === 0 ? (
-                      <div className="text-center py-12">
-                        <p className="text-gray-400 text-lg">
-                          No open positions found.
-                        </p>
-                      </div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full border-collapse">
-                          <thead>
-                            <tr className="border-b border-white/10">
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Market{" "}
-                                <span className="text-gray-500 text-xs font-normal">
-                                  (Click to view)
-                                </span>
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Outcome
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Size
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Avg Price
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Current Price
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Current Value
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                P&L
-                              </th>
-                              <th className="text-left py-3 px-2 sm:px-4 text-gray-400 text-xs sm:text-sm font-medium">
-                                Action
-                              </th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {activePositions.map((position) => {
-                              const isPending = pendingVerification.has(
-                                position.asset,
-                              );
-                              const isSelling = sellingAsset === position.asset;
-                              const isRedeemingPos =
-                                redeemingAsset === position.asset;
-                              const isSuccessful =
-                                successfulSale === position.asset;
-                              const isSuccessfulRedeem =
-                                successfulRedeem === position.asset;
+                      {emptyOutcomeAccounts.map((empty) => {
+                        const isClosing =
+                          closingAccountAddress === empty.tokenAccountAddress;
+                        return (
+                          <div key={empty.tokenAccountAddress} className="o-rent__row">
+                            <span className="rx-num" title={empty.tokenAccountAddress}>
+                              {empty.tokenAccountAddress.slice(0, 8)}...
+                              {empty.tokenAccountAddress.slice(-6)}
+                            </span>
+                            <button
+                              type="button"
+                              onClick={() => handleCloseEmptyAccount(empty)}
+                              disabled={isClosing}
+                              aria-busy={isClosing || undefined}
+                              className="rx-btn rx-btn--secondary rx-btn--s shrink-0"
+                            >
+                              <BusyLabel busy={isClosing} busyText="Closing...">
+                                Reclaim rent
+                              </BusyLabel>
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </section>
+                  )}
+              </>
+            )}
+          </>
+        ) : platformTab === "limitless" ? (
+          <>
+            {/* Limitless Trades */}
+            {activeTab === "trades" &&
+              (!limitlessUser?.sessionCookie ? (
+                limitlessSignIn("trade history")
+              ) : isLoadingLimitlessTrades ? (
+                <OrdersLoading label="Loading Limitless trades" />
+              ) : limitlessTradesError ? (
+                errorState("Failed to load Limitless trades. Please try again.")
+              ) : limitlessTrades.length === 0 ? (
+                <OrdersState icon="trades" title="No trades found">
+                  {tradesEmptyCopy}
+                </OrdersState>
+              ) : (
+                <RecordTable
+                  label="Limitless trades"
+                  columns={[
+                    { key: "side", label: "Side" },
+                    { key: "action", label: "Action", card: false },
+                    { key: "price", label: "Price", num: true },
+                    { key: "size", label: "Size", num: true, hint: "Outcome tokens (shares) bought or sold" },
+                    { key: "amount", label: "Amount", num: true, card: "half", hint: "USDC spent or received (after fees)" },
+                    { key: "time", label: "Time", muted: true, card: "half" },
+                  ]}
+                  rows={limitlessTrades.map((t: LimitlessTrade, i: number) => {
+                    const slugForLink = t.marketSlug ?? t.market ?? "—";
+                    const displayTitle = t.market ?? t.marketSlug ?? "—";
+                    const side = (t.side ?? t.outcome ?? "—").toString();
+                    const actionRaw = (t.action ?? t.strategy ?? "—") as string;
+                    const actionLower = actionRaw.toLowerCase();
+                    const actionTone: Tone =
+                      actionLower === "won"
+                        ? "up"
+                        : actionLower === "lose" || actionLower === "lost"
+                          ? "down"
+                          : "neutral";
+                    const price = t.price != null ? String(t.price) : "—";
+                    const size = t.size ?? "—";
+                    const amountRaw = t.amount;
+                    const amountStr =
+                      amountRaw != null && amountRaw !== ""
+                        ? (() => {
+                            const n = typeof amountRaw === "string" ? parseFloat(amountRaw) : Number(amountRaw);
+                            return Number.isFinite(n) ? `$${n.toFixed(2)}` : String(amountRaw);
+                          })()
+                        : "—";
+                    const ts = t.timestamp ?? t.createdAt;
+                    const timeStr =
+                      ts != null
+                        ? (() => {
+                            const num = typeof ts === "string" && /^\d+$/.test(ts) ? Number(ts) : Number(ts);
+                            if (Number.isFinite(num)) return new Date(num * 1000).toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
+                            const d = typeof ts === "string" ? new Date(ts) : new Date(Number(ts) * 1000);
+                            return !Number.isNaN(d.getTime()) ? d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" }) : "—";
+                          })()
+                        : "—";
+                    const href =
+                      slugForLink !== "—"
+                        ? `/rexmarkets/limitless/${encodeURIComponent(slugForLink)}`
+                        : undefined;
+                    const action = <StatusBadge tone={actionTone}>{actionRaw}</StatusBadge>;
+                    return {
+                      key: t.id ?? `limitless-trade-${i}`,
+                      market: (
+                        <MarketName
+                          title={displayTitle}
+                          venue="limitless"
+                          href={href}
+                          onNavigate={href ? () => openMarket(href) : undefined}
+                        />
+                      ),
+                      tag: action,
+                      cells: {
+                        side: <SideTag tone={sideTone(side)}>{side}</SideTag>,
+                        action,
+                        price,
+                        size: String(size),
+                        amount: amountStr,
+                        time: timeStr,
+                      },
+                    };
+                  })}
+                />
+              ))}
 
-                              return (
-                                <tr
-                                  key={`${position.conditionId}-${position.outcomeIndex}`}
-                                  className="border-b border-white/5 hover:bg-white/5 transition-colors"
-                                >
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    <button
-                                      onClick={() =>
-                                        handleMarketClick(
-                                          position.conditionId,
-                                          position.title,
-                                        )
-                                      }
-                                      disabled={
-                                        loadingMarketId === position.conditionId
-                                      }
-                                      className="max-w-[200px] truncate text-left hover:text-[#ffc000] transition-colors cursor-pointer underline decoration-dotted underline-offset-2 hover:decoration-solid disabled:opacity-50 disabled:cursor-wait flex items-center gap-2"
-                                      title={`Click to view ${position.title}`}
-                                    >
-                                      {loadingMarketId ===
-                                      position.conditionId ? (
-                                        <>
-                                          <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-[#ffc000] flex-shrink-0"></div>
-                                          <span className="truncate">
-                                            {position.title}
-                                          </span>
-                                        </>
-                                      ) : (
-                                        position.title
-                                      )}
-                                    </button>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    {position.outcome}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    {formatShares(position.size)} shares
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    {formatCurrency(position.avgPrice, 3)}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    {formatCurrency(position.curPrice, 3)}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4 text-white text-xs sm:text-sm">
-                                    {formatCurrency(position.currentValue)}
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    <span
-                                      className={`text-xs sm:text-sm font-medium ${
-                                        position.cashPnl >= 0
-                                          ? "text-green-400"
-                                          : "text-red-400"
-                                      }`}
-                                    >
-                                      {formatCurrency(position.cashPnl)} (
-                                      {formatPercentage(position.percentPnl)})
-                                    </span>
-                                  </td>
-                                  <td className="py-3 px-2 sm:px-4">
-                                    {position.redeemable ? (
-                                      <div className="flex flex-col items-end gap-1">
-                                        <button
-                                          onClick={() => handleRedeem(position)}
-                                          disabled={
-                                            isRedeemingPos ||
-                                            !relayClient ||
-                                            isSuccessfulRedeem
-                                          }
-                                          className={`min-w-[80px] px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                                            isSuccessfulRedeem
-                                              ? "bg-green-600/70 cursor-default text-white"
-                                              : isRedeemingPos
-                                                ? "bg-yellow-600/70 cursor-wait text-white"
-                                                : "bg-green-600 hover:bg-green-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white"
-                                          }`}
-                                        >
-                                          {isSuccessfulRedeem ? (
-                                            <span className="flex items-center gap-1.5">
-                                              <svg
-                                                className="w-3 h-3"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                              >
-                                                <path
-                                                  strokeLinecap="round"
-                                                  strokeLinejoin="round"
-                                                  strokeWidth={2}
-                                                  d="M5 13l4 4L19 7"
-                                                />
-                                              </svg>
-                                              Success
-                                            </span>
-                                          ) : isRedeemingPos ? (
-                                            <span className="flex items-center gap-1.5">
-                                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                                              Signing...
-                                            </span>
-                                          ) : (
-                                            "Redeem"
-                                          )}
-                                        </button>
-                                        {isSuccessfulRedeem && (
-                                          <span className="text-green-400 text-xs font-medium animate-pulse">
-                                            Transaction Success
-                                          </span>
-                                        )}
-                                      </div>
-                                    ) : (
-                                      <div className="flex flex-col items-end gap-1">
-                                        <button
-                                          onClick={() =>
-                                            handleMarketSell(position)
-                                          }
-                                          disabled={
-                                            isSelling ||
-                                            isSubmitting ||
-                                            !clobClient ||
-                                            isPending ||
-                                            isSuccessful
-                                          }
-                                          className={`min-w-[80px] px-3 py-1.5 rounded text-xs font-medium transition-colors ${
-                                            isSuccessful
-                                              ? "bg-green-600/70 cursor-default text-white"
-                                              : isSelling || isPending
-                                                ? "bg-yellow-600/70 cursor-wait text-white"
-                                                : "bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white"
-                                          }`}
-                                        >
-                                          {isSuccessful ? (
-                                            <span className="flex items-center gap-1.5">
-                                              <svg
-                                                className="w-3 h-3"
-                                                fill="none"
-                                                stroke="currentColor"
-                                                viewBox="0 0 24 24"
-                                              >
-                                                <path
-                                                  strokeLinecap="round"
-                                                  strokeLinejoin="round"
-                                                  strokeWidth={2}
-                                                  d="M5 13l4 4L19 7"
-                                                />
-                                              </svg>
-                                              Success
-                                            </span>
-                                          ) : isSelling ? (
-                                            <span className="flex items-center gap-1.5">
-                                              <div className="animate-spin rounded-full h-3 w-3 border-b-2 border-white"></div>
-                                              Signing...
-                                            </span>
-                                          ) : isPending ? (
-                                            "Processing..."
-                                          ) : (
-                                            "Sell"
-                                          )}
-                                        </button>
-                                        {isSuccessful && (
-                                          <span className="text-green-400 text-xs font-medium animate-pulse">
-                                            Transaction Success
-                                          </span>
-                                        )}
-                                      </div>
-                                    )}
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </>
+            {/* Limitless Positions */}
+            {activeTab === "positions" &&
+              (!limitlessUser?.sessionCookie ? (
+                limitlessSignIn("positions")
+              ) : isLoadingLimitlessPositions ? (
+                <OrdersLoading label="Loading Limitless positions" />
+              ) : limitlessPositionsError ? (
+                errorState("Failed to load Limitless positions. Please try again.")
+              ) : limitlessPositions.length === 0 ? (
+                <OrdersState icon="positions" title="No positions found">
+                  {positionsEmptyCopy}
+                </OrdersState>
+              ) : (
+                <RecordTable
+                  label="Limitless positions"
+                  actionLabel="Actions"
+                  columns={[
+                    { key: "outcome", label: "Outcome", card: false },
+                    { key: "size", label: "Size", num: true, card: "half" },
+                    { key: "closed", label: "Closed", card: "half" },
+                    { key: "expiration", label: "Expiration", muted: true, card: "full" },
+                  ]}
+                  rows={limitlessPositions.map((p: LimitlessPosition, i: number) => {
+                    const slugForLink = p.marketSlug ?? p.market ?? "—";
+                    const displayTitle = p.market ?? p.marketSlug ?? "—";
+                    const outcome = (p.outcome ?? "—").toString();
+                    const size = p.size ?? p.balance ?? "—";
+                    const closed = p.marketClosed === true ? "Yes" : p.marketClosed === false ? "No" : "—";
+                    const exp = p.expirationDate;
+                    const expiration =
+                      exp != null && exp !== ""
+                        ? (() => {
+                            const d = typeof exp === "string" ? new Date(exp) : null;
+                            return d && !Number.isNaN(d.getTime())
+                              ? d.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" })
+                              : String(exp);
+                          })()
+                        : "—";
+                    const canClaim =
+                      closed === "Yes" &&
+                      slugForLink !== "—" &&
+                      !!eoaAddress;
+                    const isClaiming =
+                      redeemingLimitlessSlug === slugForLink ||
+                      isLimitlessRedeemLoading;
+                    const href =
+                      slugForLink !== "—"
+                        ? `/rexmarkets/limitless/${encodeURIComponent(slugForLink)}`
+                        : undefined;
+                    const outcomeTag = <SideTag tone={sideTone(outcome)}>{outcome}</SideTag>;
+                    return {
+                      key: p.id ?? p.tokenId ?? `limitless-pos-${i}`,
+                      market: (
+                        <MarketName
+                          title={displayTitle}
+                          venue="limitless"
+                          href={href}
+                          onNavigate={href ? () => openMarket(href) : undefined}
+                        />
+                      ),
+                      tag: outcomeTag,
+                      cells: {
+                        outcome: outcomeTag,
+                        size: String(size),
+                        closed,
+                        expiration,
+                      },
+                      action: canClaim ? (
+                        <button
+                          type="button"
+                          onClick={() => handleLimitlessClaim(slugForLink)}
+                          disabled={isClaiming}
+                          aria-busy={isClaiming || undefined}
+                          className="rx-btn rx-btn--primary rx-btn--s"
+                        >
+                          <BusyLabel busy={isClaiming} busyText="Claiming...">
+                            Claim
+                          </BusyLabel>
+                        </button>
+                      ) : undefined,
+                    };
+                  })}
+                />
+              ))}
+          </>
+        ) : platformTab === "myriad" ? (
+          <>
+            {activeTab === "trades" &&
+              (!eoaAddress ? (
+                <OrdersState icon="wallet" title="Connect your wallet">
+                  <p>
+                    Connect your wallet to view Myriad activity and order-book
+                    orders (BNB Chain).
+                  </p>
+                </OrdersState>
+              ) : isLoadingMyriadOrders && isLoadingMyriadUserEvents ? (
+                <OrdersLoading label="Loading Myriad activity" />
+              ) : myriadOrdersError && myriadUserEventsError ? (
+                errorState(
+                  myriadUserEventsError instanceof Error
+                    ? myriadUserEventsError.message
+                    : myriadOrdersError instanceof Error
+                      ? myriadOrdersError.message
+                      : "Failed to load Myriad data.",
+                )
+              ) : myriadUserEventsSorted.length === 0 && myriadOrdersSorted.length === 0 ? (
+                <OrdersState icon="trades" title="No trades or activity yet">
+                  <p>
+                    GET /users/…/events lists AMM and other on-chain actions.
+                    GET /orders lists signed order-book orders (resting and
+                    filled).
+                  </p>
+                </OrdersState>
+              ) : (
+                <RecordTable
+                  label="Myriad trades"
+                  columns={TRADE_COLUMNS_STATUS}
+                  rows={myriadUnifiedTradesRows.map((row) => {
+                    const tone: Tone =
+                      row.kind === "order"
+                        ? row.isBuySide
+                          ? "up"
+                          : "down"
+                        : row.sideTone === "buy"
+                          ? "up"
+                          : row.sideTone === "sell"
+                            ? "down"
+                            : row.sideTone === "claim"
+                              ? "gold"
+                              : "neutral";
+                    const statusToneValue: Tone =
+                      row.statusStyle === "confirmed"
+                        ? "up"
+                        : row.statusStyle === "open" || row.statusStyle === "pending"
+                          ? "gold"
+                          : row.statusStyle === "cancelled"
+                            ? "down"
+                            : "neutral";
+                    const href = `/rexmarkets/myriad/${encodeURIComponent(row.slugForLink)}`;
+                    const status = (
+                      <StatusBadge tone={statusToneValue}>{row.statusLabel}</StatusBadge>
+                    );
+                    return {
+                      key: row.key,
+                      market: (
+                        <MarketName
+                          title={row.marketTitle}
+                          venue="myriad"
+                          href={href}
+                          onNavigate={() => openMarket(href)}
+                        />
+                      ),
+                      tag: status,
+                      cells: {
+                        side: <SideTag tone={tone}>{row.sideLabel}</SideTag>,
+                        price: row.priceDisplay,
+                        size: row.sizeDisplay,
+                        role:
+                          row.role === "—" ? (
+                            "—"
+                          ) : (
+                            <StatusBadge tone="neutral">{row.role}</StatusBadge>
+                          ),
+                        status,
+                        time: row.timeStr,
+                      },
+                    };
+                  })}
+                />
+              ))}
+
+            {activeTab === "positions" &&
+              (!eoaAddress ? (
+                <OrdersState icon="wallet" title="Connect your wallet">
+                  <p>
+                    Connect your wallet to view Myriad positions and claim on
+                    BNB Chain.
+                  </p>
+                </OrdersState>
+              ) : isLoadingMyriadUserMarkets ? (
+                <OrdersLoading label="Loading Myriad positions" />
+              ) : myriadUserMarketsError ? (
+                errorState(
+                  myriadUserMarketsError instanceof Error
+                    ? myriadUserMarketsError.message
+                    : "Failed to load Myriad positions.",
+                )
+              ) : myriadUserMarketsVisible.length === 0 ? (
+                <OrdersState icon="positions" title="No positions found">
+                  {positionsEmptyCopy}
+                </OrdersState>
+              ) : (
+                <RecordTable
+                  label="Myriad positions"
+                  actionLabel="Actions"
+                  columns={[
+                    { key: "yes", label: "Yes (shares)", num: true, card: "half" },
+                    { key: "no", label: "No (shares)", num: true, card: "half" },
+                    { key: "state", label: "State", card: false },
+                  ]}
+                  rows={myriadUserMarketsVisible.map((row) => {
+                    const slugForLink = row.slug?.trim() || String(row.marketId);
+                    const isRedeeming = redeemingMyriadMarketId === row.marketId;
+                    const href = `/rexmarkets/myriad/${encodeURIComponent(slugForLink)}`;
+                    const state = (
+                      <StatusBadge tone="neutral">
+                        <span className="capitalize">{row.state || "—"}</span>
+                      </StatusBadge>
+                    );
+                    return {
+                      key: String(row.marketId),
+                      market: (
+                        <MarketName
+                          title={row.title}
+                          venue="myriad"
+                          href={href}
+                          onNavigate={() => openMarket(href)}
+                        />
+                      ),
+                      tag: state,
+                      cells: {
+                        yes: row.yesShares.toLocaleString(undefined, {
+                          maximumFractionDigits: 4,
+                        }),
+                        no: row.noShares.toLocaleString(undefined, {
+                          maximumFractionDigits: 4,
+                        }),
+                        state,
+                      },
+                      action: (
+                        <button
+                          type="button"
+                          onClick={() => void handleMyriadClaim(row.marketId)}
+                          disabled={isRedeeming || !row.redeemEligible}
+                          aria-busy={isRedeeming || undefined}
+                          title={
+                            row.redeemEligible
+                              ? "POST /markets/claim — submit calldata on BNB Smart Chain (fallback: order-book redeem)."
+                              : "Claim is only available when the market is resolved and you have winnings or voided proceeds to claim (per API)."
+                          }
+                          className={clsx(
+                            "rx-btn rx-btn--s",
+                            row.redeemEligible ? "rx-btn--primary" : "rx-btn--secondary",
+                          )}
+                        >
+                          <BusyLabel busy={isRedeeming} busyText="Claiming...">
+                            Claim
+                          </BusyLabel>
+                        </button>
+                      ),
+                    };
+                  })}
+                />
+              ))}
+          </>
+        ) : platformTab === "predictfun" ? (
+          <PredictFunMarketInfoPanel
+            isOpen={isOpen}
+            onClose={onClose}
+            activeTab={activeTab}
+            setActiveTab={setActiveTab}
+            eoaAddress={eoaAddress}
+            signer={ethersSigner}
+          />
+        ) : !tradingContext ? (
+          <OrdersState icon="wallet" title="Trading isn't available here">
+            <p>
+              Trading provider not available. Please navigate to the trading
+              page to view data.
+            </p>
+          </OrdersState>
+        ) : !clobClient || !safeAddress || !isTradingSessionComplete ? (
+          <OrdersState
+            icon="wallet"
+            title={!eoaAddress ? "Connect your wallet" : "Set up Polymarket trading"}
+            actions={
+              eoaAddress && initializeTradingSession ? (
+                <>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (!initializeTradingSession) return;
+                      setIsInitializing(true);
+                      try {
+                        await initializeTradingSession();
+                      } catch (error) {
+                        console.error("Failed to initialize trading:", error);
+                      } finally {
+                        setIsInitializing(false);
+                      }
+                    }}
+                    disabled={
+                      isInitializing ||
+                      currentStep !== "idle" ||
+                      isTradingSessionComplete
+                    }
+                    aria-busy={isInitializing || currentStep !== "idle" || undefined}
+                    className="rx-btn rx-btn--primary"
+                  >
+                    <BusyLabel
+                      busy={isInitializing || currentStep !== "idle"}
+                      busyText={
+                        currentStep === "checking"
+                          ? "Checking..."
+                          : currentStep === "deploying"
+                            ? "Deploying Safe..."
+                            : currentStep === "credentials"
+                              ? "Setting up credentials..."
+                              : currentStep === "approvals"
+                                ? "Setting approvals..."
+                                : "Initializing..."
+                      }
+                    >
+                      Initialize Trading
+                    </BusyLabel>
+                  </button>
+                  {sessionError && (
+                    <p className="rx-help rx-help--error">
+                      {sessionError.message ||
+                        "Failed to initialize trading session"}
+                    </p>
+                  )}
+                </>
+              ) : null
+            }
+          >
+            <p>
+              {!eoaAddress
+                ? "Please connect your wallet to view trading data."
+                : "Please initialize trading session to view data."}
+            </p>
+          </OrdersState>
+        ) : (
+          <>
+            {/* Polymarket Trades */}
+            {activeTab === "trades" &&
+              (isLoadingTrades ? (
+                <OrdersLoading label="Loading Polymarket trades" />
+              ) : tradesError ? (
+                errorState("Failed to load trades. Please try again later.")
+              ) : trades.length === 0 ? (
+                <OrdersState icon="trades" title="No trades found">
+                  {tradesEmptyCopy}
+                </OrdersState>
+              ) : (
+                <RecordTable
+                  label="Polymarket trades"
+                  columns={TRADE_COLUMNS_STATUS}
+                  rows={tradesWithTitles.map(
+                    (
+                      trade: PolymarketTrade & {
+                        marketTitle?: string;
+                      },
+                    ) => {
+                      const isMaker =
+                        (trade.maker_address || "").toLowerCase() ===
+                        (safeAddress || "").toLowerCase();
+                      const role =
+                        trade.trader_side ||
+                        (isMaker ? "MAKER" : "TAKER");
+                      const marketKey = trade.market || trade.asset_id || "";
+                      const name =
+                        trade.marketTitle ||
+                        trade.market ||
+                        trade.asset_id ||
+                        "N/A";
+                      const status = (
+                        <StatusBadge
+                          tone={
+                            trade.status === "CONFIRMED"
+                              ? "up"
+                              : trade.status === "PENDING"
+                                ? "gold"
+                                : "neutral"
+                          }
+                        >
+                          {trade.status || "N/A"}
+                        </StatusBadge>
+                      );
+                      return {
+                        key: trade.id,
+                        market: (
+                          <MarketName
+                            title={name}
+                            venue="polymarket"
+                            onClick={() => handleMarketClick(marketKey, name)}
+                            disabled={loadingMarketId === marketKey}
+                            loading={loadingMarketId === marketKey}
+                            tooltip={`Click to view ${name}`}
+                          />
+                        ),
+                        tag: status,
+                        cells: {
+                          side: (
+                            <SideTag tone={trade.side === "BUY" ? "up" : "down"}>
+                              {trade.side}
+                            </SideTag>
+                          ),
+                          price: formatPrice(trade.price),
+                          size: formatSize(trade.size),
+                          role: <StatusBadge tone="neutral">{role}</StatusBadge>,
+                          status,
+                          time: formatDate(trade.match_time),
+                        },
+                      };
+                    },
+                  )}
+                />
+              ))}
+
+            {/* Polymarket Positions */}
+            {activeTab === "positions" && (
+              <>
+                {/* Position filters with dust warning */}
+                <div className="o-tools">
+                  {hideDust &&
+                  positions &&
+                  positions.length > activePositions.length ? (
+                    <span className="o-hint">
+                      Hiding {positions.length - activePositions.length}{" "}
+                      dust position(s) (value &lt; $
+                      {DUST_THRESHOLD.toFixed(2)})
+                    </span>
+                  ) : (
+                    <span />
+                  )}
+                  <RxToggle
+                    checked={!hideDust}
+                    onChange={(checked) => setHideDust(!checked)}
+                    label="Show All"
+                  />
+                </div>
+
+                {isLoadingPositions ? (
+                  <OrdersLoading label="Loading Polymarket positions" />
+                ) : positionsError ? (
+                  errorState("Failed to load positions. Please try again later.")
+                ) : activePositions.length === 0 ? (
+                  <OrdersState icon="positions" title="No open positions found">
+                    {positionsEmptyCopy}
+                  </OrdersState>
+                ) : (
+                  <RecordTable
+                    label="Polymarket positions"
+                    actionLabel="Actions"
+                    columns={[
+                      { key: "outcome", label: "Outcome", card: false },
+                      { key: "shares", label: "Shares", num: true },
+                      { key: "avg", label: "Avg price", num: true },
+                      { key: "now", label: "Now", num: true },
+                      { key: "value", label: "Value", num: true, card: "half" },
+                      { key: "pnl", label: "P&L", num: true, card: "half" },
+                    ]}
+                    rows={activePositions.map((position) => {
+                      const isPending = pendingVerification.has(position.asset);
+                      const isSelling = sellingAsset === position.asset;
+                      const isRedeemingPos = redeemingAsset === position.asset;
+                      const isSuccessful = successfulSale === position.asset;
+                      const isSuccessfulRedeem = successfulRedeem === position.asset;
+                      const outcome = (
+                        <SideTag tone={sideTone(position.outcome)}>
+                          {position.outcome}
+                        </SideTag>
+                      );
+                      return {
+                        key: `${position.conditionId}-${position.outcomeIndex}`,
+                        market: (
+                          <MarketName
+                            title={position.title}
+                            venue="polymarket"
+                            onClick={() =>
+                              handleMarketClick(position.conditionId, position.title)
+                            }
+                            disabled={loadingMarketId === position.conditionId}
+                            loading={loadingMarketId === position.conditionId}
+                            tooltip={`Click to view ${position.title}`}
+                          />
+                        ),
+                        tag: outcome,
+                        cells: {
+                          outcome,
+                          shares: formatShares(position.size),
+                          avg: formatCurrency(position.avgPrice, 3),
+                          now: formatCurrency(position.curPrice, 3),
+                          value: formatCurrency(position.currentValue),
+                          pnl: (
+                            <span className={position.cashPnl >= 0 ? "up" : "down"}>
+                              {formatCurrency(position.cashPnl)}{" "}
+                              <small>({formatPercentage(position.percentPnl)})</small>
+                            </span>
+                          ),
+                        },
+                        action: position.redeemable ? (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleRedeem(position)}
+                              disabled={
+                                isRedeemingPos ||
+                                !relayClient ||
+                                isSuccessfulRedeem
+                              }
+                              aria-busy={isRedeemingPos || undefined}
+                              className={clsx(
+                                "rx-btn rx-btn--s",
+                                isSuccessfulRedeem ? "o-btn-ok" : "rx-btn--primary",
+                              )}
+                            >
+                              {isSuccessfulRedeem ? (
+                                <>
+                                  <Check className="size-3" aria-hidden="true" />
+                                  Success
+                                </>
+                              ) : (
+                                <BusyLabel busy={isRedeemingPos} busyText="Signing...">
+                                  Redeem
+                                </BusyLabel>
+                              )}
+                            </button>
+                            {isSuccessfulRedeem && <SuccessNote />}
+                          </>
+                        ) : (
+                          <>
+                            <button
+                              type="button"
+                              onClick={() => handleMarketSell(position)}
+                              disabled={
+                                isSelling ||
+                                isSubmitting ||
+                                !clobClient ||
+                                isPending ||
+                                isSuccessful
+                              }
+                              aria-busy={isSelling || isPending || undefined}
+                              className={clsx(
+                                "rx-btn rx-btn--s",
+                                isSuccessful ? "o-btn-ok" : "rx-btn--secondary",
+                              )}
+                            >
+                              {isSuccessful ? (
+                                <>
+                                  <Check className="size-3" aria-hidden="true" />
+                                  Success
+                                </>
+                              ) : isSelling ? (
+                                <BusyLabel busy busyText="Signing...">
+                                  Sell
+                                </BusyLabel>
+                              ) : isPending ? (
+                                "Processing..."
+                              ) : (
+                                "Sell"
+                              )}
+                            </button>
+                            {isSuccessful && <SuccessNote />}
+                          </>
+                        ),
+                      };
+                    })}
+                  />
                 )}
               </>
             )}
-          </div>
-        </div>
+          </>
+        )}
       </div>
-    </>
+    </AcctModal>
   );
+}
+
+const ORDERS_TABS = [
+  ["positions", "Positions"],
+  ["trades", "Trade history"],
+] as const;
+
+/** Trades with a role column (Kalshi fills): the side is the card's head tag. */
+const TRADE_COLUMNS_ROLE: RecordColumn[] = [
+  { key: "side", label: "Side", card: false },
+  { key: "price", label: "Price", num: true },
+  { key: "size", label: "Size", num: true },
+  { key: "role", label: "Role" },
+  { key: "time", label: "Time", muted: true, card: "full" },
+];
+
+/** Trades with a status column (Polymarket, Myriad): the status is the card's head tag. */
+const TRADE_COLUMNS_STATUS: RecordColumn[] = [
+  { key: "side", label: "Side" },
+  { key: "price", label: "Price", num: true },
+  { key: "size", label: "Size", num: true },
+  { key: "role", label: "Role" },
+  { key: "status", label: "Status", card: false },
+  { key: "time", label: "Time", muted: true, card: "wide" },
+];
+
+/** Yes / Buy read green, No / Sell red, anything else (team names, ranges) neutral. */
+function sideTone(label: string | undefined | null): Tone {
+  const s = (label ?? "").trim().toLowerCase();
+  if (s === "yes" || s === "buy" || s.startsWith("buy ")) return "up";
+  if (s === "no" || s === "sell" || s.startsWith("sell ")) return "down";
+  return "neutral";
 }

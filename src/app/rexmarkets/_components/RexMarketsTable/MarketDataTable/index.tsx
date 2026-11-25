@@ -475,6 +475,17 @@ export default function MarketDataTable({
     }
   }, [dataSource, setPageIndex]);
 
+  // Entering "All" starts the merged list on page 1 (the venue hooks keep their page from single-venue browsing)
+  const { setPageIndex: setKalshiPage } = kalshiMarkets;
+  const { setPageIndex: setPolymarketPage } = polymarketMarkets;
+  const { setPageIndex: setLimitlessPage } = limitlessMarkets;
+  useEffect(() => {
+    if (dataSource !== "all") return;
+    setKalshiPage(1);
+    setPolymarketPage(1);
+    setLimitlessPage(1);
+  }, [dataSource, setKalshiPage, setPolymarketPage, setLimitlessPage]);
+
   // Rows per page: the viewer's last choice (kept across visits), fitted to what each venue's API accepts
   const pageSizes = PAGE_SIZES[dataSource] ?? DEFAULT_PAGE_SIZES;
   const [preferredPageSize, setPreferredPageSize] = useState(pageSizes[0]);

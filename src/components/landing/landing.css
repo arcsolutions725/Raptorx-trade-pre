@@ -988,7 +988,8 @@ html:has(.lp){scroll-behavior:smooth;scroll-padding-top:84px}
 /* =====================================================================
    PRIMARY BUTTON RING: the circling border Claw uses, on one primary button per screen
    ===================================================================== */
-:where(.lp) .js-ring{position:relative;isolation:isolate}
+/* overflow:visible: the ring sits 4–5px outside the button, and .rx-btn clips its overflow (text-fit rule) */
+:where(.lp) .js-ring{position:relative;isolation:isolate;overflow:visible}
 :where(.lp) .js-ring::after{content:"";position:absolute;inset:-4px;border-radius:calc(11px + 4px);padding:1.6px;pointer-events:none;opacity:0;transition:opacity .45s var(--rx-ease);
   background:conic-gradient(from var(--lp-ring),transparent 0 58%,#C8102E 70%,#FF6A13 80%,#FFD15C 90%,transparent 98%);
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude}

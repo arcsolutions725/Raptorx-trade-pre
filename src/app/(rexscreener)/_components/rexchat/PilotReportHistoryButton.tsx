@@ -1,12 +1,16 @@
 "use client";
 
 type Props = {
-  /** Used only for accessibility; not shown in the UI. */
+  /** Saved reports; shown as a small count next to the label. */
   count: number;
   onOpen: () => void;
   className?: string;
 };
 
+/**
+ * Opens the Report history drawer. Prototype's History control (token.html #histBtn):
+ * secondary button with a clock; 40px tall on phones so it is an easy tap.
+ */
 export function PilotReportHistoryButton({
   count,
   onOpen,
@@ -16,22 +20,24 @@ export function PilotReportHistoryButton({
     <button
       type="button"
       onClick={onOpen}
-      className={`${className}`}
+      className={`rx-btn rx-btn--secondary rx-btn--s max-md:h-10 max-md:px-3.5 max-md:text-[13px] ${className}`}
       aria-label={
         count > 0
           ? `View report history, ${count} saved`
           : "View report history"
       }
+      title="Report history"
     >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src="/images/history.webp"
-        alt=""
-        width={112}
-        height={112}
-        decoding="async"
-        className="block h-12 w-24 shrink-0 object-contain"
-      />
+      <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
+        <path d="M12 8v4l3 2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      Report history
+      {count > 0 ? (
+        <span className="rx-count" aria-hidden="true">
+          {count}
+        </span>
+      ) : null}
     </button>
   );
 }

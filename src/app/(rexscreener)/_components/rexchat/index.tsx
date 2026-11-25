@@ -15,6 +15,8 @@ interface RexChatProps {
   onViewHistory?: () => void;
   /** Close control in ChatInterface top bar (when parent hides floating close). */
   onCloseSidebar?: () => void;
+  /** Bring up the panel's swap (What's New "Trade" card); `full` shows the Exchange on its own. */
+  onOpenExchange?: (opts?: { full?: boolean }) => void;
 }
 
 export function RexChat({
@@ -26,6 +28,7 @@ export function RexChat({
   reportType = "all",
   onViewHistory,
   onCloseSidebar,
+  onOpenExchange,
 }: RexChatProps) {
   const [selectedReportId, setSelectedReportId] = useState<string | null>(
     initialReportId
@@ -52,12 +55,14 @@ export function RexChat({
   return (
     <div className="flex h-full w-full max-w-360 mx-auto overflow-x-hidden min-h-0">
       {isSidebarOpen && (
-        <ChatSidebar
-          userId={userId}
-          currentReportId={selectedReportId || undefined}
-          onSelectReport={handleSelectReport}
-          reportType={reportType}
-        />
+        <div className="h-full w-80 shrink-0">
+          <ChatSidebar
+            userId={userId}
+            currentReportId={selectedReportId || undefined}
+            onSelectReport={handleSelectReport}
+            reportType={reportType}
+          />
+        </div>
       )}
       {/* Ensure the chat area can shrink without overflowing */}
       <div className="flex-1 min-w-0 min-h-0 flex flex-col">
@@ -69,6 +74,7 @@ export function RexChat({
             onViewHistory={onViewHistory}
             reportHistoryCount={reports.length}
             onCloseSidebar={onCloseSidebar}
+            onOpenExchange={onOpenExchange}
           />
         ) : (
           <div className="flex items-center justify-center h-full">

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useEffect, useRef } from "react";
+import { REX_SCREENER_EXCHANGE_HREF } from "@/components/ui/layout/shellActions";
 import { ArrowIcon } from "./icons";
 import { prefersReducedMotion } from "./motion";
 
@@ -140,8 +141,8 @@ export default function ClawChat() {
           <div className="mk-ans__foot">
             <span className="mk-ghost">Deep analysis</span>
             {/* the prototype opens its Exchange page with VVV preselected (exchange.html?to=VVV); the app's
-                exchange is a panel inside RexScreener with no URL of its own, so this opens RexScreener on Base */}
-            <Link className="mk-cta" href="/base">
+                exchange is a panel inside RexScreener, opened by `?exchange=1` (no token preselect) */}
+            <Link className="mk-cta" href={REX_SCREENER_EXCHANGE_HREF}>
               Trade on RaptorX
               <ArrowIcon size={14} strokeWidth={2.4} ariaHidden={false} />
             </Link>

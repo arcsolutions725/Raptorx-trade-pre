@@ -3,6 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Check, Copy, Users, Gift, CheckIcon } from "lucide-react";
 import Image from "next/image";
+import { animalAvatarSrc } from "@/components/ui/modal/accountUi";
 
 interface ReferralInputProps {
   onReferralCodeEntered?: (code: string) => void;
@@ -187,18 +188,20 @@ interface ReferralShareProps {
   referralCode?: string;
 }
 
+export type ReferralStats = {
+  totalReferrals: number;
+  totalPointsEarned: number;
+  recentReferrals: Array<{
+    id: string;
+    username: string;
+    createdAt: string;
+    points: number;
+  }>;
+};
+
 export function ReferralShare({ userId, referralCode }: ReferralShareProps) {
   const [copied, setCopied] = useState(false);
-  const [stats, setStats] = useState<{
-    totalReferrals: number;
-    totalPointsEarned: number;
-    recentReferrals: Array<{
-      id: string;
-      username: string;
-      createdAt: string;
-      points: number;
-    }>;
-  } | null>(null);
+  const [stats, setStats] = useState<ReferralStats | null>(null);
 
   const copyReferralCode = async () => {
     if (!referralCode) return;
@@ -239,100 +242,113 @@ export function ReferralShare({ userId, referralCode }: ReferralShareProps) {
   }
 
   return (
-    <div className="w-full bg-white/5 border border-white/10 rounded-2xl p-6">
-      <div className="flex items-center gap-3 mb-6">
-        <div className="rounded-lg">
-          {/* <Users className="w-6 h-6 text-white" /> */}
-          <Image
-            src={"/images/referral.png"}
-            width={80}
-            height={80}
-            alt="referral"
-          />
-        </div>
-        <div>
-          <h3 className="text-xl font-bold text-white">Your Referral Link</h3>
-          <p className="text-gray-400 text-sm">
-            Share with friends to earn points
-          </p>
-        </div>
-      </div>
+    <ReferralShareView
+      referralCode={referralCode}
+      stats={stats}
+      copied={copied}
+      onCopy={() => void copyReferralCode()}
+    />
+  );
+}
 
-      {/* Referral Code Display */}
-      <div className="flex gap-3 items-center justify-center mb-6">
-        <div className="bg-[#262626] rounded-lg h-10 flex items-center justify-center w-full">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-white font-mono text-[14px] font-bold">
-                https://raptorx.trade?referralcode={referralCode}
-              </p>
-            </div>
-          </div>
+/** Referrals tab of the Account popup (prototype shell.js `account:` → referrals). Presentation only. */
+export function ReferralShareView({
+  referralCode,
+  stats,
+  copied,
+  onCopy,
+}: {
+  referralCode: string;
+  stats: ReferralStats | null;
+  copied: boolean;
+  onCopy: () => void;
+}) {
+  const shownLink = `https://raptorx.trade?referralcode=${referralCode}`;
+  return (
+    <>
+      <div className="rx-raised flex flex-col gap-3 p-4">
+        <div>
+          <h3 className="rx-h3">Your referral link</h3>
+          <p className="rx-small mb-0 mt-1">Share with friends to earn points.</p>
         </div>
-        <button
-          onClick={copyReferralCode}
-          className="flex items-center justify-center gap-1 text-[#F9B80C] border border-[#6D4F03] w-20.25 h-10 rounded-lg transition-colors text-[14px]"
-        >
-          {!copied ? (
-            <Copy className="w-4 h-4" />
-          ) : (
-            <CheckIcon className="w-4 h-4" />
-          )}
-        </button>
+        <div className="rx-input pr-1.5">
+          <input
+            className="rx-num text-[13px]"
+            readOnly
+            value={shownLink}
+            aria-label="Referral link"
+            onFocus={(e) => e.currentTarget.select()}
+          />
+          <button
+            type="button"
+            onClick={onCopy}
+            className="rx-btn rx-btn--secondary rx-btn--s shrink-0"
+            aria-label={copied ? "Referral link copied" : "Copy referral link"}
+          >
+            {copied ? (
+              <CheckIcon className="size-3.5 text-rx-up" aria-hidden="true" />
+            ) : (
+              <Copy className="size-3.5" aria-hidden="true" />
+            )}
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
       </div>
 
       {/* Stats */}
       {stats && (
-        <div className="grid grid-cols-2 gap-4 mb-6">
-          <div className="bg-white/5 border border-white/10 rounded-lg p-4">
-            <p className="text-gray-400 text-sm">Total Referrals</p>
-            <p className="text-white text-2xl font-bold">
-              {stats.totalReferrals}
-            </p>
+        <div className="acct-stats">
+          <div className="rx-well acct-stat">
+            <span className="acct-stat__label">Total referrals</span>
+            <span className="acct-stat__value">{stats.totalReferrals}</span>
           </div>
-          <div className="bg-white/5 border border-white/10 rounded-lg p-4">
-            <p className="text-gray-400 text-sm">Points Earned</p>
-            <p className="text-green-400 text-2xl font-bold">
+          <div className="rx-well acct-stat">
+            <span className="acct-stat__label">Points earned</span>
+            <span className="acct-stat__value is-up">
               +{stats.totalPointsEarned}
-            </p>
+            </span>
           </div>
         </div>
       )}
 
       {/* Recent Referrals */}
       {stats && stats.recentReferrals.length > 0 && (
-        <div>
-          <h4 className="text-white font-semibold mb-3">Recent Referrals</h4>
-          <div className="space-y-2">
+        <>
+          <h3 className="rx-h3">Recent referrals</h3>
+          <div className="flex flex-col gap-2">
             {stats.recentReferrals.map((referral) => (
-              <div
-                key={referral.id}
-                className="flex items-center justify-between bg-white/5 border border-white/10 rounded-lg p-3"
-              >
-                <div>
-                  <p className="text-white font-medium">{referral.username}</p>
-                  <p className="text-gray-400 text-sm">
-                    {new Date(referral.createdAt).toLocaleDateString()}
-                  </p>
+              <div key={referral.id} className="rx-flat acct-ref-row">
+                <div className="acct-ref-row__u">
+                  <Image
+                    src={animalAvatarSrc(referral.username)}
+                    alt=""
+                    width={30}
+                    height={30}
+                    className="acct-rav"
+                  />
+                  <div className="min-w-0">
+                    <b>{referral.username}</b>
+                    <span className="rx-num">
+                      {new Date(referral.createdAt).toLocaleDateString()}
+                    </span>
+                  </div>
                 </div>
-                <span className="text-green-400 font-bold">+150</span>
+                <span className="rx-num font-semibold text-rx-up">+150</span>
               </div>
             ))}
           </div>
-        </div>
+        </>
       )}
 
       {/* Information */}
-      <div className="mt-6 pt-6 border-t border-gray-700">
-        <h4 className="text-white font-medium mb-2">Referral Rewards</h4>
-        <ul className="text-sm text-gray-400 space-y-1">
-          <li>• You earn 150 points for each successful referral</li>
-          <li>
-            • New users get 100 points (instead of 50) when using your link
-          </li>
-          <li>• Share your link on social media, Discord, or with friends!</li>
+      <div className="flex flex-col gap-2 border-t border-rx-line pt-4">
+        <h3 className="rx-h3">Referral rewards</h3>
+        <ul className="acct-rules">
+          <li>You earn 150 points for each successful referral</li>
+          <li>New users get 100 points (instead of 50) when using your link</li>
+          <li>Share your link on social media, Discord, or with friends!</li>
         </ul>
       </div>
-    </div>
+    </>
   );
 }

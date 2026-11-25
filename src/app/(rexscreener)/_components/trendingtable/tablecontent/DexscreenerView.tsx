@@ -26,6 +26,8 @@ import {
 } from "@/components/ui/modal/WhatsNewModal";
 import { GlossyReportButton } from "./GlossyReportButton";
 import { toDexChainSlug, type DexScreenerPair } from "@/lib/api/dexscreener";
+import { resolveSwapChain } from "@/lib/swapChain";
+import { requestShellAction } from "@/components/ui/layout/shellActions";
 
 type DexscreenerViewProps = {
   token: TrendingToken;
@@ -488,6 +490,24 @@ export default function DexscreenerView({
         error={whatsNewError}
         result={whatsNewResult}
         imageUrl={token.logo}
+        symbol={token.symbol}
+        trade={
+          token.symbol && (tokenAddress || token.tokenAddress)
+            ? {
+                symbol: token.symbol,
+                name: token.name,
+                logo: token.logo,
+                chain: resolveSwapChain({
+                  swapTokenAddress: tokenAddress || token.tokenAddress,
+                  token,
+                }),
+                // This chart's token is the panel's swap target: open the panel's Exchange.
+                onTrade: () => {
+                  requestShellAction("exchange");
+                },
+              }
+            : null
+        }
       />
     </div>
   );
