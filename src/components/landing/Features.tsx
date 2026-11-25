@@ -7,13 +7,16 @@ import { cssVars } from "./motion";
 const PUMP_BARS = ["18%", "22%", "16%", "26%", "20%", "30%", "24%", "92%", "78%"];
 const PUMP_SPIKES = 2;
 
-/** FEATURES: the bento of everything a trader opens ten tabs for. */
+/** FEATURES: the flagship listings program and the bento of tools around it. */
 export default function Features() {
   return (
     <section className="feats" aria-labelledby="feats-title">
       <div className="sec-head reveal">
-        <p className="eyebrow">Built for the hunt</p>
-        <h2 id="feats-title">Everything a trader opens ten tabs for.</h2>
+        <h2 id="feats-title">Our Flagship Listings Program.</h2>
+        <p>
+          We hand-pick tokenized projects across memes and use-cases to list them in our prestigious Golden Reports and
+          Pump Reports categories to help traders make better sense of the market. RaptorX holds the Alpha.
+        </p>
       </div>
       <Bento>
         <li className="bx bx--golden reveal">
@@ -21,13 +24,14 @@ export default function Features() {
             <img src="/landing/ic-golden.webp" alt="" width={52} height={52} loading="lazy" decoding="async" />
             <b>Golden Reports</b>
             <span>
-              Hand-picked projects with working teams, real culture and relevance. Market cap and volume up front, team
-              updates inside.
+              Hand-picked projects with the highest potential backed by quality teams. Golden Reports listings follow
+              stringent due diligence. Claw AI 5.0 gives real-time intel &amp; reporting on all Golden listed tokens.
             </span>
           </div>
           <div className="bx__viz viz-fan" aria-hidden="true">
             <div className="fan-card" style={cssVars({ "--r": "-9deg", "--x": "-58%" })}>
               <b>
+                <img className="tk-logo" src="/landing/tokens/virtual.webp" alt="" width={18} height={18} loading="lazy" decoding="async" />
                 Virtuals <em>VIRTUAL</em>
               </b>
               <span className="mk-label">Market cap</span>
@@ -36,15 +40,16 @@ export default function Features() {
             </div>
             <div className="fan-card fan-card--r" style={cssVars({ "--r": "9deg", "--x": "58%" })}>
               <b>
-                Brett <em>BRETT</em>
+                <img className="tk-logo" src="/landing/tokens/vvv.webp" alt="" width={18} height={18} loading="lazy" decoding="async" />
+                Venice <em>VVV</em>
               </b>
               <span className="mk-label">Market cap</span>
-              <b className="rx-num">$842M</b>
-              <span className="mk-up">▲ 2.1%</span>
+              <b className="rx-num">$978M</b>
+              <span className="mk-up">▲ 5.1%</span>
             </div>
             <div className="fan-card fan-card--top">
               <div className="fan-card__h">
-                <img src="/landing/ic-golden.webp" alt="" width={26} height={26} loading="lazy" decoding="async" />
+                <img className="tk-logo" src="/landing/tokens/aero.webp" alt="" width={26} height={26} loading="lazy" decoding="async" />
                 <b>
                   Aerodrome <em>AERO</em>
                 </b>
@@ -79,7 +84,10 @@ export default function Features() {
             <img src="/landing/ic-pump.webp" alt="" width={44} height={44} loading="lazy" decoding="async" />
             <div>
               <b>Pump Reports</b>
-              <span>Momentum alerts when volume spikes, with the move, the window and a one-click trade.</span>
+              <span>
+                Volatile projects with great potential backed by up-and-coming teams. Claw AI 5.0 gives real-time intel
+                &amp; reporting on all Pump listed tokens.
+              </span>
             </div>
           </div>
           <div className="bx__viz viz-pump" aria-hidden="true">
@@ -93,7 +101,8 @@ export default function Features() {
               ))}
             </div>
             <span className="pump-badge">
-              <b>BRETT</b>
+              <img className="tk-logo" src="/landing/tokens/morpho.webp" alt="" width={18} height={18} loading="lazy" decoding="async" />
+              <b>MORPHO</b>
               <em className="rx-num">▲ 182%</em>
               <span>1h · vol 6.4×</span>
             </span>
@@ -142,13 +151,19 @@ export default function Features() {
             <div className="sw-row">
               <span className="mk-label">Pay</span>
               <b className="rx-num">0.25</b>
-              <span className="mk-tok">ETH</span>
+              <span className="mk-tok">
+                <img className="tk-logo" src="/landing/tokens/eth.webp" alt="" width={16} height={16} loading="lazy" decoding="async" />
+                ETH
+              </span>
             </div>
             <span className="sw-flip">⇅</span>
             <div className="sw-row">
               <span className="mk-label">Get</span>
               <b className="rx-num">702.4</b>
-              <span className="mk-tok mk-tok--a">AERO</span>
+              <span className="mk-tok mk-tok--a">
+                <img className="tk-logo" src="/landing/tokens/aero.webp" alt="" width={16} height={16} loading="lazy" decoding="async" />
+                AERO
+              </span>
             </div>
           </div>
         </li>

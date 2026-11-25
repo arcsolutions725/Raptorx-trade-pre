@@ -584,7 +584,7 @@ const MarketDenseCard = memo(function MarketDenseCard({
               <button
                 type="button"
                 onClick={handleTrade}
-                className="self-start text-[13px] text-rx-text-2 transition-colors hover:text-rx-text"
+                className="-my-[7px] self-start py-[7px] text-[13px] text-rx-text-2 transition-colors hover:text-rx-text"
               >
                 + {hiddenOutcomes} more outcome{hiddenOutcomes === 1 ? "" : "s"}
               </button>

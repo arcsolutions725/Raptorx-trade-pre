@@ -35,7 +35,6 @@ import { TableRow } from "./TableRow";
 import DexscreenerView from "./DexscreenerView";
 import PageLoaderOverlay from "@/components/PageLoaderOverlay";
 import { TokenSearchBar } from "@/app/(rexscreener)/_components/TokenSearchBar";
-import { ChevronDown, Check } from "lucide-react";
 import { ChainButtons } from "./ChainButtons";
 import clsx from "clsx";
 import { useGenerateRexReport } from "@/hooks/useGenerateRexReport";
@@ -49,148 +48,160 @@ import {
   mergeScreenerTokenMarket,
 } from "@/utils/screenerRowMerge";
 
-/* ============================ Styled, Up-Opening Select ============================ */
+/* ============================ Pager ============================ */
 
-type RowsPerPageSelectProps = {
-  value: number;
-  onChange: (n: number) => void;
-  options?: number[];
-  className?: string;
-  /** "up" by default; set "down" if you ever want normal dropdown behavior */
-  direction?: "up" | "down";
+const SCREENER_PAGE_SIZES = [25, 50];
+
+/** Up to 7 slots: first and last always, the current page with its neighbours, "…" for gaps. */
+function pageSlots(cur: number, last: number): (number | "gap")[] {
+  if (last <= 7) return Array.from({ length: last }, (_, i) => i + 1);
+  if (cur <= 4) return [1, 2, 3, 4, 5, "gap", last];
+  if (cur >= last - 3)
+    return [1, "gap", last - 4, last - 3, last - 2, last - 1, last];
+  return [1, "gap", cur - 1, cur, cur + 1, "gap", last];
+}
+
+type ScreenerPagerProps = {
+  page: number;
+  pageSize: number;
+  /** Total rows when the API reports it; otherwise pages are open-ended (Previous / Next only). */
+  total?: number;
+  totalPages?: number;
+  hasPrev: boolean;
+  hasNext: boolean;
+  onPage: (page: number) => void;
+  onSize: (size: number) => void;
 };
 
-function RowsPerPageSelect({
-  value,
-  onChange,
-  options = [25, 50],
-  className = "",
-  direction = "up",
-}: RowsPerPageSelectProps) {
-  const [open, setOpen] = useState(false);
-  const [activeIndex, setActiveIndex] = useState(
-    Math.max(
-      0,
-      options.findIndex((o) => o === value)
-    )
+/**
+ * Shared pagination (RaptorX design `.pgr`): "Show N per page" on the left, only when there are
+ * more rows than the smallest option; Previous · 1 2 3 … N · Next on the right ("Page X of N" on
+ * phones). Hidden when everything fits on one page.
+ */
+function ScreenerPager({
+  page,
+  pageSize,
+  total,
+  totalPages,
+  hasPrev,
+  hasNext,
+  onPage,
+  onSize,
+}: ScreenerPagerProps) {
+  const last =
+    typeof totalPages === "number" && totalPages > 0 ? totalPages : null;
+  const multi = hasPrev || hasNext || (last ?? 1) > 1;
+  const moreThanSmallest =
+    typeof total === "number" ? total > SCREENER_PAGE_SIZES[0] : multi;
+  if (!multi && !moreThanSmallest) return null;
+  const cur = last ? Math.min(Math.max(1, page), last) : Math.max(1, page);
+
+  const chevron = (d: string) => (
+    <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d={d}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
   );
-  const rootRef = useRef<HTMLDivElement | null>(null);
-  const listRef = useRef<HTMLUListElement | null>(null);
-
-  // Close on outside click
-  useEffect(() => {
-    const onDocClick = (e: MouseEvent) => {
-      if (!rootRef.current) return;
-      if (rootRef.current.contains(e.target as Node)) return;
-      setOpen(false);
-    };
-    document.addEventListener("mousedown", onDocClick);
-    return () => document.removeEventListener("mousedown", onDocClick);
-  }, []);
-
-  // Ensure activeIndex follows current value
-  useEffect(() => {
-    const idx = options.findIndex((o) => o === value);
-    if (idx >= 0) setActiveIndex(idx);
-  }, [value, options]);
-
-  const commit = (idx: number) => {
-    const selected = options[idx];
-    if (typeof selected === "number") onChange(selected);
-    setOpen(false);
-  };
-
-  const onKeyDownButton = (e: React.KeyboardEvent<HTMLButtonElement>) => {
-    if (e.key === "ArrowDown" || e.key === "Enter" || e.key === " ") {
-      e.preventDefault();
-      setOpen(true);
-      requestAnimationFrame(() => listRef.current?.focus());
-    }
-  };
-
-  const onKeyDownList = (e: React.KeyboardEvent<HTMLUListElement>) => {
-    if (e.key === "Escape") {
-      e.preventDefault();
-      setOpen(false);
-      return;
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveIndex((i) => Math.min(options.length - 1, i + 1));
-      return;
-    }
-    if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIndex((i) => Math.max(0, i - 1));
-      return;
-    }
-    if (e.key === "Enter") {
-      e.preventDefault();
-      commit(activeIndex);
-      return;
-    }
-  };
-
-  const popPos =
-    direction === "up" ? "top-auto bottom-[calc(100%+8px)]" : "";
 
   return (
-    <div ref={rootRef} className={`relative ${className}`}>
-      <button
-        type="button"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`Rows per page: ${value}`}
-        onClick={() => setOpen((v) => !v)}
-        onKeyDown={onKeyDownButton}
-        className="rx-btn rx-btn--secondary rx-btn--s gap-1.5 px-2.5 font-medium"
-      >
-        <span className="tabular-nums">{value}</span>
-        <span className="hidden text-rx-text-3 sm:inline">/ page</span>
-        <ChevronDown
-          className={`size-3.5 text-rx-text-3 transition ${open ? "rotate-180" : ""}`}
-          aria-hidden
-        />
-      </button>
-
-      {open && (
-        <ul
-          ref={listRef}
-          role="listbox"
-          tabIndex={-1}
-          aria-activedescendant={`rpp-opt-${activeIndex}`}
-          onKeyDown={onKeyDownList}
-          className={`rx-menu z-50 ${popPos} min-w-[140px] max-h-60 overflow-auto outline-none`}
-        >
-          {options.map((opt, idx) => {
-            const selected = opt === value;
-            const active = idx === activeIndex;
-            return (
-              <li
-                key={opt}
-                id={`rpp-opt-${idx}`}
-                role="option"
-                aria-selected={selected}
-                onMouseEnter={() => setActiveIndex(idx)}
-                onClick={() => commit(idx)}
-                className={[
-                  "rx-menu__item justify-between",
-                  active ? "bg-[rgba(255,236,205,0.06)] text-rx-text" : "",
-                  selected ? "text-rx-gold-hi" : "",
-                ].join(" ")}
-              >
-                <span className="tabular-nums">{opt} per page</span>
-                {selected ? (
-                  <Check className="size-4 text-rx-gold" aria-hidden />
-                ) : (
-                  <span className="size-4" />
-                )}
-              </li>
-            );
-          })}
-        </ul>
+    <nav className="rx-pgr" aria-label="RexScreener pages">
+      {moreThanSmallest ? (
+        <label className="rx-pgr__size">
+          <span className="rx-pgr__label">Show</span>
+          <span className="rx-pgr__sel">
+            <select
+              value={pageSize}
+              onChange={(e) => onSize(Number(e.target.value))}
+              aria-label="Rows per page"
+            >
+              {SCREENER_PAGE_SIZES.map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </select>
+            <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
+              <path
+                d="M6 9l6 6 6-6"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </span>
+          <span className="rx-pgr__label">per page</span>
+        </label>
+      ) : (
+        <span />
       )}
-    </div>
+      {multi ? (
+        <div className="rx-pgr__nav">
+          <button
+            type="button"
+            className="rx-btn rx-btn--secondary rx-btn--s rx-pgr__step"
+            onClick={() => onPage(cur - 1)}
+            disabled={!hasPrev}
+          >
+            {chevron("M15 6l-6 6 6 6")}
+            <span>Previous</span>
+          </button>
+          {last ? (
+            <ol className="rx-pgr__pages">
+              {pageSlots(cur, last).map((n, i) =>
+                n === "gap" ? (
+                  <li
+                    key={`gap-${i}`}
+                    className="rx-pgr__gap"
+                    aria-hidden="true"
+                  >
+                    …
+                  </li>
+                ) : (
+                  <li key={n}>
+                    <button
+                      type="button"
+                      className="rx-pgr__num rx-num"
+                      onClick={() => onPage(n)}
+                      aria-current={n === cur ? "page" : undefined}
+                      aria-label={`Page ${n}${n === last ? ", last page" : ""}`}
+                    >
+                      {n}
+                    </button>
+                  </li>
+                ),
+              )}
+            </ol>
+          ) : null}
+          <span
+            className={clsx(
+              "rx-pgr__mobile rx-num",
+              !last && "rx-pgr__mobile--always",
+            )}
+            aria-live="polite"
+          >
+            Page {cur.toLocaleString("en-US")}
+            {last ? ` of ${last.toLocaleString("en-US")}` : ""}
+          </span>
+          <button
+            type="button"
+            className="rx-btn rx-btn--secondary rx-btn--s rx-pgr__step"
+            onClick={() => onPage(cur + 1)}
+            disabled={!hasNext}
+          >
+            <span>Next</span>
+            {chevron("M9 6l6 6-6 6")}
+          </button>
+        </div>
+      ) : null}
+    </nav>
   );
 }
 
@@ -198,7 +209,7 @@ const GOLDEN_REPORTS_INFO_TEXT =
   "Golden Reports are a special category where projects with hardworking teams, strong culture, potential, and relevance are listed. Reports generated for these projects include an exclusive “Team Updates” section, where teams share the latest updates on what they’re building and the moves they’re making.";
 
 const PUMP_REPORTS_INFO_TEXT =
-  "Projects listed in this category are highly volatile in nature but also have the highest potential based on several factors, including narrative, team backing, and more. Proceed with caution. Projects that mature and reach stronger valuation stages are automatically transferred to the Golden Reports listing.";
+  "Volatile projects with great potential backed by up-and-coming teams. Claw AI 5.0 gives real-time intel & reporting on all Pump listed tokens.";
 
 const GOLDEN_INFO_ZONE_RIGHT_FRACTION = 0.8;
 
@@ -387,16 +398,6 @@ function isInGoldenInfoZone(clientX: number, el: HTMLElement): boolean {
 }
 
 /* ============================ Toolbar pieces ============================ */
-
-const SCREENER_CHAIN_LABEL: Record<Chain, string> = {
-  base: "Base",
-  robinhood: "Robinhood",
-  ethereum: "Ethereum",
-  solana: "Solana",
-  bsc: "BNB Chain",
-  monad: "Monad",
-  all: "all chains",
-};
 
 type ReportShortcutProps = {
   variant: "golden" | "pump";
@@ -620,8 +621,6 @@ export function TrendingTableContent({
     totalPages,
     hasPrev,
     hasNext,
-    nextPage,
-    prevPage,
     setPageIndex,
     setPageSize,
 
@@ -631,8 +630,6 @@ export function TrendingTableContent({
 
     isPageLoading,
 
-    jupVerifiedTotal,
-    upstreamTotal,
   } = useTrendingTokens(
     isSearchMode && searchQuery && searchType
       ? {
@@ -1486,8 +1483,6 @@ export function TrendingTableContent({
     );
   }
 
-  const showingFrom = displayRows.length > 0 ? (pageIndex - 1) * pageSize + 1 : 0;
-  const showingTo = displayRows.length > 0 ? showingFrom + displayRows.length - 1 : 0;
   const tableCountLabel = goldenReportsOnly
     ? goldenTableStillLoading
       ? null
@@ -1532,7 +1527,7 @@ export function TrendingTableContent({
       />
 
       {/* Toolbar: search + Golden/Pump on the left, count + chain switcher on the right */}
-      <div className="mx-3 flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-b border-rx-line-strong pb-3 pt-4 sm:mx-5 sm:pt-5">
+      <div className="mx-[var(--rx-gutter)] flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-b border-rx-line-strong pb-3 pt-4 md:pt-[22px]">
         <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 md:w-auto">
           <TokenSearchBar
             onSearch={handleSearch}
@@ -1598,7 +1593,7 @@ export function TrendingTableContent({
       </div>
 
       <div
-        className="rexscreener-trending-table-frame relative flex min-h-0 flex-1 flex-col overflow-hidden touch-manipulation sm:mx-5"
+        className="rexscreener-trending-table-frame relative flex min-h-0 flex-1 flex-col overflow-hidden touch-manipulation md:mx-[var(--rx-gutter)]"
         style={pinStyle}
       >
         {isPageLoading &&
@@ -1887,93 +1882,44 @@ export function TrendingTableContent({
         </div>
       </div>
 
-      {/* Pager */}
-      <div className="flex shrink-0 flex-col gap-2.5 px-3 py-3 text-[13px] text-rx-text-3 sm:mx-5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between sm:px-0">
-        {!goldenReportsOnly && !pumpReportsOnly ? (
-          <>
-            <div className="rx-num min-w-0" aria-live="polite">
-              {displayRows.length > 0 ? (
-                <>
-                  Showing {showingFrom}–{showingTo}
-                  {typeof upstreamTotal === "number"
-                    ? ` of ${upstreamTotal.toLocaleString()}`
-                    : ""}{" "}
-                  {isSearchMode
-                    ? "matching your search"
-                    : `on ${SCREENER_CHAIN_LABEL[screenerChain]}`}
-                  {typeof jupVerifiedTotal === "number" && (
-                    <> · Jupiter Verified: {jupVerifiedTotal.toLocaleString()}</>
-                  )}
-                </>
-              ) : isLoading ? (
-                "Loading…"
-              ) : (
-                "No tokens match that search. Try a ticker like WETH or paste a contract address."
-              )}
-            </div>
-
-            <div className="flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className="rx-btn rx-btn--secondary rx-btn--s"
-                onClick={prevPage}
-                disabled={!hasPrev}
-              >
-                Previous
-              </button>
-
-              <label className="rx-num flex items-center gap-1.5 text-rx-text">
-                <span className="text-rx-text-3">Page</span>
-                <input
-                  type="number"
-                  min={1}
-                  value={pageIndex}
-                  onChange={(e) => setPageIndex(Number(e.target.value))}
-                  inputMode="numeric"
-                  pattern="[0-9]*"
-                  placeholder="1"
-                  aria-label="Page number"
-                  className="h-8 w-14 rounded-[9px] border border-rx-line-strong bg-black/40 px-2 text-center text-[13px] text-rx-text outline-none transition placeholder:text-rx-text-3 focus:border-rx-gold focus:shadow-[0_0_0_3px_rgba(255,184,0,0.14)] [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                />
-                {totalPages ? (
-                  <span className="text-rx-text-3">of {totalPages.toLocaleString()}</span>
-                ) : null}
-              </label>
-
-              <button
-                type="button"
-                className="rx-btn rx-btn--secondary rx-btn--s"
-                onClick={nextPage}
-                disabled={!hasNext}
-              >
-                Next
-              </button>
-
-              <RowsPerPageSelect
-                value={pageSize}
-                onChange={(n) => setPageSize(Number(n))}
-                options={[25, 50]}
-                direction="up"
-              />
-            </div>
-          </>
-        ) : (
-          <div className="rx-num">
-            {goldenReportsOnly &&
-              (goldenTableStillLoading
-                ? "…"
-                : `Golden Reports: ${displayRows.length} project${
-                    displayRows.length === 1 ? "" : "s"
-                  }`)}
-            {pumpReportsOnly &&
-              (pumpTableStillLoading
-                ? "…"
-                : `Pump Reports: ${displayRows.length} project${
-                    displayRows.length === 1 ? "" : "s"
-                  }`)}
+      {/* Pager (shared .rx-pgr): hidden when everything fits on one page */}
+      {!goldenReportsOnly && !pumpReportsOnly ? (
+        displayRows.length > 0 ? (
+          <div className="shrink-0 px-[var(--rx-gutter)] py-2.5">
+            <ScreenerPager
+              page={pageIndex}
+              pageSize={pageSize}
+              total={
+                typeof totalPages === "number"
+                  ? totalPages > 1
+                    ? totalPages * pageSize
+                    : displayRows.length
+                  : undefined
+              }
+              totalPages={totalPages}
+              hasPrev={hasPrev}
+              hasNext={hasNext}
+              onPage={(n) => setPageIndex(n)}
+              onSize={(n) => setPageSize(n)}
+            />
           </div>
-        )}
-      </div>
+        ) : null
+      ) : (
+        <div className="rx-small rx-num shrink-0 px-[var(--rx-gutter)] py-3 text-rx-text-3">
+          {goldenReportsOnly &&
+            (goldenTableStillLoading
+              ? "…"
+              : `Golden Reports: ${displayRows.length} project${
+                  displayRows.length === 1 ? "" : "s"
+                }`)}
+          {pumpReportsOnly &&
+            (pumpTableStillLoading
+              ? "…"
+              : `Pump Reports: ${displayRows.length} project${
+                  displayRows.length === 1 ? "" : "s"
+                }`)}
+        </div>
+      )}
     </div>
   );
 }

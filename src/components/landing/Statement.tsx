@@ -23,7 +23,7 @@ export default function Statement() {
   return (
     <section className="statement" aria-label="Why RaptorX exists">
       <p className="statement__text" ref={ref}>
-        <span>Markets are loud.</span> <span>The edge is quiet.</span> <span>RaptorX finds it.</span>
+        <span>Markets move fast.</span> <span>Opportunities get lost.</span> <span>Not anymore with RaptorX.</span>
       </p>
     </section>
   );

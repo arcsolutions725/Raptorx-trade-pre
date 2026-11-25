@@ -153,27 +153,36 @@ textarea {
   outline: none;
 }
 
-/* Ensure Goudy Old Style is used throughout with proper weights and styles */
-/* Redesign: headings and body text use the RaptorX type scale instead of Georgia.
+/* Element defaults live in the base layer, so layered component and utility classes
+   (rx-num, rx-eyebrow, font-mono, font-display …) still win over them.
+   Redesign: headings and body text use the RaptorX type scale instead of Georgia.
    Georgia stays available as `font-goudy` for any screen that still asks for it. */
-h1,
-h2,
-h3,
-h4,
-h5,
-h6 {
-  font-family: var(--rx-ui);
-  font-weight: 650;
-  letter-spacing: -0.01em;
-}
+@layer base {
+  h1,
+  h2,
+  h3,
+  h4,
+  h5,
+  h6 {
+    font-family: var(--rx-ui);
+    font-weight: 650;
+    letter-spacing: -0.01em;
+  }
 
-p,
-span,
-button,
-input,
-textarea,
-select {
-  font-family: inherit;
+  /* Form controls and inline text inherit the surrounding font */
+  p,
+  span,
+  button,
+  input,
+  textarea,
+  select {
+    font-family: inherit;
+  }
+
+  input,
+  textarea {
+    font-weight: 400;
+  }
 }
 
 /* Rex Markets card grid: Geist sans (overrides global Georgia on p/span/button) */
@@ -368,12 +377,6 @@ button {
   cursor: pointer;
 }
 
-input,
-textarea {
-  font-family: inherit;
-  font-weight: 400;
-}
-
 /* Redesign: screens that ask for the Geist stack (card grid, Rex Pilot) get the RaptorX fonts.
    body.* outranks the temporary fallback classes set in app/layout.tsx. */
 body.font-geist-sans-fallback,
@@ -407,9 +410,11 @@ b {
   font-weight: 700;
 }
 
-em,
-i {
-  font-style: italic;
+@layer base {
+  em,
+  i {
+    font-style: italic;
+  }
 }
 
 h2 {

@@ -200,17 +200,17 @@ export default function HeroRadar() {
         <i className="rd__ping" ref={pingRef} />
       </div>
       <div className="gc gc--report" data-target="0">
-        <img src="/landing/ic-golden.webp" alt="" width={44} height={44} />
+        <img className="gc__tok" src="/landing/tokens/vvv.webp" alt="" width={44} height={44} />
         <div>
-          <span className="gc__label">Golden Report · AERO</span>
+          <span className="gc__label">Golden Report · VVV</span>
           <b className="rx-num">$475.53M</b>
           <span className="gc__up rx-num">▲ 4.18% · 24h</span>
         </div>
       </div>
       <div className="gc gc--pump" data-target="1">
-        <img src="/landing/ic-pump.webp" alt="" width={40} height={40} />
+        <img className="gc__tok" src="/landing/tokens/morpho.webp" alt="" width={40} height={40} />
         <div>
-          <span className="gc__label">Pump Report · BRETT</span>
+          <span className="gc__label">Pump Report · MORPHO</span>
           <b className="rx-num">▲ 182%</b>
           <span className="gc__dim">1h · volume 6.4×</span>
         </div>

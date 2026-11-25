@@ -8,9 +8,7 @@ import {
   useEffect,
   useCallback,
   useMemo,
-  memo,
   type UIEvent,
-  type ChangeEvent,
 } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import clsx from "clsx";
@@ -39,11 +37,11 @@ import RexMarketsSearch from "../RexMarketsSearch";
 import RexMarketsCardView from "./RexMarketsCardView";
 import {
   CardSkeleton,
-  ChevronIcon,
   GridIcon,
   ListIcon,
   TableSkeleton,
 } from "./listUi";
+import RexPager from "./RexPager";
 import {
   getRexmarketsDetailHref,
   getMarketReportGenKey,
@@ -52,73 +50,24 @@ import PolymarketTradingInterface from "../../RexMarketsReport/RexMarketsReportD
 
 type MarketsLayoutView = "table" | "card";
 
-type RowsPerPageSelectProps = {
-  value: number;
-  onChange: (n: number) => void;
-  options?: number[];
-  className?: string;
+/** Rows-per-page options each venue's list API accepts
+    (Limitless rejects more than 25; Polymarket returns at most 100; Myriad rejects 200). */
+const PAGE_SIZES: Record<string, readonly number[]> = {
+  kalshi: [25, 50, 100, 200],
+  polymarket: [25, 50, 100],
+  limitless: [25],
+  myriad: [25, 50, 100],
+  predictfun: [25, 50],
+  all: [25, 50, 100],
 };
-
-const RowsPerPageSelect = memo(function RowsPerPageSelect({
-  value,
-  onChange,
-  options = [25, 50],
-  className = "",
-}: RowsPerPageSelectProps) {
-  const [open, setOpen] = useState(false);
-
-  const handleToggle = useCallback(() => {
-    setOpen((v) => !v);
-  }, []);
-
-  const handleOptionClick = useCallback(
-    (opt: number) => {
-      onChange(opt);
-      setOpen(false);
-    },
-    [onChange]
-  );
-
-  return (
-    <div className={clsx("relative", className)}>
-      <button
-        type="button"
-        onClick={handleToggle}
-        className="rx-btn rx-btn--secondary rx-btn--s gap-1.5 px-2.5 sm:px-3"
-        aria-haspopup="listbox"
-        aria-expanded={open}
-        aria-label={`Rows per page: ${value}`}
-      >
-        <b className="font-mono font-semibold tabular-nums">{value}</b>
-        <small className="hidden text-[12px] text-rx-text-3 sm:inline">/ page</small>
-        <ChevronIcon direction="down" size={12} />
-      </button>
-
-      {open && (
-        <ul
-          className="rx-menu bottom-[calc(100%+8px)] top-auto z-50 m-0 min-w-[128px] list-none"
-          role="listbox"
-          aria-label="Rows per page"
-        >
-          {options.map((opt) => (
-            <li
-              key={opt}
-              role="option"
-              aria-selected={opt === value}
-              onClick={() => handleOptionClick(opt)}
-              className={clsx(
-                "rx-menu__item h-9 font-mono tabular-nums",
-                opt === value && "text-rx-gold-hi"
-              )}
-            >
-              {opt} <small className="font-sans text-[12px] text-rx-text-3">/ page</small>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
-  );
-});
+const DEFAULT_PAGE_SIZES: readonly number[] = [25, 50];
+/** Shared with the prototype's other lists: the last "Show N per page" choice. */
+const PAGE_SIZE_KEY = "rx-page-size";
+/** Venues paged by page number / offset: any page opens directly. The rest page by cursor. */
+const RANDOM_ACCESS_SOURCES = new Set(["polymarket", "limitless", "myriad"]);
+/** Largest allowed size that does not exceed the preferred one. */
+const fitPageSize = (sizes: readonly number[], preferred: number) =>
+  [...sizes].reverse().find((s) => s <= preferred) ?? sizes[0];
 
 // Category mapping - extracted outside component to prevent recreation
 // Maps categories to CategoryType for Kalshi API compatibility
@@ -426,6 +375,12 @@ export default function MarketDataTable({
     predictFunMarkets.markets,
   ]);
 
+  const allModePageIndex = Math.max(
+    kalshiMarkets.pageIndex,
+    polymarketMarkets.pageIndex,
+    limitlessMarkets.pageIndex,
+  );
+
   // Select the appropriate data source
   const {
     markets,
@@ -465,10 +420,10 @@ export default function MarketDataTable({
           kalshiMarkets.isFetching ||
           polymarketMarkets.isFetching ||
           limitlessMarkets.isFetching,
-        pageIndex: Math.max(kalshiMarkets.pageIndex, polymarketMarkets.pageIndex, limitlessMarkets.pageIndex),
+        pageIndex: allModePageIndex,
         pageSize: Math.max(kalshiMarkets.pageSize, polymarketMarkets.pageSize, limitlessMarkets.pageSize),
         totalPages: undefined, // Combined pagination is complex, so we'll handle it differently
-        hasPrev: false, // Simplified for "all" mode
+        hasPrev: allModePageIndex > 1,
         hasNext: mergedMarkets.length >= Math.max(kalshiMarkets.pageSize, polymarketMarkets.pageSize, limitlessMarkets.pageSize),
         nextPage: () => {
           // In "all" mode, we'll load more by fetching next pages from all sources
@@ -486,10 +441,11 @@ export default function MarketDataTable({
           polymarketMarkets.setPageIndex(idx);
           limitlessMarkets.setPageIndex(idx);
         },
+        // Each venue gets the largest size its API accepts (see PAGE_SIZES)
         setPageSize: (size: number) => {
           kalshiMarkets.setPageSize(size);
-          polymarketMarkets.setPageSize(size);
-          limitlessMarkets.setPageSize(size);
+          polymarketMarkets.setPageSize(Math.min(size, 100));
+          limitlessMarkets.setPageSize(Math.min(size, 25));
         },
         isPageLoading: kalshiMarkets.isPageLoading || polymarketMarkets.isPageLoading || limitlessMarkets.isPageLoading,
       }
@@ -518,6 +474,31 @@ export default function MarketDataTable({
       setPageIndex(1);
     }
   }, [dataSource, setPageIndex]);
+
+  // Rows per page: the viewer's last choice (kept across visits), fitted to what each venue's API accepts
+  const pageSizes = PAGE_SIZES[dataSource] ?? DEFAULT_PAGE_SIZES;
+  const [preferredPageSize, setPreferredPageSize] = useState(pageSizes[0]);
+  useEffect(() => {
+    try {
+      const saved = Number(window.localStorage.getItem(PAGE_SIZE_KEY));
+      if (saved > 0) setPreferredPageSize(saved);
+    } catch {
+      /* storage unavailable: keep the default */
+    }
+  }, []);
+  const effectivePageSize = fitPageSize(pageSizes, preferredPageSize);
+  const pageSizeOutOfStep = isAllMode
+    ? kalshiMarkets.pageSize !== effectivePageSize ||
+      polymarketMarkets.pageSize !== Math.min(effectivePageSize, 100) ||
+      limitlessMarkets.pageSize !== Math.min(effectivePageSize, 25)
+    : pageSize !== effectivePageSize;
+  useEffect(() => {
+    if (!pageSizeOutOfStep) return;
+    setPageSize(effectivePageSize);
+    setPageIndex(1);
+    // setPageSize / setPageIndex change identity every render in "all" mode; the guard stops repeats
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pageSizeOutOfStep, effectivePageSize, dataSource]);
 
   // --- Refs for scroll synchronization
   const topScrollRef = useRef<HTMLDivElement | null>(null);
@@ -777,21 +758,33 @@ export default function MarketDataTable({
     setSelectedForChart(null);
   }, []);
 
-  const handlePageIndexChange = useCallback(
-    (e: ChangeEvent<HTMLInputElement>) => {
-      const value = Number(e.target.value);
-      if (!isNaN(value) && value > 0) {
-        setPageIndex(value);
-      }
-    },
-    [setPageIndex]
-  );
+  /** After paging, bring the list back to its first row (prototype: scroll #main into view). */
+  const scrollListToTop = useCallback(() => {
+    const el = mainScrollRef.current;
+    if (!el) return;
+    const reduce = window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    el.scrollTo({ top: 0, behavior: reduce ? "auto" : "smooth" });
+  }, []);
+
+  // Next/Previous go through the hooks' own steppers (cursor venues record the next cursor there)
+  const handlePageChange = (n: number) => {
+    if (n === pageIndex + 1) nextPage();
+    else if (n === pageIndex - 1) prevPage();
+    else setPageIndex(n);
+    scrollListToTop();
+  };
 
   const handlePageSizeChange = useCallback(
     (n: number) => {
-      setPageSize(Number(n));
+      setPreferredPageSize(n);
+      try {
+        window.localStorage.setItem(PAGE_SIZE_KEY, String(n));
+      } catch {
+        /* storage unavailable: the choice lasts for this visit */
+      }
+      scrollListToTop();
     },
-    [setPageSize]
+    [scrollListToTop]
   );
 
   const handleRefetch = useCallback(() => {
@@ -830,6 +823,13 @@ export default function MarketDataTable({
   const showSkeleton = isLoading && !isError && markets.length === 0;
   const showEmpty = !isLoading && !isError && markets.length === 0;
   const showMarkets = !isLoading && !isError && markets.length > 0;
+
+  // Pager under the last row; hidden when everything fits on one page (an empty later page keeps it, to go back)
+  const showPageSizePicker =
+    pageSizes.length > 1 && (hasNext || hasPrev || markets.length > pageSizes[0]);
+  const showPager =
+    (showMarkets || (showEmpty && hasPrev)) &&
+    (hasPrev || hasNext || (totalPages ?? 1) > 1 || showPageSizePicker);
 
   const layoutToggle = (
     <div className="rx-seg shrink-0" role="group" aria-label="Markets layout">
@@ -984,7 +984,8 @@ export default function MarketDataTable({
               ref={contentRef}
               className={clsx(
                 "align-top w-full",
-                !isTable && "px-3 pb-6 pt-4 sm:px-5"
+                !isTable && "px-3 pt-4 sm:px-5",
+                !isTable && !showPager && "pb-6"
               )}
             >
               {showSkeleton && (
@@ -1030,59 +1031,27 @@ export default function MarketDataTable({
                 ))}
             </div>
           </div>
+
+          {/* Pager: in flow under the last row, like the prototype (never scrolls sideways with the table) */}
+          {showPager ? (
+            <div className={clsx("pb-6 pt-4", isTable ? "px-3 sm:px-0" : "px-3 sm:px-5")}>
+              <RexPager
+                page={pageIndex}
+                totalPages={totalPages}
+                hasPrev={hasPrev}
+                hasNext={hasNext}
+                randomAccess={RANDOM_ACCESS_SOURCES.has(dataSource)}
+                onPage={handlePageChange}
+                size={effectivePageSize}
+                sizes={pageSizes}
+                onSize={handlePageSizeChange}
+                showSize={showPageSizePicker}
+                busy={!RANDOM_ACCESS_SOURCES.has(dataSource) && isFetching}
+              />
+            </div>
+          ) : null}
         </div>
       </div>
-
-      {/* Pager */}
-      <nav
-        className="flex-shrink-0 flex flex-wrap items-center justify-between gap-x-2 gap-y-2 border-t border-rx-line px-3 py-2.5 text-[13px] text-rx-text-3 sm:gap-x-3 sm:px-5"
-        aria-label="Pagination"
-      >
-        <label className="flex items-center gap-2 font-mono tabular-nums">
-          <span>Page</span>
-          <input
-            type="number"
-            min={1}
-            value={pageIndex}
-            onChange={handlePageIndexChange}
-            inputMode="numeric"
-            pattern="[0-9]*"
-            placeholder="1"
-            aria-label="Page number"
-            className="h-8 w-14 rounded-lg border sm:w-16 border-rx-line-strong bg-black/40 px-2 text-center font-mono text-[13px] text-rx-text outline-none transition placeholder:text-rx-text-3
-                       focus:border-rx-gold focus:shadow-[0_0_0_3px_rgba(255,184,0,.14)]
-                       [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
-          />
-          {totalPages ? <span>of {totalPages}</span> : null}
-        </label>
-
-        <div className="flex items-center gap-2">
-          <RowsPerPageSelect
-            value={pageSize}
-            onChange={handlePageSizeChange}
-            options={[25, 50]}
-          />
-          <button
-            type="button"
-            className="rx-btn rx-btn--secondary rx-btn--s"
-            onClick={prevPage}
-            disabled={!hasPrev}
-            aria-label="Previous page"
-          >
-            <small className="text-[12px] sm:hidden">Prev</small>
-            <small className="hidden text-[12px] sm:inline">Previous</small>
-          </button>
-          <button
-            type="button"
-            className="rx-btn rx-btn--secondary rx-btn--s"
-            aria-label="Next page"
-            onClick={nextPage}
-            disabled={!hasNext}
-          >
-            Next
-          </button>
-        </div>
-      </nav>
     </div>
   );
 }

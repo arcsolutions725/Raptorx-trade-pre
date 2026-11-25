@@ -1,10 +1,19 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState, useEffect } from "react";
-import { usePathname } from "next/navigation";
+import { useState, useEffect, type ReactNode } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
+import Link from "next/link";
 import { TermsOfServiceModal } from "@/components/ui/modal/TermsOfServiceModal";
+import {
+  isRexScreenerPathname,
+  REX_SCREENER_ALL_HREF,
+} from "@/lib/rexscreenerRoutes";
+import { markClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
+import {
+  requestShellAction,
+  REX_SCREENER_EXCHANGE_HREF,
+} from "@/components/ui/layout/shellActions";
 
 interface CryptoToken {
   id: string;
@@ -16,81 +25,81 @@ interface CryptoToken {
   image?: string;
 }
 
-interface PredictionMarket {
-  ticker: string;
-  title: string;
-  yes_price: number;
-  no_price: number;
+/** Tab bar glyphs (same strokes as the design's icon sprite). */
+const TAB_ICONS = {
+  list: "M4 6h16M4 12h16M4 18h10",
+  swap: "M7 7h12l-3-3M17 17H5l3 3",
+} as const;
+
+function TabIcon({ kind }: { kind: "list" | "clock" | "swap" | "user" }) {
+  return (
+    <svg width="20" height="20" viewBox="0 0 24 24" aria-hidden="true">
+      {kind === "clock" ? (
+        <>
+          <circle cx="12" cy="12" r="8" fill="none" stroke="currentColor" strokeWidth="2" />
+          <path d="M12 8v4l3 2" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </>
+      ) : kind === "user" ? (
+        <>
+          <circle cx="12" cy="8" r="4" fill="none" stroke="currentColor" strokeWidth="2" />
+          <path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+        </>
+      ) : (
+        <path
+          d={TAB_ICONS[kind]}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
+  );
 }
 
-export default function Footer() {
-  const pathname = usePathname();
-  const isRexMarketsPage = pathname === "/rexmarkets";
+/**
+ * App footer (RaptorX design: `.app-foot`).
+ * Desktop: one line · [dock] | live crypto prices | legal links.
+ * Phones: a slim live-prices line above the bottom tab bar (Screener · Predictions · Claw AI · Exchange · Account).
+ * Live prediction markets run in the bar above the header (PredictionsTicker).
+ */
+export default function Footer({
+  dock,
+}: {
+  /** Optional left slot on desktop (RexScreener: Daily missions + Leaderboard). */
+  dock?: ReactNode;
+} = {}) {
+  const pathname = usePathname() ?? "";
+  const router = useRouter();
+  const isScreener = isRexScreenerPathname(pathname);
+  const isPredictions =
+    pathname === "/rexmarkets" || pathname.startsWith("/rexmarkets/");
+  const isClaw = pathname === "/claw-v5" || pathname.startsWith("/claw-v5/");
 
   const [cryptoTokens, setCryptoTokens] = useState<CryptoToken[]>([]);
-  const [predictionMarkets, setPredictionMarkets] = useState<
-    PredictionMarket[]
-  >([]);
   const [showTerms, setShowTerms] = useState(false);
 
-  /* ---------------------------
-      FETCH DATA: MAIN PAGE
-  --------------------------- */
   useEffect(() => {
-    if (!isRexMarketsPage) {
-      const fetchCryptoTokens = async () => {
-        try {
-          const res = await fetch("/api/crypto/top", { cache: "no-store" });
-          if (res.ok) {
-            const data = await res.json();
-            setCryptoTokens(data.tokens || []);
-          }
-        } catch (error) {
-          console.error("Failed to fetch crypto tokens:", error);
+    const fetchCryptoTokens = async () => {
+      try {
+        const res = await fetch("/api/crypto/top", { cache: "no-store" });
+        if (res.ok) {
+          const data = await res.json();
+          setCryptoTokens(Array.isArray(data?.tokens) ? data.tokens : []);
         }
-      };
+      } catch (error) {
+        console.error("Failed to fetch crypto tokens:", error);
+      }
+    };
 
-      fetchCryptoTokens();
-      const interval = setInterval(fetchCryptoTokens, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [isRexMarketsPage]);
+    fetchCryptoTokens();
+    const interval = setInterval(fetchCryptoTokens, 30000);
+    return () => clearInterval(interval);
+  }, []);
 
-  useEffect(() => {
-    if (isRexMarketsPage) {
-      const fetchPredictionMarkets = async () => {
-        try {
-          const res = await fetch("/api/kalshi/markets?limit=15&status=open", {
-            cache: "no-store",
-          });
-          if (res.ok) {
-            const data = await res.json();
-            const markets = (data.markets || [])
-              .slice(0, 15)
-              .map((market: any) => ({
-                ticker: market.ticker || "",
-                title: market.title || "",
-                yes_price: market.yes_price || 0,
-                no_price: market.no_price || 0,
-              }));
-
-            setPredictionMarkets(markets);
-          }
-        } catch (error) {
-          console.error("Failed to fetch prediction markets:", error);
-        }
-      };
-
-      fetchPredictionMarkets();
-      const interval = setInterval(fetchPredictionMarkets, 30000);
-      return () => clearInterval(interval);
-    }
-  }, [isRexMarketsPage]);
-
-  // Get all items and duplicate for seamless infinite scroll
-  const allItems = isRexMarketsPage ? predictionMarkets : cryptoTokens;
-  // Only duplicate if we have items, otherwise show empty
-  const duplicatedItems = allItems.length > 0 ? [...allItems, ...allItems] : [];
+  // Duplicated once for a seamless loop
+  const loop = cryptoTokens.length > 0 ? [...cryptoTokens, ...cryptoTokens] : [];
 
   const pct = (v: number) => (
     <span className={v < 0 ? "rx-down" : "rx-up"}>
@@ -98,85 +107,43 @@ export default function Footer() {
     </span>
   );
 
+  const openExchange = () => {
+    if (!requestShellAction("exchange")) router.push(REX_SCREENER_EXCHANGE_HREF);
+  };
+
   return (
     <footer className="rx-footer">
       <div className="rx-footer__bar">
-        <div className="rx-ticker">
-          <span className="rx-badge rx-badge--live shrink-0">
-            <span className="text-[12px] font-medium">Live</span>
-          </span>
-          <div
-            className="rx-ticker__viewport h-10 flex items-center"
-            aria-label={
-              isRexMarketsPage ? "Live prediction markets" : "Live token prices"
-            }
-          >
-            {duplicatedItems.length > 0 ? (
-              <div className="flex items-center gap-[26px] animate-scroll-infinite whitespace-nowrap">
-                {duplicatedItems.map((item, index) => (
-                  <div
-                    key={`${
-                      isRexMarketsPage
-                        ? (item as PredictionMarket).ticker
-                        : (item as CryptoToken).id
-                    }-${index}`}
+        {dock ? <div className="rx-footer__dock">{dock}</div> : null}
+
+        <div className="rx-ticker" role="region" aria-label="Live token prices">
+          <span className="rx-badge rx-badge--live shrink-0">Live</span>
+          <div className="rx-ticker__viewport">
+            {loop.length > 0 ? (
+              <div className="rx-ticker__track">
+                {loop.map((t, index) => (
+                  <span
+                    key={`${t.id}-${index}`}
                     className="rx-ticker__item shrink-0"
-                    aria-hidden={index >= allItems.length || undefined}
+                    aria-hidden={index >= cryptoTokens.length || undefined}
                   >
-                    {isRexMarketsPage ? (
-                      <>
-                        <span className="rx-ticker__q">
-                          {(item as PredictionMarket).title}
-                        </span>
-                        <span className="rx-up">
-                          Yes{" "}
-                          {((item as PredictionMarket).yes_price * 100).toFixed(
-                            1,
-                          )}
-                          %
-                        </span>
-                        <span className="rx-down">
-                          No{" "}
-                          {((item as PredictionMarket).no_price * 100).toFixed(
-                            1,
-                          )}
-                          %
-                        </span>
-                      </>
-                    ) : (
-                      <>
-                        {(item as CryptoToken).image && (
-                          <Image
-                            src={(item as CryptoToken).image!}
-                            alt=""
-                            width={16}
-                            height={16}
-                            className="rounded-full"
-                            unoptimized
-                          />
-                        )}
-                        <b>{(item as CryptoToken).symbol.toUpperCase()}</b>
-                        <span>
-                          $
-                          {(item as CryptoToken).current_price.toLocaleString(
-                            undefined,
-                            {
-                              minimumFractionDigits: 2,
-                              maximumFractionDigits: 2,
-                            },
-                          )}
-                        </span>
-                        {pct((item as CryptoToken).price_change_percentage_24h)}
-                      </>
-                    )}
-                  </div>
+                    <span className="rx-ticker__sym">{t.symbol.toUpperCase()}</span>
+                    <span>
+                      $
+                      {t.current_price.toLocaleString(undefined, {
+                        minimumFractionDigits: 2,
+                        maximumFractionDigits: 2,
+                      })}
+                    </span>
+                    {pct(t.price_change_percentage_24h)}
+                  </span>
                 ))}
               </div>
             ) : null}
           </div>
         </div>
 
-        <div className="rx-footer__links">
+        <nav className="rx-footer__links" aria-label="Footer">
           <span>© {new Date().getFullYear()} RaptorX</span>
           <a
             href="/docs/TermsofService-RaptorX.pdf"
@@ -189,20 +156,15 @@ export default function Footer() {
             href="https://x.com/huntonraptor"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Follow RaptorX on X"
+            aria-label="RaptorX on X"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden="true"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
               <path
-                d="M2.66675 13.3332L7.17875 8.82117M8.81875 7.18117L13.3334 2.6665M2.66675 2.6665L10.4887 13.3332H13.3334L5.51141 2.6665H2.66675Z"
+                d="M4 4l16 16M20 4L4 20"
+                fill="none"
                 stroke="currentColor"
+                strokeWidth="2"
                 strokeLinecap="round"
-                strokeLinejoin="round"
               />
             </svg>
           </a>
@@ -210,25 +172,72 @@ export default function Footer() {
             href="https://t.me/huntonraptor"
             target="_blank"
             rel="noopener noreferrer"
-            aria-label="Join RaptorX on Telegram"
+            aria-label="RaptorX on Telegram"
           >
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              aria-hidden="true"
-            >
+            <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
               <path
-                d="M10 6.6665L7.33333 9.33317L11.3333 13.3332L14 2.6665L2 7.33317L4.66667 8.6665L6 12.6665L8 9.99984"
+                d="M21 4L3 11l6 2 2 6 3-4 5 4z"
+                fill="none"
                 stroke="currentColor"
-                strokeLinecap="round"
+                strokeWidth="2"
                 strokeLinejoin="round"
               />
             </svg>
           </a>
-        </div>
+        </nav>
       </div>
+
+      {/* Phones: main navigation */}
+      <nav className="rx-tabbar" aria-label="Main">
+        <Link
+          href={REX_SCREENER_ALL_HREF}
+          className="rx-tabbar__item"
+          aria-current={isScreener ? "page" : undefined}
+        >
+          <TabIcon kind="list" />
+          Screener
+        </Link>
+        <Link
+          href="/rexmarkets"
+          className="rx-tabbar__item"
+          aria-current={isPredictions ? "page" : undefined}
+        >
+          <TabIcon kind="clock" />
+          Predictions
+        </Link>
+        <Link
+          href="/claw-v5"
+          className="rx-tabbar__item rx-tabbar__item--claw"
+          aria-current={isClaw ? "page" : undefined}
+          onClick={() => {
+            if (!isClaw) markClawV5ScrollToInput();
+          }}
+        >
+          <span className="rx-tabbar__claw">
+            <Image
+              src="/images/claw-logo-96.webp"
+              alt=""
+              width={34}
+              height={34}
+              className="claw-ico"
+            />
+          </span>
+          Claw AI
+        </Link>
+        <button type="button" className="rx-tabbar__item" onClick={openExchange}>
+          <TabIcon kind="swap" />
+          Exchange
+        </button>
+        <button
+          type="button"
+          className="rx-tabbar__item"
+          onClick={() => requestShellAction("account")}
+        >
+          <TabIcon kind="user" />
+          Account
+        </button>
+      </nav>
+
       <TermsOfServiceModal
         isOpen={showTerms}
         onClose={() => setShowTerms(false)}

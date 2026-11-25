@@ -1,12 +1,14 @@
+import Link from "next/link";
 import { cssVars } from "./motion";
 
-const SCREENER_ROWS: [avatar: string, sym: string, mcap: string, chg: string][] = [
-  ["eagle", "AERO", "$475M", "+4.2%"],
-  ["fox", "BRETT", "$842M", "+2.1%"],
-  ["falcon", "VIRTUAL", "$1.3B", "+6.4%"],
-  ["raven", "DEGEN", "$96M", "+11%"],
-  ["wolf", "TOSHI", "$188M", "+3.0%"],
-  ["shark", "MOG", "$612M", "+1.4%"],
+// token logos live in /landing/tokens/<symbol lowercased>.webp
+const SCREENER_ROWS: [sym: string, mcap: string, chg: string][] = [
+  ["AERO", "$475M", "+4.2%"],
+  ["BRETT", "$842M", "+2.1%"],
+  ["VIRTUAL", "$1.3B", "+6.4%"],
+  ["DEGEN", "$96M", "+11%"],
+  ["TOSHI", "$188M", "+3.0%"],
+  ["MOG", "$612M", "+1.4%"],
 ];
 
 function PhoneBar() {
@@ -23,25 +25,32 @@ export default function MobileSection() {
   return (
     <section className="mobile" aria-labelledby="mb-title">
       <div className="sec-head sec-head--center reveal">
-        <p className="eyebrow">Desktop or phone</p>
-        <h2 id="mb-title">Hunt on the go.</h2>
-        <p>The same terminal, rebuilt for one hand. Screener, Claw and markets, wherever you are.</p>
+        <h2 id="mb-title">Desktop or Mobile, the Raptor hunts with you.</h2>
+        <p>Hunt with Claw AI 5.0 and trade wherever you go.</p>
       </div>
-      <div className="phones" role="img" aria-label="RexScreener, Claw AI 5.0 and a prediction market on a phone">
+      <div className="phones" role="group" aria-label="RexScreener, Claw AI 5.0 and a prediction market on a phone">
         <figure className="phone reveal" aria-hidden="true">
           <div className="ph">
             <PhoneBar />
             <div className="ph-scr">
               <b>RexScreener</b>
               <div className="mk-chips">
-                <span className="is-on">All</span>
-                <span>Base</span>
-                <span>Solana</span>
+                <span className="is-on">Base</span>
+                <span>Trending</span>
+                <span>New</span>
               </div>
               <ul>
-                {SCREENER_ROWS.map(([av, sym, mcap, chg]) => (
+                {SCREENER_ROWS.map(([sym, mcap, chg]) => (
                   <li key={sym}>
-                    <img src={`/landing/avatars/${av}.webp`} alt="" width={22} height={22} loading="lazy" decoding="async" />
+                    <img
+                      className="tk-logo"
+                      src={`/landing/tokens/${sym.toLowerCase()}.webp`}
+                      alt=""
+                      width={22}
+                      height={22}
+                      loading="lazy"
+                      decoding="async"
+                    />
                     <b>{sym}</b>
                     <span className="rx-num">{mcap}</span>
                     <em className="mk-up rx-num">{chg}</em>
@@ -55,7 +64,7 @@ export default function MobileSection() {
           <div className="ph">
             <PhoneBar />
             <div className="ph-claw">
-              <img src="/images/claw-mini.svg" alt="" width={28} height={28} loading="lazy" decoding="async" />
+              <img className="claw-logo" src="/landing/claw-logo-96.webp" alt="" width={32} height={32} loading="lazy" decoding="async" />
               <b>Claw AI 5.0</b>
               <div className="mk-msg mk-msg--me">Hottest AI markets today?</div>
               <div className="ph-claw__ans">
@@ -71,11 +80,15 @@ export default function MobileSection() {
                     AI bill passes Senate <em className="rx-num">22%</em>
                   </li>
                 </ol>
-                <span className="mk-cta">Trade on RaptorX</span>
+                <Link className="mk-cta" href="/rexmarkets">
+                  Trade on RaptorX
+                </Link>
               </div>
               <div className="mk-composer">
                 <span>Ask anything…</span>
-                <i />
+                <i>
+                  <img className="claw-logo" src="/landing/claw-logo-96.webp" alt="" width={20} height={20} loading="lazy" decoding="async" />
+                </i>
               </div>
             </div>
           </div>

@@ -1,6 +1,7 @@
 import clsx from "clsx";
 import {
   SCREENER_GRID_COLS,
+  SCREENER_ORDER,
   SCREENER_ROW_MIN_W,
 } from "./gridColumns";
 
@@ -21,9 +22,10 @@ const TH =
 /**
  * The header row sits outside the horizontal scroller and follows it with a transform,
  * so its pinned cells undo that transform (--rx-hscroll) to stay over the pinned row cells.
+ * Tablets (768–1199px) pin nothing, so the header cells scroll with the rest there.
  */
 const TH_PINNED =
-  "relative z-[2] self-stretch translate-x-[var(--rx-hscroll,0px)] bg-[var(--rx-pin-head-bg,transparent)]";
+  "relative z-[2] self-stretch translate-x-[var(--rx-hscroll,0px)] bg-[var(--rx-pin-head-bg,transparent)] md:max-[1200px]:translate-x-0 md:max-[1200px]:bg-transparent md:max-[1200px]:shadow-none";
 
 function SortIcon({ dir }: { dir: SortDirection | "none" }) {
   return (
@@ -57,6 +59,15 @@ export function TableHeader({
   sortDirection,
   onSort,
 }: TableHeaderProps) {
+  /** The sorted column's header cell carries the direction (the design puts aria-sort on the th;
+   *  this grid has no table roles, so the sort buttons' labels announce it instead). */
+  const sortedDir = (field: SortField) =>
+    sortField === field && sortDirection !== null
+      ? sortDirection === "asc"
+        ? ("ascending" as const)
+        : ("descending" as const)
+      : undefined;
+
   const sortButton = (field: SortField, label: string) => {
     const active = sortField === field && sortDirection !== null;
     return (
@@ -68,7 +79,7 @@ export function TableHeader({
           active ? (sortDirection === "asc" ? ", ascending" : ", descending") : ""
         }`}
         className={clsx(
-          "-mx-1.5 -my-1 inline-flex items-center gap-1.5 rounded-md px-1.5 py-1 uppercase tracking-[0.08em] transition-colors hover:text-rx-text",
+          "-mx-1.5 -my-2 inline-flex items-center gap-1.5 rounded-md px-1.5 py-2 uppercase tracking-[0.08em] transition-colors hover:text-rx-text focus-visible:outline-2 focus-visible:outline-offset-0 focus-visible:outline-rx-gold-hi",
           active && "text-rx-gold-hi hover:text-rx-gold-hi",
         )}
       >
@@ -86,49 +97,69 @@ export function TableHeader({
         SCREENER_ROW_MIN_W,
       )}
     >
-      <div className={clsx(TH, TH_PINNED, "pl-3 pr-1 sm:pl-1")}>#</div>
+      <div className={clsx(TH, TH_PINNED, "pl-1 pr-1 max-md:hidden")}>
+        #
+      </div>
 
       <div
         className={clsx(
           TH,
           TH_PINNED,
-          "shadow-[var(--rx-pin-shadow,none)]",
+          SCREENER_ORDER.token,
+          "shadow-[var(--rx-pin-shadow,none)] max-md:pl-3.5",
         )}
         title="Click a token to open its chart"
       >
         Token
       </div>
 
-      <div className={clsx(TH, "px-2")}>AI reports</div>
+      <div className={clsx(TH, SCREENER_ORDER.ai, "px-2")}>
+        AI reports
+      </div>
 
-      <div className={clsx(TH, "justify-end")}>
+      <div
+        data-sorted={sortedDir("marketCap")}
+        className={clsx(TH, SCREENER_ORDER.mcap, "justify-end")}
+      >
         {sortButton("marketCap", "Mcap")}
       </div>
 
       <div
-        className={clsx(TH, "justify-end")}
+        className={clsx(TH, SCREENER_ORDER.chg, "justify-end")}
         title="24h price change (USD)"
       >
         24h
       </div>
 
-      <div className={clsx(TH, "justify-end")}>
+      <div className={clsx(TH, SCREENER_ORDER.trend, "justify-end")}>
         <span className="sr-only">24h trend (hourly line from Birdeye)</span>
       </div>
 
-      <div className={clsx(TH, "justify-end")}>
+      <div
+        data-sorted={sortedDir("price")}
+        className={clsx(TH, SCREENER_ORDER.price, "justify-end")}
+      >
         {sortButton("price", "Price")}
       </div>
 
-      <div className={clsx(TH, "justify-end")}>
+      <div
+        data-sorted={sortedDir("volume")}
+        className={clsx(TH, SCREENER_ORDER.volume, "justify-end")}
+      >
         {sortButton("volume", "Volume")}
       </div>
 
-      <div className={clsx(TH, "justify-end")}>
+      <div
+        data-sorted={sortedDir("liquidity")}
+        className={clsx(TH, SCREENER_ORDER.liquidity, "justify-end")}
+      >
         {sortButton("liquidity", "Liquidity")}
       </div>
 
-      <div className={clsx(TH, "justify-end pr-3 sm:pr-1")}>
+      <div
+        data-sorted={sortedDir("age")}
+        className={clsx(TH, SCREENER_ORDER.age, "justify-end pr-3.5 md:pr-1")}
+      >
         {sortButton("age", "Age")}
       </div>
     </div>

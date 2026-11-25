@@ -8,14 +8,14 @@ const SITE_URL =
     : "https://raptorx.trade";
 
 const DESCRIPTION =
-  "AI crypto screener and prediction market terminal. Scan memecoins, read AI token reports, track odds and ask Claw AI, then trade in one window.";
-const SHARE_TITLE = "RaptorX · See every move. Trade the right one.";
+  "RaptorX is the AI for Internet Markets: real-time research reports on crypto and prediction markets from Claw AI 5.0, then trade in one workflow.";
+const SHARE_TITLE = "RaptorX · The AI for Internet Markets";
 const OG_IMAGE = `${SITE_URL}/landing/og-image.jpg`;
 const OG_IMAGE_ALT = "RaptorX: a raptor eye radar locking onto a Golden Report and a Pump Report";
 
 export const metadata: Metadata = {
   // absolute: skip the layout's "%s | RaptorXchange" template, as in the prototype
-  title: { absolute: "RaptorX · AI crypto screener & prediction market terminal" },
+  title: { absolute: SHARE_TITLE },
   description: DESCRIPTION,
   alternates: { canonical: `${SITE_URL}/` },
   openGraph: {

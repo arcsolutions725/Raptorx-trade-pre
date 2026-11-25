@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useRef } from "react";
 import { ArrowIcon } from "./icons";
 import { prefersReducedMotion } from "./motion";
@@ -71,14 +72,14 @@ export default function ClawChat() {
     <div
       className="mk-claw"
       data-mk="claw"
-      role="img"
-      aria-label="Claw AI 5.0 thinking through a question about Solana, then answering with levels and a trade button"
+      role="group"
+      aria-label="Claw AI 5.0 thinking through a question about VVV on Base, then answering with levels and a trade button"
       ref={ref}
     >
       <aside className="mk-claw__side" aria-hidden="true">
         <span className="mk-new-chat">+ New chat</span>
         <span className="mk-label">Today</span>
-        <i className="is-on">SOL on the 15m</i>
+        <i className="is-on">VVV on the 15m</i>
         <i>Fed cut odds, Dec</i>
         <i>Hottest AI markets</i>
         <span className="mk-label">Yesterday</span>
@@ -86,10 +87,10 @@ export default function ClawChat() {
         <i>Arb: Kalshi vs Polymarket</i>
       </aside>
       <div className="mk-claw__main" aria-hidden="true">
-        <div className="mk-msg mk-msg--me">Is $SOL leaning bullish on the 15m?</div>
+        <div className="mk-msg mk-msg--me">Is $VVV leaning bullish on the 15m?</div>
         <div className="mk-think mk-think--steps">
           <div className="mk-think__h">
-            <img src="/images/claw-mini.svg" alt="" width={16} height={16} loading="lazy" decoding="async" />
+            <img src="/landing/claw-logo-96.webp" alt="" width={16} height={16} loading="lazy" decoding="async" />
             <span>Thinking</span>
             <em className="rx-num" data-mk="secs">
               0.0s
@@ -99,15 +100,15 @@ export default function ClawChat() {
             <li>Pulling 15m candles from 4 venues</li>
             <li>Reading funding and open interest</li>
             <li>Scanning 214 news sources</li>
-            <li>Checking whale wallets on Solana</li>
+            <li>Checking whale wallets on Base</li>
           </ul>
         </div>
         <div className="mk-ans mk-ans--wide">
           <div className="mk-tok-row">
-            <span className="mk-coin">◎</span>
-            <b>Solana</b>
-            <em>SOL</em>
-            <b className="rx-num">$187.42</b>
+            <img className="tk-logo" src="/landing/tokens/vvv.webp" alt="" width={24} height={24} loading="lazy" decoding="async" />
+            <b>Venice Token</b>
+            <em>VVV · Base</em>
+            <b className="rx-num">$19.78</b>
             <span className="mk-up">▲ 2.6%</span>
             <svg viewBox="0 0 120 30" className="mk-spark">
               <path
@@ -123,14 +124,14 @@ export default function ClawChat() {
           </div>
           <p>
             <b>Yes, leaning bullish.</b> Price reclaimed the 15m VWAP and funding stays neutral, so the move
-            isn&apos;t crowded. Two large wallets added 41K SOL in the last hour.
+            isn&apos;t crowded. Two large Base wallets added 41K VVV in the last hour.
           </p>
           <div className="mk-levels">
             <span>
-              Support <b className="rx-num">$184.10</b>
+              Support <b className="rx-num">$19.12</b>
             </span>
             <span>
-              Target <b className="rx-num">$191.80</b>
+              Target <b className="rx-num">$21.40</b>
             </span>
             <span>
               Confidence <b>64%</b>
@@ -138,15 +139,19 @@ export default function ClawChat() {
           </div>
           <div className="mk-ans__foot">
             <span className="mk-ghost">Deep analysis</span>
-            <span className="mk-cta">
+            {/* the prototype opens its Exchange page with VVV preselected (exchange.html?to=VVV); the app's
+                exchange is a panel inside RexScreener with no URL of its own, so this opens RexScreener on Base */}
+            <Link className="mk-cta" href="/base">
               Trade on RaptorX
               <ArrowIcon size={14} strokeWidth={2.4} ariaHidden={false} />
-            </span>
+            </Link>
           </div>
         </div>
         <div className="mk-composer">
           <span>Ask Claw anything…</span>
-          <i />
+          <i>
+            <img className="claw-logo" src="/landing/claw-logo-96.webp" alt="" width={20} height={20} loading="lazy" decoding="async" />
+          </i>
         </div>
       </div>
     </div>

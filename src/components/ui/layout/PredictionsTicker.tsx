@@ -6,7 +6,9 @@ import { useQuery } from "@tanstack/react-query";
 import { getRexmarketsDetailHref } from "@/lib/rexmarkets/marketRoutes";
 
 /**
- * Live prediction-odds ticker (RaptorX design: `.ticker` with a "Predictions" group).
+ * Live prediction markets bar above the header (RaptorX design: `.pm-bar`).
+ * The split-ticker layout: prediction odds run across the top of the product, live crypto
+ * prices across the bottom (Footer). Both move left to right and pause on hover / focus.
  * Data: the open Kalshi markets list Rex Predictions already uses (/api/kalshi/markets).
  * Each item links to its Rex Predictions market page.
  */
@@ -81,27 +83,24 @@ export default function PredictionsTicker({
   // Nothing to show once loaded (error / empty list): take no space at all.
   if (!isPending && items.length === 0) return null;
 
-  // ~5s of travel per item keeps the pace close to the design's 80s loop.
+  // ~6s of travel per item keeps the pace close to the design's 90s loop.
   const trackStyle = {
-    "--rx-ticker-dur": `${Math.max(40, items.length * 5)}s`,
+    "--rx-ticker-dur": `${Math.max(45, items.length * 6)}s`,
   } as CSSProperties;
 
   return (
     <div
-      className={`rx-ticker h-8 flex-none gap-3 border-b border-[rgba(255,236,205,0.08)] bg-[rgba(7,7,7,0.9)] px-5 ${className}`}
-      aria-label="Live prediction odds"
+      className={`rx-pm-bar ${className}`}
       role="region"
+      aria-label="Live prediction markets"
     >
-      <span className="rx-badge rx-badge--live shrink-0">Live</span>
-      <div className="shrink-0 rounded-md border border-rx-gold-line px-[7px] py-0.5 font-mono text-[10px] uppercase leading-none tracking-[0.14em] text-rx-gold-hi">
+      <span className="rx-pm-bar__tag">
+        <i aria-hidden="true" />
         Predictions
-      </div>
-      <div className="rx-ticker__viewport group/ticker">
+      </span>
+      <div className="rx-ticker__viewport">
         {items.length > 0 ? (
-          <div
-            className="flex w-max items-center gap-[26px] animate-[scrollInfinite_var(--rx-ticker-dur)_linear_infinite] group-hover/ticker:[animation-play-state:paused] group-focus-within/ticker:[animation-play-state:paused] motion-reduce:animate-none"
-            style={trackStyle}
-          >
+          <div className="rx-ticker__track" style={trackStyle}>
             {[0, 1].map((copy) =>
               items.map((item) => (
                 <Link
@@ -113,9 +112,9 @@ export default function PredictionsTicker({
                   tabIndex={copy === 1 ? -1 : undefined}
                   title={item.question}
                 >
-                  <div className="rx-ticker__q">{item.question}</div>
-                  <div className="text-rx-up">Yes {item.yes}%</div>
-                  <div className="text-rx-down">No {item.no}%</div>
+                  <span className="rx-ticker__q">{item.question}</span>
+                  <span className="rx-up">Yes {item.yes}%</span>
+                  <span className="rx-down">No {item.no}%</span>
                 </Link>
               )),
             )}

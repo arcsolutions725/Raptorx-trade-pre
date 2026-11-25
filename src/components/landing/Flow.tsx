@@ -7,9 +7,15 @@ export default function Flow() {
   return (
     <section className="flow" id="flow" aria-labelledby="flow-title">
       <div className="sec-head reveal">
-        <p className="eyebrow">From research to trade</p>
-        <h2 id="flow-title">Four moves. One window.</h2>
-        <p>Here&apos;s one trade on RaptorX, start to finish. Every step happens on the same screen.</p>
+        <h2 id="flow-title">
+          From Research to Trade.
+          <br />
+          In One Workflow.
+        </h2>
+        <p>
+          Discover and hunt any digital asset or prediction event with our powerful AI, understand real-time
+          movements, and deploy capital intelligently in one workflow.
+        </p>
       </div>
       <FlowTrack>
         <li className="jr__step" style={cssVars({ "--i": 0 })}>
@@ -24,31 +30,31 @@ export default function Flow() {
             <div className="jr__viz jv-scr" aria-hidden="true">
               <div className="jv-scr__row is-hot">
                 <span className="rx-num">1</span>
-                <img src="/landing/avatars/eagle.webp" alt="" width={22} height={22} />
+                <img className="tk-logo" src="/landing/tokens/aero.webp" alt="" width={22} height={22} />
                 <b>AERO</b>
                 <em className="rx-num mk-up">+6.4%</em>
                 <i className="jv-up">▲ 3</i>
               </div>
               <div className="jv-scr__row">
                 <span className="rx-num">2</span>
-                <img src="/landing/avatars/fox.webp" alt="" width={22} height={22} />
-                <b>BRETT</b>
+                <img className="tk-logo" src="/landing/tokens/vvv.webp" alt="" width={22} height={22} />
+                <b>VVV</b>
                 <em className="rx-num mk-up">+2.1%</em>
               </div>
               <div className="jv-scr__row">
                 <span className="rx-num">3</span>
-                <img src="/landing/avatars/falcon.webp" alt="" width={22} height={22} />
+                <img className="tk-logo" src="/landing/tokens/virtual.webp" alt="" width={22} height={22} />
                 <b>VIRTUAL</b>
                 <em className="rx-num mk-up">+1.8%</em>
               </div>
               <div className="jv-scr__row">
                 <span className="rx-num">4</span>
-                <img src="/landing/avatars/raven.webp" alt="" width={22} height={22} />
-                <b>DEGEN</b>
+                <img className="tk-logo" src="/landing/tokens/morpho.webp" alt="" width={22} height={22} />
+                <b>MORPHO</b>
                 <em className="rx-num mk-dn">−1.2%</em>
               </div>
             </div>
-            <p>RexScreener ranks live tokens across six chains by volume, momentum and age. AERO just climbed to the top.</p>
+            <p>RexScreener ranks live tokens by volume, momentum and age. AERO just climbed to the top.</p>
           </div>
         </li>
         <li className="jr__step" style={cssVars({ "--i": 1 })}>
@@ -62,7 +68,7 @@ export default function Flow() {
           <div className="jr__card">
             <div className="jr__viz jv-rep" aria-hidden="true">
               <div className="jv-rep__top">
-                <img src="/landing/ic-golden.webp" alt="" width={30} height={30} />
+                <img className="tk-logo" src="/landing/tokens/aero.webp" alt="" width={30} height={30} />
                 <div>
                   <span className="mk-label">Golden Report</span>
                   <b>Aerodrome</b>
@@ -108,7 +114,7 @@ export default function Flow() {
             <div className="jr__viz jv-ask" aria-hidden="true">
               <div className="jv-ask__q">Is AERO worth a look today?</div>
               <div className="jv-ask__a">
-                <img src="/images/claw-mini.svg" alt="" width={18} height={18} />
+                <img src="/landing/claw-logo-96.webp" alt="" width={18} height={18} />
                 <div>
                   <b>Bullish bias on the 4h.</b>
                   <span>Volume up 38%, price holding support.</span>
@@ -139,12 +145,18 @@ export default function Flow() {
               <div className="jv-buy__row">
                 <span className="mk-label">Pay</span>
                 <b className="rx-num">0.25</b>
-                <span className="mk-tok">ETH</span>
+                <span className="mk-tok">
+                  <img className="tk-logo" src="/landing/tokens/eth.webp" alt="" width={16} height={16} />
+                  ETH
+                </span>
               </div>
               <div className="jv-buy__row">
                 <span className="mk-label">Get</span>
                 <b className="rx-num">702.4</b>
-                <span className="mk-tok mk-tok--a">AERO</span>
+                <span className="mk-tok mk-tok--a">
+                  <img className="tk-logo" src="/landing/tokens/aero.webp" alt="" width={16} height={16} />
+                  AERO
+                </span>
               </div>
               <span className="jv-buy__btn">Buy AERO</span>
               <span className="jv-buy__ok">

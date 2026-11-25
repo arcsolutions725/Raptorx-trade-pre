@@ -8,20 +8,18 @@ export default function ClawSection() {
       <div className="claw__aura" aria-hidden="true" />
       <div className="sec-head sec-head--center reveal">
         <img className="claw__mark" src="/landing/claw-hero.webp" alt="" width={120} height={120} loading="lazy" decoding="async" />
-        <p className="eyebrow">Claw AI 5.0</p>
         <h2 id="claw-title">
-          Ask anything.
-          <br />
-          Watch it think.
+          Claw AI 5.0.<span className="h2-sub">The World’s Most Powerful Model for Internet Markets.</span>
         </h2>
-        <p>
-          The thinking engine for prediction markets and crypto. Paste a contract address, name a market or just ask
-          what&apos;s moving. Claw shows its work, then writes the answer.
+        <p className="sec-lead">
+          The Proprietary Engine for Prediction Markets &amp; Crypto. Paste a contract address, hunt a prediction event
+          or just ask what’s moving. Claw AI 5.0 leverages private datasets and OSINT to give you real-time market
+          intelligence and context so you can deploy capital intelligently without any guesswork.
         </p>
       </div>
       <ul className="chips reveal" aria-label="Things to ask Claw">
         <li>What are the odds the Fed cuts in December?</li>
-        <li>Is $SOL leaning bullish on the 15m?</li>
+        <li>Is $VVV leaning bullish on the 15m?</li>
         <li>Hottest AI markets today</li>
         <li>Where is the arbitrage between venues?</li>
       </ul>
@@ -36,16 +34,22 @@ export default function ClawSection() {
       </figure>
       <ul className="pillars">
         <li className="reveal">
-          <b>Shows its thinking</b>
-          <span>Watch Claw scan sources and check data live, instead of a spinner.</span>
+          <b>Built on Proprietary Datasets</b>
+          <span>
+            When Claw AI is queried, it leverages data sourced from thousands of private trading telegram groups and
+            combines it with open-source intel to give you the most relevant intel in real-time.
+          </span>
         </li>
         <li className="reveal" style={cssVars({ "--d": ".08s" })}>
-          <b>Deep analysis on demand</b>
-          <span>Turn any answer into a full report with levels, catalysts and risks.</span>
+          <b>On-Demand Research Reports covering Internet Markets 24/7</b>
+          <span>Every response is a human-friendly research report that you can rely on to deploy capital intelligently.</span>
         </li>
         <li className="reveal" style={cssVars({ "--d": ".16s" })}>
-          <b>Ends in a trade</b>
-          <span>Every report finishes with Trade on RaptorX, right where you are.</span>
+          <b>From Intel to Trade</b>
+          <span>
+            Every research report and intel is actionable, empowering traders to directly trade within the platform
+            without jumping through multiple hoops or exiting the ecosystem.
+          </span>
         </li>
       </ul>
     </section>

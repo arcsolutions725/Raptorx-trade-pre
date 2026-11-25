@@ -16,7 +16,6 @@ export default function Rewards() {
   return (
     <section className="rewards" id="rewards" aria-labelledby="rw-title">
       <div className="sec-head reveal">
-        <p className="eyebrow">Missions, tiers &amp; the leaderboard</p>
         <h2 id="rw-title">
           Climb from Hatchling
           <br />
@@ -27,7 +26,7 @@ export default function Rewards() {
           leaderboard.
         </p>
       </div>
-      <ol className="tiers reveal" aria-label="Tiers">
+      <ol className="tiers reveal" aria-label="Tiers, scrolls sideways" tabIndex={0}>
         {TIER_ROWS.map(([k, name, pts]) => (
           <li key={k}>
             <span className="tb" data-tier={k}>

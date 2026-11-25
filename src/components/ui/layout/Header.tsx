@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
 import { useRouter, usePathname } from "next/navigation";
@@ -17,8 +18,14 @@ import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
 import { useEthereumWalletAddress } from "@/hooks/useEthereumWalletAddress";
 import {
   isRexScreenerPathname,
+  parseRexScreenerPath,
   REX_SCREENER_ALL_HREF,
 } from "@/lib/rexscreenerRoutes";
+import {
+  RX_SHELL_ACTION_EVENT,
+  REX_SCREENER_EXCHANGE_HREF,
+  type RxShellActionDetail,
+} from "@/components/ui/layout/shellActions";
 import {
   PREDICT_FUN_LOGO_SRC,
   PREDICT_FUN_TAB_ICON_SRC,
@@ -39,18 +46,35 @@ type User = {
 
 interface RexHeaderProps {
   onHistoryClick?: () => void;
+  /** "Enter the Exchange" (header) and the phone tab bar's Exchange: opens this page's swap panel.
+   *  Without it, both go to RexScreener and open the Exchange there. */
   onExchangeClick?: () => void;
+  /** Kept for existing callers. The header shows Exchange on every page (design), so this no longer hides it. */
   showExchangeButton?: boolean;
   onLogout?: () => void;
   title?: string;
   description?: string;
   mobileMenuButton?: React.ReactNode;
-  /** On claw-v5 (md+), nudge the pill nav so it stays centered over the main column vs the chat sidebar. */
-  clawV5MainNavShiftPx?: number;
 }
 
 type MarketDataSource =
   "all" | "predictfun" | "kalshi" | "polymarket" | "limitless" | "myriad";
+
+const SCREENER_CHAIN_EYEBROW: Record<string, string> = {
+  base: "Base",
+  robinhood: "Robinhood",
+  ethereum: "Ethereum",
+  solana: "Solana",
+  bsc: "BNB Chain",
+  monad: "Monad",
+  all: "All chains",
+};
+
+/** Account button initials ("Admin0000" → "AD"); falls back to the user icon. */
+function initialsOf(name?: string | null): string {
+  const clean = (name ?? "").replace(/[^A-Za-z0-9]/g, "");
+  return clean.slice(0, 2).toUpperCase();
+}
 
 const MARKET_SOURCE_TAB_THEME: Record<
   MarketDataSource,
@@ -225,12 +249,11 @@ function RexMarketSourceTabs({
 export default function RexHeader({
   onHistoryClick,
   onExchangeClick,
-  showExchangeButton = false,
+  showExchangeButton: _showExchangeButton = false,
   onLogout: externalOnLogout,
   title,
   description,
   mobileMenuButton,
-  clawV5MainNavShiftPx,
 }: RexHeaderProps) {
   const {
     authenticated: privyAuthenticated,
@@ -268,14 +291,18 @@ export default function RexHeader({
       ? "Claw AI 5.0"
       : isRexMarketsPage
         ? "Rex Predictions"
-        : "Market Overview");
+        : "Market overview");
   const displayDescription =
     description ||
     (isClawV5Page
       ? "AI-powered chat assistant."
       : isRexMarketsPage
         ? "Prediction Intelligence by your side."
-        : "Real time insights powered by Claw AI 5.0.");
+        : "Live tokens, read in real time by Claw AI 5.0.");
+  // RexScreener eyebrow: which chain the list shows ("RexScreener · Base")
+  const screenerEyebrow = isRexScreenerPage
+    ? `RexScreener · ${SCREENER_CHAIN_EYEBROW[parseRexScreenerPath(pathname).routeChain] ?? "All chains"}`
+    : null;
 
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [isLoadingUser, setIsLoadingUser] = useState(false);
@@ -291,31 +318,6 @@ export default function RexHeader({
   useEffect(() => {
     setTopbarVisible(false);
   }, [setTopbarVisible]);
-  const [isMobile, setIsMobile] = useState(false);
-  const [isMdUp, setIsMdUp] = useState(false);
-
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth < 640); // 640px is Tailwind's sm breakpoint
-    };
-    checkMobile();
-    window.addEventListener("resize", checkMobile);
-    return () => window.removeEventListener("resize", checkMobile);
-  }, []);
-
-  useEffect(() => {
-    const mq = window.matchMedia("(min-width: 768px)");
-    const sync = () => setIsMdUp(mq.matches);
-    sync();
-    mq.addEventListener("change", sync);
-    return () => mq.removeEventListener("change", sync);
-  }, []);
-
-  const clawV5DesktopNavShiftPx =
-    isClawV5Page && isMdUp && typeof clawV5MainNavShiftPx === "number"
-      ? clawV5MainNavShiftPx
-      : 0;
-
   const handleSignIn = () => {
     setShowLoginModal(true);
   };
@@ -466,6 +468,36 @@ export default function RexHeader({
     }
   };
 
+  /** "Enter the Exchange": this page's swap panel, or RexScreener's Exchange from other pages. */
+  const handleExchangeClick = useCallback(() => {
+    if (onExchangeClick) {
+      onExchangeClick();
+      return;
+    }
+    router.push(REX_SCREENER_EXCHANGE_HREF);
+  }, [onExchangeClick, router]);
+
+  /** Phone tab bar (in the Footer): Account opens login or the account menu, Exchange as above. */
+  useEffect(() => {
+    const onShellAction = (e: Event) => {
+      const detail = (e as CustomEvent<RxShellActionDetail>).detail;
+      if (!detail || detail.handled) return;
+      detail.handled = true;
+      if (detail.action === "exchange") {
+        handleExchangeClick();
+        return;
+      }
+      if (!authenticated) {
+        setShowLoginModal(true);
+        return;
+      }
+      setShowAccountModal(true);
+    };
+    window.addEventListener(RX_SHELL_ACTION_EVENT, onShellAction);
+    return () =>
+      window.removeEventListener(RX_SHELL_ACTION_EVENT, onShellAction);
+  }, [authenticated, handleExchangeClick]);
+
   const clawAiHeaderButton = (
     <button
       type="button"
@@ -474,35 +506,29 @@ export default function RexHeader({
       aria-label="Claw AI 5.0: report history"
     >
       <Image
-        src="/images/claw-mini.svg"
+        src="/images/claw-logo-96.webp"
         alt=""
-        width={17}
-        height={17}
+        width={20}
+        height={20}
         className="claw-ico"
       />
       Claw AI 5.0
     </button>
   );
 
-  const exchangeButton = showExchangeButton ? (
-    <button
-      type="button"
-      className="rx-btn rx-btn--exchange rx-btn--s"
-      onClick={onExchangeClick}
-    >
-      Enter the Exchange
-      <ArrowRight className="size-3.5" aria-hidden="true" />
-    </button>
-  ) : null;
+  const accountInitials = initialsOf(currentUser?.username);
 
   return (
     <>
       <div className="w-full flex flex-col z-20">
-        {/* Redesign: the green "Intelligent Terminal" strip is removed per the brief (slide 2). */}
-        {/* Live prediction odds strip above the header (hidden on phones) */}
-        <PredictionsTicker className="hidden md:flex" />
+        {/* Live prediction markets bar above the header (crypto prices run in the footer) */}
+        <PredictionsTicker />
         <header className="rx-header">
-          <div className="rx-header__logo">
+          <Link
+            href={REX_SCREENER_ALL_HREF}
+            className="rx-header__logo"
+            aria-label="RaptorX home"
+          >
             <Image
               src="/images/raptorx-logo.svg"
               alt="RaptorX"
@@ -510,18 +536,10 @@ export default function RexHeader({
               height={50}
               priority
             />
-          </div>
+          </Link>
 
-          {/* Desktop / tablet navigation */}
-          <nav
-            className="rx-header__nav hidden sm:flex"
-            aria-label="Main"
-            style={
-              clawV5DesktopNavShiftPx !== 0
-                ? { transform: `translateX(${clawV5DesktopNavShiftPx}px)` }
-                : undefined
-            }
-          >
+          {/* Desktop / tablet navigation (phones use the tab bar in the footer) */}
+          <nav className="rx-header__nav" aria-label="Main">
             <button
               type="button"
               onClick={() => {
@@ -535,19 +553,6 @@ export default function RexHeader({
             <button
               type="button"
               onClick={() => {
-                if (!isClawV5Page) {
-                  markClawV5ScrollToInput();
-                  router.push("/claw-v5");
-                }
-              }}
-              aria-current={isClawV5Page ? "page" : undefined}
-              className="rx-nav-link"
-            >
-              Claw AI 5.0
-            </button>
-            <button
-              type="button"
-              onClick={() => {
                 if (!isRexMarketsPage) router.push("/rexmarkets");
               }}
               aria-current={
@@ -557,65 +562,44 @@ export default function RexHeader({
             >
               Rex Predictions
             </button>
-          </nav>
-
-          {/* Mobile navigation: compact segmented control */}
-          <nav className="sm:hidden flex-1 min-w-0" aria-label="Main">
-            <div className="rx-seg rx-seg--gold w-full max-w-[300px] mx-auto">
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isRexScreenerPage) router.push(REX_SCREENER_ALL_HREF);
-                }}
-                aria-current={isRexScreenerPage ? "page" : undefined}
-                className={clsx(
-                  "rx-seg__item flex-1 min-w-0 justify-center px-1.5 text-[12px]",
-                  isRexScreenerPage && "is-active",
-                )}
-              >
-                Screener
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isClawV5Page) {
-                    markClawV5ScrollToInput();
-                    router.push("/claw-v5");
-                  }
-                }}
-                aria-current={isClawV5Page ? "page" : undefined}
-                className={clsx(
-                  "rx-seg__item flex-1 min-w-0 justify-center px-1.5 text-[12px]",
-                  isClawV5Page && "is-active",
-                )}
-              >
-                Claw AI
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (!isRexMarketsPage) router.push("/rexmarkets");
-                }}
-                aria-current={
-                  isRexMarketsPage && !isClawV5Page ? "page" : undefined
+            <button
+              type="button"
+              onClick={() => {
+                if (!isClawV5Page) {
+                  markClawV5ScrollToInput();
+                  router.push("/claw-v5");
                 }
-                className={clsx(
-                  "rx-seg__item flex-1 min-w-0 justify-center px-1.5 text-[12px]",
-                  isRexMarketsPage && !isClawV5Page && "is-active",
-                )}
-              >
-                Predictions
-              </button>
-            </div>
+              }}
+              aria-current={isClawV5Page ? "page" : undefined}
+              className="rx-nav-link"
+            >
+              <Image
+                src="/images/claw-logo-96.webp"
+                alt=""
+                width={20}
+                height={20}
+                className="claw-ico"
+              />
+              Claw AI 5.0
+            </button>
           </nav>
 
-          {/* Right: Deposit & account; above the claw-v5 nav shift so it keeps its clicks */}
+          {/* Right: Exchange, Deposit & account */}
           <div className="rx-header__actions relative z-30 shrink-0">
+            <button
+              type="button"
+              className="rx-btn rx-btn--exchange"
+              onClick={handleExchangeClick}
+            >
+              <span className="rx-hdr-long">Enter the&nbsp;</span>Exchange
+              <ArrowRight className="size-3.5" aria-hidden="true" />
+            </button>
+
             {authenticated && isRexMarketsPage && (
               <button
                 type="button"
                 onClick={() => setShowDepositModal(true)}
-                className="rx-btn rx-btn--primary hidden sm:inline-flex"
+                className="rx-btn rx-btn--primary hidden md:inline-flex"
                 title="Deposit & Withdraw"
               >
                 Deposit
@@ -640,7 +624,11 @@ export default function RexHeader({
                   aria-haspopup="menu"
                   aria-expanded={showUserDropdown}
                 >
-                  <User className="size-5" aria-hidden="true" />
+                  {accountInitials ? (
+                    <span aria-hidden="true">{accountInitials}</span>
+                  ) : (
+                    <User className="size-5" aria-hidden="true" />
+                  )}
                 </button>
 
                 {showUserDropdown && (
@@ -671,7 +659,7 @@ export default function RexHeader({
                             setShowUserDropdown(false);
                             setShowDepositModal(true);
                           }}
-                          className="rx-menu__item sm:hidden"
+                          className="rx-menu__item md:hidden"
                         >
                           <Wallet aria-hidden="true" />
                           Deposit
@@ -705,6 +693,9 @@ export default function RexHeader({
         {!isClawV5Page && (
           <div className="rx-page-head">
             <div className="rx-page-head__title">
+              {screenerEyebrow ? (
+                <span className="rx-eyebrow">{screenerEyebrow}</span>
+              ) : null}
               <h1>{displayTitle}</h1>
               <p>{displayDescription}</p>
             </div>
@@ -715,7 +706,6 @@ export default function RexHeader({
                   setDataSource={setDataSource}
                 />
               )}
-              {exchangeButton}
               {clawAiHeaderButton}
             </div>
           </div>

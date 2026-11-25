@@ -6,15 +6,14 @@ export default function Predictions() {
   return (
     <section className="pred" id="predictions" aria-labelledby="pred-title">
       <div className="pred__copy reveal">
-        <p className="eyebrow">Rex Predictions</p>
         <h2 id="pred-title">
-          Every market.
+          Rex Predictions.
           <br />
-          One screen.
+          The AI for Event Markets.
         </h2>
         <p>
-          Elections, sports, crypto, the economy. Five prediction venues come together in one list, with live odds and
-          the same clean order ticket.
+          Our AI helps you discover, hunt, research and trade millions of prediction markets from Elections to Sports,
+          Crypto, Geopolitics, Economy, Tech and more, right at your fingertips.
         </p>
         <ul className="ticks">
           <li>
@@ -24,7 +23,8 @@ export default function Predictions() {
             <b>Odds you can read.</b> One chart, one scale, the current price tagged on the axis.
           </li>
           <li>
-            <b>Buy Yes or No</b> in a couple of taps, then track it in My orders and positions.
+            <b>Buy Yes or No</b> or trade any prediction event in 2 taps. Claw AI 5.0 auto-manages your orders and
+            positions with real-time portfolio updates.
           </li>
         </ul>
         <Link className="rx-btn rx-btn--primary js-ring" href="/rexmarkets">
@@ -97,7 +97,7 @@ export default function Predictions() {
                 <span className="mk-axis mk-axis--n rx-num">38%</span>
               </div>
               <div className="mk-pilot">
-                <img src="/images/claw-mini.svg" alt="" width={16} height={16} loading="lazy" decoding="async" />
+                <img src="/landing/claw-logo-96.webp" alt="" width={16} height={16} loading="lazy" decoding="async" />
                 <div>
                   <b>Rex Pilot brief</b>
                   <span>CPI cooled to 2.6% and two Fed speakers sounded open to a cut. Odds rose 9 pts this week.</span>

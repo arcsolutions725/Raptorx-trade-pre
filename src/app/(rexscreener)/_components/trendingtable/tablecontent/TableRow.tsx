@@ -20,6 +20,7 @@ import { Token24hChangeBadge, Token24hSparkline } from "./Token24hSparkline";
 import { dexScreenerTokenImageUrl } from "@/lib/api/dexscreener";
 import {
   SCREENER_GRID_COLS,
+  SCREENER_ORDER,
   SCREENER_PIN_RANK,
   SCREENER_PIN_TOKEN,
   SCREENER_ROW_MIN_W,
@@ -79,54 +80,42 @@ function monogramBackground(seed: string): string {
   return `hsl(${h % 360} 38% 34%)`;
 }
 
-/* AI report buttons: same shape, two inks (gold Full Report, ember What's New), as in the design. */
+/* AI report buttons (client feedback 24 Nov): antique-gold Full Report with a black report icon,
+   graphite What's New with a soft gold edge and a 3D bolt. Colours live in raptorx-ds.css. */
 const FULL_REPORT_BTN =
-  "rx-btn rx-btn--report rx-btn--s px-2.5 font-bold text-[#1A1206] border-[#FFE08A] bg-[linear-gradient(180deg,#FFD15C,#E3A300)] shadow-[0_0_0_1px_rgba(255,184,0,0.15),0_4px_14px_rgba(255,170,0,0.22)] hover:brightness-[1.08] hover:-translate-y-px disabled:translate-none disabled:filter-none sm:px-3";
+  "rx-btn rx-btn--report rx-btn--gold rx-btn--s px-2.5 font-bold hover:-translate-y-px disabled:translate-none disabled:filter-none sm:px-3";
 const WHATS_NEW_BTN =
-  "rx-btn rx-btn--news rx-btn--s px-2.5 font-bold text-[#FFD2B8] border-[#B0461C] bg-[linear-gradient(180deg,#3A1A0C,#200E07)] shadow-[0_0_0_1px_rgba(255,106,19,0.1),0_4px_14px_rgba(255,106,19,0.16)] hover:border-rx-ember hover:-translate-y-px disabled:translate-none sm:px-3";
+  "rx-btn rx-btn--news rx-btn--s px-2.5 font-bold hover:-translate-y-px disabled:translate-none sm:px-3";
 /** Small icon controls next to the ticker (copy address, open explorer). */
 const ICON_BTN =
   "inline-flex size-6 shrink-0 items-center justify-center rounded-md text-rx-text-3 transition-colors hover:bg-white/[0.06] hover:text-rx-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rx-gold-hi disabled:pointer-events-none disabled:opacity-40";
 const CELL = "px-2.5 py-3";
 
+/** Full Report on gold: the black report mark (matches the black label). */
 function ReportIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M6 2.5h8.2L19 7.3V20a1.5 1.5 0 0 1-1.5 1.5h-11A1.5 1.5 0 0 1 5 20V4A1.5 1.5 0 0 1 6.5 2.5Z"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M14 2.7V7.5h4.8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinejoin="round"
-      />
-      <path
-        d="M8.5 12h7M8.5 15.5h7M8.5 8.5h3"
-        stroke="currentColor"
-        strokeWidth="1.9"
-        strokeLinecap="round"
-      />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      className="rx-emo rx-emo--ink"
+      src="/images/emoji/report-ink.svg"
+      alt=""
+      width={17}
+      height={17}
+    />
   );
 }
 
+/** What's New: the 3D lightning bolt. */
 function NewsIcon() {
   return (
-    <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
-      <path
-        d="M13.6 1.8 4.3 13.4c-.3.4 0 .9.5.9h5.6l-1.3 7.6c-.1.6.6.9 1 .5l9.4-11.7c.3-.4 0-.9-.5-.9h-5.6l1.2-7.5c.1-.6-.6-.9-1-.5Z"
-        fill="#FFD15C"
-        stroke="#B87400"
-        strokeWidth="1"
-        strokeLinejoin="round"
-      />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      className="rx-emo"
+      src="/images/emoji/bolt.webp"
+      alt=""
+      width={16}
+      height={16}
+    />
   );
 }
 
@@ -313,7 +302,7 @@ export function TableRow({
           : "SolScan";
 
   const chainBadge = isBaseChain
-    ? { src: "/images/base.png", label: "Base" as const }
+    ? { src: "/images/brands/base.webp", label: "Base" as const }
     : isEthereumChain
       ? { src: "/images/ETH_light_logo.webp", label: "Ethereum" as const }
     : isBnbChain
@@ -454,7 +443,7 @@ export function TableRow({
         <div
           className={clsx(
             SCREENER_PIN_RANK,
-            "rx-num flex items-center py-3 pl-3 pr-1 text-xs text-rx-text-3 sm:pl-1",
+            "rx-num flex items-center py-3 pl-1 pr-1 text-xs text-rx-text-3",
           )}
         >
           {rank}
@@ -464,8 +453,10 @@ export function TableRow({
         <div
           className={clsx(
             SCREENER_PIN_TOKEN,
-            "flex min-w-0 items-center gap-3",
+            SCREENER_ORDER.token,
+            "flex min-w-0 items-center gap-2 md:gap-3",
             CELL,
+            "max-md:pl-3.5 max-md:pr-2",
           )}
           title={displayName}
         >
@@ -474,7 +465,7 @@ export function TableRow({
               type="button"
               onClick={openChart}
               onKeyDown={keyOpenChart}
-              className="rx-avatar rx-avatar--token size-9 cursor-pointer overflow-hidden transition-transform hover:scale-[1.05] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rx-gold-hi disabled:cursor-default"
+              className="rx-avatar rx-avatar--token size-7 cursor-pointer overflow-hidden transition-transform md:size-9 hover:scale-[1.05] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rx-gold-hi disabled:cursor-default"
               style={{
                 background: showTokenImage
                   ? "var(--rx-surface-3)"
@@ -490,7 +481,7 @@ export function TableRow({
                   alt=""
                   width={36}
                   height={36}
-                  className="size-9 object-cover"
+                  className="size-7 object-cover md:size-9"
                   onError={() => {
                     if (logoSrc && constructedLogo && logoSrc !== constructedLogo) {
                       setLogoSrc(constructedLogo);
@@ -534,7 +525,7 @@ export function TableRow({
               >
                 {displaySymbol || baseCurrency}{" "}
                 {displaySymbol ? (
-                  <span className="font-normal text-rx-text-3">
+                  <span className="font-normal text-rx-text-3 max-md:hidden">
                     / {baseCurrency}
                   </span>
                 ) : null}
@@ -543,7 +534,7 @@ export function TableRow({
                 type="button"
                 onClick={handleCopyAddress}
                 disabled={!token?.tokenAddress}
-                className={clsx(ICON_BTN, "ml-0.5")}
+                className={clsx(ICON_BTN, "ml-0.5 max-md:hidden")}
                 title={token?.tokenAddress ? "Copy contract address" : "No address"}
                 aria-label={
                   copied
@@ -562,7 +553,7 @@ export function TableRow({
                   href={explorerUrl}
                   target="_blank"
                   rel="noopener noreferrer"
-                  className={ICON_BTN}
+                  className={clsx(ICON_BTN, "max-md:hidden")}
                   aria-label={`View on ${explorerName}`}
                   title={`View token on ${explorerName}`}
                 >
@@ -570,14 +561,14 @@ export function TableRow({
                 </a>
               ) : null}
             </div>
-            <div className="max-w-[230px] truncate text-xs text-rx-text-2 min-[1800px]:max-w-[360px]">
+            <div className="max-w-[230px] truncate text-xs text-rx-text-2 max-md:hidden min-[1800px]:max-w-[360px]">
               {displayName}
             </div>
           </div>
         </div>
 
         {/* AI reports */}
-        <div className="flex items-center gap-1.5 px-2 py-3">
+        <div className={clsx(SCREENER_ORDER.ai, "flex items-center gap-1.5 px-2 py-3")}>
           {isGenerating && countdown !== null ? (
             <span
               role="status"
@@ -622,7 +613,7 @@ export function TableRow({
         </div>
 
         {/* Mcap */}
-        <div className={clsx(CELL, "rx-num text-right font-semibold text-rx-text")}>
+        <div className={clsx(SCREENER_ORDER.mcap, CELL, "rx-num text-right font-semibold text-rx-text")}>
           {marketLoading ? (
             <span
               className="rx-skel ml-auto block h-3.5 w-16"
@@ -635,12 +626,12 @@ export function TableRow({
         </div>
 
         {/* 24h change */}
-        <div className={clsx(CELL, "rx-num flex min-w-0 justify-end")}>
+        <div className={clsx(SCREENER_ORDER.chg, CELL, "rx-num flex min-w-0 justify-end")}>
           <Token24hChangeBadge changePct24h={priceChange24h} />
         </div>
 
         {/* 24h trend */}
-        <div className={clsx(CELL, "flex justify-end")}>
+        <div className={clsx(SCREENER_ORDER.trend, CELL, "flex justify-end")}>
           <Token24hSparkline
             changePct24h={priceChange24h}
             seriesY={sparklineY}
@@ -649,7 +640,7 @@ export function TableRow({
         </div>
 
         {/* Price */}
-        <div className={clsx(CELL, "rx-num text-right font-semibold text-rx-text")}>
+        <div className={clsx(SCREENER_ORDER.price, CELL, "rx-num text-right font-semibold text-rx-text")}>
           {marketLoading ? (
             <span
               className="rx-skel ml-auto block h-3.5 w-14"
@@ -664,7 +655,7 @@ export function TableRow({
         </div>
 
         {/* Volume, with the 24h volume change as a multiplier */}
-        <div className={clsx(CELL, "rx-num flex flex-col items-end gap-1 text-right")}>
+        <div className={clsx(SCREENER_ORDER.volume, CELL, "rx-num flex flex-col items-end gap-1 text-right")}>
           <div>{formatUsd(vol)}</div>
           {volumeTone && volumeChange24h != null ? (
             <div
@@ -681,12 +672,12 @@ export function TableRow({
         </div>
 
         {/* Liquidity */}
-        <div className={clsx(CELL, "rx-num text-right text-rx-text-2")}>
+        <div className={clsx(SCREENER_ORDER.liquidity, CELL, "rx-num text-right text-rx-text-2")}>
           {formatUsd(liq)}
         </div>
 
         {/* Age */}
-        <div className={clsx(CELL, "pr-3 text-right text-rx-text-2 sm:pr-1")}>
+        <div className={clsx(SCREENER_ORDER.age, CELL, "pr-3.5 text-right text-rx-text-2 md:pr-1")}>
           {ageLoading ? (
             <span
               className="rx-skel ml-auto block h-3.5 w-9"

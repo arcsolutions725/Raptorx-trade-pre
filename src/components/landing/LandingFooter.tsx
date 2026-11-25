@@ -4,7 +4,12 @@ export default function LandingFooter() {
   return (
     <footer className="lp-foot">
       <div className="lp-foot__top">
-        <img src="/images/raptorx-logo.svg" alt="RaptorX" width={52} height={41} loading="lazy" decoding="async" />
+        <div className="lp-foot__brand">
+          <img src="/images/raptorx-logo.svg" alt="RaptorX" width={52} height={41} loading="lazy" decoding="async" />
+          <p className="lp-foot__note">
+            © 2026 RaptorX. Trading crypto and prediction markets carries risk. Nothing on RaptorX is financial advice.
+          </p>
+        </div>
         <nav aria-label="Product">
           <b>Product</b>
           <Link href="/base">RexScreener</Link>
@@ -15,7 +20,7 @@ export default function LandingFooter() {
         </nav>
         <nav aria-label="Community">
           <b>Community</b>
-          <a href="https://x.com/huntonraptor" target="_blank" rel="noopener noreferrer">
+          <a href="https://www.x.com/huntonraptor" target="_blank" rel="noopener noreferrer">
             X
           </a>
           <a href="https://t.me/huntonraptor" target="_blank" rel="noopener noreferrer">
@@ -24,15 +29,12 @@ export default function LandingFooter() {
         </nav>
         <nav aria-label="Legal">
           <b>Legal</b>
-          {/* same document the app footer links to */}
+          {/* the prototype links https://www.raptorx.trade/docs/TermsofService-RaptorX.pdf: this same file on this site */}
           <a href="/docs/TermsofService-RaptorX.pdf" target="_blank" rel="noopener noreferrer">
             Terms of service
           </a>
         </nav>
       </div>
-      <p className="lp-foot__note">
-        © 2026 RaptorX. Trading crypto and prediction markets carries risk. Nothing on RaptorX is financial advice.
-      </p>
     </footer>
   );
 }

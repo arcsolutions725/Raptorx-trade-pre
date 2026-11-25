@@ -38,6 +38,7 @@ import {
 } from "@/lib/rexscreenerRoutes";
 import { useOpenPilotSidebarOnMobileReportGen } from "@/hooks/useOpenPilotSidebarOnMobileReportGen";
 import { markClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
+import { REX_SCREENER_EXCHANGE_PARAM } from "@/components/ui/layout/shellActions";
 
 /** After the first auto-open on RexScreener, skip auto-open on refresh; user can still open via the button. */
 const DAILY_MISSION_MODAL_OPENED_KEY = "dailymission_modal_opened";
@@ -138,6 +139,24 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
     if (!phantomResumeRef.current) return;
     setShowReportSidebar(true);
     setForceShowExchange(true);
+  }, []);
+
+  /**
+   * "Enter the Exchange" from another page (header button / phone tab bar) lands here with
+   * `?exchange=1`: open the Exchange panel, then drop the flag from the address bar.
+   */
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (url.searchParams.get(REX_SCREENER_EXCHANGE_PARAM) !== "1") return;
+    setShowReportSidebar(true);
+    setForceShowExchange(true);
+    url.searchParams.delete(REX_SCREENER_EXCHANGE_PARAM);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      url.pathname + (url.search ? url.search : "") + url.hash,
+    );
   }, []);
   const [selectedToken, setSelectedToken] = useState<TrendingToken | null>(
     null
@@ -541,6 +560,52 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
     }
   }, [showReportSidebar]);
 
+  /** Daily missions + Leaderboard (signed in): the footer's left slot on desktop, floating on phones. */
+  const dockButtons = (
+    <>
+      <button
+        type="button"
+        onClick={openDailyTasksPopup}
+        className="rx-btn h-[30px] shrink-0 gap-2 rounded-[15px] border-transparent bg-[linear-gradient(180deg,#2B150B,#150B07)] pl-[3px] pr-3 text-xs text-[#FFE7C2] shadow-[inset_0_0_0_1px_rgba(255,106,19,0.45),0_8px_20px_rgba(0,0,0,0.45)] hover:shadow-[inset_0_0_0_1px_rgba(255,184,0,0.7),0_8px_20px_rgba(0,0,0,0.45)]"
+        aria-label="Open Daily Tasks"
+        title="Daily Missions"
+      >
+        <span
+          className="flex size-6 items-center justify-center rounded-full bg-[linear-gradient(180deg,#F04A2C,#B5101F)]"
+          aria-hidden="true"
+        >
+          <Image
+            src="/images/claw-logo-96.webp"
+            alt=""
+            width={18}
+            height={18}
+            className="claw-ico size-[18px] p-px"
+          />
+        </span>
+        Daily missions
+      </button>
+
+      <button
+        type="button"
+        onClick={openLeaderboard}
+        className="rx-btn h-[30px] shrink-0 gap-1.5 rounded-[15px] border-rx-gold-line bg-[linear-gradient(180deg,#261D0B,#15100A)] px-3 text-xs text-rx-gold-hi shadow-[inset_0_1px_0_rgba(255,236,205,0.14),0_8px_20px_rgba(0,0,0,0.45)] hover:border-[#6A511B]"
+        aria-label="Open Leaderboard"
+        title="Global Leaderboard"
+      >
+        <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+        </svg>
+        Leaderboard
+      </button>
+    </>
+  );
+
   return (
     <RexScreenerTableContext.Provider value={tableContext}>
       <div
@@ -565,7 +630,7 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
               {children}
             </div>
 
-            <Footer />
+            <Footer dock={currentUserId ? dockButtons : undefined} />
           </div>
 
           <div
@@ -619,52 +684,14 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
           )}
         </div>
 
+        {/* Phones: Daily missions + Leaderboard float just above the live-prices line and tab bar */}
         {currentUserId && (
           <div
-            className={`fixed bottom-20 left-3 z-40 flex-col items-start gap-2 sm:bottom-[114px] sm:left-5 sm:flex-row sm:items-center ${
-              showReportSidebar ? "hidden lg:flex" : "flex"
+            className={`fixed bottom-[calc(108px+env(safe-area-inset-bottom,0px))] left-3 z-40 flex-col items-start gap-2 md:hidden ${
+              showReportSidebar ? "hidden" : "flex"
             }`}
           >
-            <button
-              type="button"
-              onClick={openDailyTasksPopup}
-              className="rx-btn h-[30px] shrink-0 gap-2 rounded-[15px] border-rx-gold-line bg-[linear-gradient(180deg,#261D0B,#15100A)] pl-[3px] pr-3 text-xs text-[#FFE2A0] shadow-[inset_0_1px_0_rgba(255,236,205,0.14),0_8px_20px_rgba(0,0,0,0.45)] hover:border-[#6A511B]"
-              aria-label="Open Daily Tasks"
-              title="Daily Missions"
-            >
-              <span
-                className="flex size-6 items-center justify-center rounded-full bg-[linear-gradient(180deg,#FFD670,#E3A300)]"
-                aria-hidden="true"
-              >
-                <Image
-                  src="/images/claw-mini.svg"
-                  alt=""
-                  width={14}
-                  height={14}
-                  className="size-3.5 brightness-0 opacity-85"
-                />
-              </span>
-              Daily missions
-            </button>
-
-            <button
-              type="button"
-              onClick={openLeaderboard}
-              className="rx-btn h-[30px] shrink-0 gap-1.5 rounded-[15px] border-rx-gold-line bg-[linear-gradient(180deg,#261D0B,#15100A)] px-3 text-xs text-rx-gold-hi shadow-[inset_0_1px_0_rgba(255,236,205,0.14),0_8px_20px_rgba(0,0,0,0.45)] hover:border-[#6A511B]"
-              aria-label="Open Leaderboard"
-              title="Global Leaderboard"
-            >
-              <svg width="15" height="15" viewBox="0 0 24 24" aria-hidden="true">
-                <path
-                  d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinejoin="round"
-                />
-              </svg>
-              Leaderboard
-            </button>
+            {dockButtons}
           </div>
         )}
 
@@ -677,11 +704,11 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
             aria-label="Ask Claw: open Claw AI 5.0"
           >
             <Image
-              src="/images/claw-mini.svg"
+              src="/images/claw-logo-96.webp"
               alt=""
-              width={22}
-              height={22}
-              className="size-[22px] brightness-0 invert drop-shadow-[0_1px_0_rgba(90,0,10,0.35)]"
+              width={24}
+              height={24}
+              className="claw-ico size-6"
             />
             Ask Claw
           </button>

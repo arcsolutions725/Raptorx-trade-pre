@@ -2,14 +2,13 @@
 
 /**
  * Shared presentation bits for the Rex Predictions list (table + card views):
- * venue badges, market thumbnails, price formatting, icons and loading skeletons.
+ * venue logos and badges, market thumbnails, price formatting, icons and loading skeletons.
  * Styling follows the RaptorX design system (rx-* classes + Tailwind rx colours).
  */
 
 import { useEffect, useState } from "react";
 import Image from "next/image";
 import clsx from "clsx";
-import { PREDICT_FUN_LOGO_SRC } from "@/lib/predictfun/assets";
 import { REX_TABLE_GRID, REX_TABLE_MIN_W } from "./TableHeader";
 
 export type MarketVenue =
@@ -19,30 +18,35 @@ export type MarketVenue =
   | "myriad"
   | "predictfun";
 
+/** Real venue logos (prototype assets/brands/, square app-icon marks). */
 const VENUES: Record<
   MarketVenue,
-  { label: string; className: string; logo?: string }
+  { label: string; className: string; logo: string }
 > = {
-  kalshi: { label: "Kalshi", className: "rx-badge--kalshi" },
+  kalshi: {
+    label: "Kalshi",
+    className: "rx-badge--kalshi",
+    logo: "/images/brands/kalshi.webp",
+  },
   polymarket: {
     label: "Polymarket",
     className: "rx-badge--polymarket",
-    logo: "/images/polymarket.png",
+    logo: "/images/brands/polymarket.webp",
   },
   limitless: {
     label: "Limitless",
     className: "bg-[rgba(195,255,1,.1)] text-[#D9FF66]",
-    logo: "/images/limitless-logo-new-white.webp",
+    logo: "/images/brands/limitless.webp",
   },
   myriad: {
     label: "Myriad",
     className: "bg-[rgba(124,58,237,.18)] text-[#C2ABFF]",
-    logo: "/images/myriad.webp",
+    logo: "/images/brands/myriad.webp",
   },
   predictfun: {
     label: "Predict.fun",
     className: "bg-[rgba(168,85,247,.16)] text-[#D6B6FF]",
-    logo: PREDICT_FUN_LOGO_SRC,
+    logo: "/images/brands/predictfun.webp",
   },
 };
 
@@ -50,28 +54,32 @@ export function venueLabel(venue: string): string {
   return VENUES[venue as MarketVenue]?.label ?? venue;
 }
 
-/** Small venue pill (rx-badge) with the platform mark. */
+/** Venue logo chip (prototype .src-logo: rounded square on a dark ground). */
+export function VenueLogo({ venue, size = 18 }: { venue: string; size?: number }) {
+  const v = VENUES[venue as MarketVenue];
+  if (!v) return null;
+  return (
+    <Image
+      src={v.logo}
+      alt=""
+      width={size}
+      height={size}
+      className="shrink-0 bg-[#0E0E10] object-cover"
+      style={{ width: size, height: size, borderRadius: Math.round(size * 0.28) }}
+    />
+  );
+}
+
+/** Small venue pill (rx-badge) with the platform logo. */
 export function VenueBadge({ venue }: { venue: string }) {
   const v = VENUES[venue as MarketVenue];
   if (!v) return null;
   return (
     <span
-      className={clsx("rx-badge h-5 shrink-0 gap-1 px-1.5 text-[10.5px]", v.className)}
+      className={clsx("rx-badge h-5 shrink-0 gap-1 pl-0.5 pr-1.5 text-[10.5px]", v.className)}
       title={`Data source: ${v.label}`}
     >
-      {v.logo ? (
-        <Image
-          src={v.logo}
-          alt=""
-          width={12}
-          height={12}
-          className="size-3 shrink-0 object-contain"
-        />
-      ) : (
-        <span className="text-[11px] font-bold leading-none" aria-hidden>
-          K
-        </span>
-      )}
+      <VenueLogo venue={venue} size={16} />
       {v.label}
     </span>
   );
@@ -139,25 +147,19 @@ export function formatPct(pct: number): string {
   return `${trimNum(pct)}%`;
 }
 
-/** Report icon (prototype i-doc). */
+/** Report mark for the Generate report buttons: the prototype's 3D report emoji (.rx-emo, 15px in small buttons). */
 export function ReportIcon({ className }: { className?: string }) {
   return (
-    <svg
-      viewBox="0 0 24 24"
-      width="12"
-      height="12"
-      aria-hidden
-      className={clsx("shrink-0 text-rx-gold", className)}
-    >
-      <path
-        d="M6 3h9l4 4v14H6zM9 12h7M9 16h5"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
+    <Image
+      src="/images/brands/report-emoji.webp"
+      alt=""
+      width={15}
+      height={15}
+      className={clsx(
+        "size-[15px] shrink-0 object-contain drop-shadow-[0_1px_1px_rgba(0,0,0,.35)]",
+        className,
+      )}
+    />
   );
 }
 

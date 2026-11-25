@@ -1,40 +1,49 @@
 type Mark = "y" | "p" | "n";
 type Cell = [Mark, string];
 
-// columns: RaptorX, token screeners, prediction apps, AI chatbots
+const Y: Cell = ["y", "Yes"];
+const N: Cell = ["n", "No"];
+
+// columns: RaptorX, prediction markets, social trading apps, terminals
 const ROWS: [string, Cell, Cell, Cell, Cell][] = [
-  ["Live tokens across chains", ["y", "Yes"], ["y", "Yes"], ["n", "No"], ["n", "No"]],
-  ["Prediction markets from several venues", ["y", "Yes"], ["n", "No"], ["p", "One venue"], ["n", "No"]],
-  ["AI report for every token and market", ["y", "Yes"], ["n", "No"], ["n", "No"], ["p", "Without live data"]],
-  ["AI that reads live market data", ["y", "Yes"], ["n", "No"], ["n", "No"], ["p", "Sometimes"]],
-  ["Trade in the same window", ["y", "Yes"], ["p", "Via links"], ["y", "Yes"], ["n", "No"]],
-  ["Missions, tiers and a leaderboard", ["y", "Yes"], ["n", "No"], ["p", "Some"], ["n", "No"]],
+  ["AI Operating System", Y, N, N, N],
+  ["AI-Powered Market Research", Y, N, N, N],
+  ["Real-Time Research Reports", Y, N, N, N],
+  ["Recursive Self-Improvement Reasoning", Y, N, N, N],
+  ["Cross-Market Hunting & Intelligent Capital Deployment", Y, N, N, ["p", "Partly"]],
+  ["AI-Powered Research-to-Trade", Y, N, N, N],
 ];
 
-/** COMPARISON: RaptorX against the tools that do one part. */
+/** COMPARISON: RaptorX against terminals, social trading and prediction markets. */
 export default function Compare() {
   return (
     <section className="compare" aria-labelledby="cmp-title">
       <div className="sec-head sec-head--center reveal">
-        <p className="eyebrow">Why RaptorX</p>
-        <h2 id="cmp-title">Other tools do one part.</h2>
-        <p>Screeners show you tokens. Prediction apps show you odds. Chatbots guess. RaptorX does the whole job.</p>
+        <h2 id="cmp-title">
+          Terminals and Social Trading cover specific parts.
+          <br />
+          RaptorX does it all.
+        </h2>
+        <p>
+          Social trading cannot live with KOL pumps and dumps. Terminals are too complex and built for specific trader
+          groups. Prediction Markets sit in their own boxes without cross-venture opportunity.
+        </p>
+        <p className="cmp__mog">RaptorX mogs them all.</p>
       </div>
-      <div className="cmp reveal">
+      {/* keyboard users can focus the table and scroll it sideways on phones */}
+      <div className="cmp reveal" tabIndex={0} role="region" aria-label="RaptorX compared with other tools, scrolls sideways">
         <table>
-          <caption className="sr-only">RaptorX compared with other kinds of trading tools</caption>
+          <caption>RaptorX Competitive Comparison</caption>
           <thead>
             <tr>
-              <th scope="col">
-                <span className="sr-only">Feature</span>
-              </th>
+              <th scope="col">Capabilities</th>
               <th scope="col" className="cmp__us">
                 <img src="/images/raptorx-logo.svg" alt="" width={32} height={26} loading="lazy" decoding="async" />
                 RaptorX
               </th>
-              <th scope="col">Token screeners</th>
-              <th scope="col">Prediction apps</th>
-              <th scope="col">AI chatbots</th>
+              <th scope="col">Prediction Markets</th>
+              <th scope="col">Social Trading Apps</th>
+              <th scope="col">Terminals</th>
             </tr>
           </thead>
           <tbody>

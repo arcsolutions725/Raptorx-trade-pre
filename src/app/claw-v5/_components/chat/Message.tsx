@@ -300,7 +300,7 @@ const STREAMING_COUNTDOWN_START = 20;
 const SCAN_CELLS = Array.from({ length: 96 }, (_, i) => {
   const level = ["l1", "l2", "l2", "l3", "l4"][(i * 7) % 5];
   return {
-    on: (i * 31) % 4 !== 0,
+    on: (i * 31) % 5 < 3,
     className: level,
     style: {
       "--d": `${(((i * 53) % 97) / 97) * 3.2}s`,
