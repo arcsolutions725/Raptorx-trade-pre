@@ -206,7 +206,7 @@ export default function PhantomCallbackPage() {
       const action = consumePendingAction();
 
       if (!action) {
-        window.location.replace("/");
+        window.location.replace("/base");
         return;
       }
 
@@ -265,7 +265,7 @@ export default function PhantomCallbackPage() {
             </a>
           )}
           <button
-            onClick={() => window.location.replace("/")}
+            onClick={() => window.location.replace("/base")}
             className="mt-2 rounded-lg bg-[#ffc000] px-5 py-2 text-sm font-semibold text-black"
           >
             Back to RaptorX

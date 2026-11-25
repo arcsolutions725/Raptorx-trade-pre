@@ -1,4 +1,6 @@
 @import "tailwindcss";
+/* RaptorX redesign: tokens, fonts and base components (rx-*) */
+@import "../styles/raptorx-ds.css";
 
 @font-face {
   font-family: "GeorgiaCustom";
@@ -29,23 +31,46 @@
 }
 
 :root {
-  --background: #000;
-  --foreground: #171717;
+  --background: #070707;
+  --foreground: #f5f3f0;
   --font-georgia: "GeorgiaCustom", "Georgia", "serif";
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--rx-ui);
+  --font-mono: var(--rx-mono);
+  --font-display: var(--rx-display);
+  /* RaptorX palette as Tailwind colours: bg-rx-surface-1, text-rx-gold, border-rx-line … */
+  --color-rx-bg: var(--rx-bg);
+  --color-rx-surface-1: var(--rx-surface-1);
+  --color-rx-surface-2: var(--rx-surface-2);
+  --color-rx-surface-3: var(--rx-surface-3);
+  --color-rx-line: var(--rx-line);
+  --color-rx-line-strong: var(--rx-line-strong);
+  --color-rx-text: var(--rx-text);
+  --color-rx-text-2: var(--rx-text-2);
+  --color-rx-text-3: var(--rx-text-3);
+  --color-rx-gold: var(--rx-gold);
+  --color-rx-gold-hi: var(--rx-gold-hi);
+  --color-rx-gold-ink: var(--rx-gold-ink);
+  --color-rx-gold-tint: var(--rx-gold-tint);
+  --color-rx-gold-line: var(--rx-gold-line);
+  --color-rx-ember: var(--rx-ember);
+  --color-rx-up: var(--rx-up);
+  --color-rx-up-tint: var(--rx-up-tint);
+  --color-rx-down: var(--rx-down);
+  --color-rx-down-tint: var(--rx-down-tint);
+  --color-rx-kalshi: var(--rx-kalshi);
+  --color-rx-polymarket: var(--rx-polymarket);
   --font-goudy: var(--font-georgia);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: #000;
-    --foreground: #ededed;
+    --background: #070707;
+    --foreground: #f5f3f0;
   }
 }
 
@@ -101,18 +126,20 @@ html {
 body {
   height: 100%;
   min-height: 100vh;
-  background: var(--background);
-  color: var(--foreground);
-  font-family: aptos, sans-serif;
+  background: var(--rx-bg-image);
+  background-color: var(--rx-bg);
+  background-attachment: fixed;
+  color: var(--rx-text);
+  font-family: var(--rx-ui);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
   scroll-behavior: smooth;
   -webkit-overflow-scrolling: touch;
   overscroll-behavior: none;
   touch-action: manipulation;
 }
 
-* {
-  font-family: aptos, sans-serif !important;
-}
+/* Redesign: the old global Aptos override is gone; everything inherits Instrument Sans from body. */
 
 a {
   text-decoration: none;
@@ -127,21 +154,26 @@ textarea {
 }
 
 /* Ensure Goudy Old Style is used throughout with proper weights and styles */
+/* Redesign: headings and body text use the RaptorX type scale instead of Georgia.
+   Georgia stays available as `font-goudy` for any screen that still asks for it. */
 h1,
 h2,
 h3,
 h4,
 h5,
 h6 {
-  font-family: var(--font-georgia);
-  font-weight: 700; /* Will use the bold variant */
+  font-family: var(--rx-ui);
+  font-weight: 650;
+  letter-spacing: -0.01em;
 }
 
 p,
 span,
-button {
-  font-family: var(--font-georgia);
-  font-weight: 400;
+button,
+input,
+textarea,
+select {
+  font-family: inherit;
 }
 
 /* Rex Markets card grid: Geist sans (overrides global Georgia on p/span/button) */
@@ -338,8 +370,16 @@ button {
 
 input,
 textarea {
-  font-family: var(--font-georgia);
+  font-family: inherit;
   font-weight: 400;
+}
+
+/* Redesign: screens that ask for the Geist stack (card grid, Rex Pilot) get the RaptorX fonts.
+   body.* outranks the temporary fallback classes set in app/layout.tsx. */
+body.font-geist-sans-fallback,
+body {
+  --font-geist-sans: var(--rx-ui);
+  --font-geist-mono: var(--rx-mono);
 }
 
 /* Utility classes for different font weights and styles */
@@ -807,15 +847,15 @@ a.chakra-link.custom-fcnbia {
   animation: whatsNewEllipsis 1.4s steps(1, end) infinite;
 }
 
-/* What's New: Aptos everywhere (overrides Georgia title face). */
+/* What's New: RaptorX UI font everywhere (overrides the heading face). */
 .whats-new-modal,
 .whats-new-modal * {
-  font-family: aptos, sans-serif !important;
+  font-family: var(--rx-ui) !important;
 }
 
 .whats-new-title,
 .whats-new-title * {
-  font-family: aptos, sans-serif !important;
+  font-family: var(--rx-ui) !important;
   font-weight: 700 !important;
   font-size: 20px !important;
   line-height: 1.2 !important;

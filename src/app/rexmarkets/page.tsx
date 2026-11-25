@@ -95,14 +95,22 @@ export default function RexMarketsPage() {
   const [selectedMarketVolume, setSelectedMarketVolume] = useState<number>(0);
 
   const [selectedMarketEventId, setSelectedMarketEventId] = useState<string | null>(null);
+  const [selectedMarketSource, setSelectedMarketSource] = useState<string | null>(null);
 
   const handleMarketSelected = useCallback(
-    (eventTicker: string, marketTitle: string, totalVolume: number, eventId?: string) => {
+    (
+      eventTicker: string,
+      marketTitle: string,
+      totalVolume: number,
+      eventId?: string,
+      marketSource?: string,
+    ) => {
       setGeneratedReport(null);
       setSelectedMarketTicker(eventTicker);
       setSelectedMarketTitle(marketTitle);
       setSelectedMarketVolume(totalVolume);
       setSelectedMarketEventId(eventId || null);
+      setSelectedMarketSource(marketSource || null);
       setShowReportSidebar(true);
     },
     []
@@ -175,6 +183,7 @@ export default function RexMarketsPage() {
               selectedMarketTitle={selectedMarketTitle}
               selectedMarketVolume={selectedMarketVolume}
               selectedMarketEventId={selectedMarketEventId}
+              selectedMarketSource={selectedMarketSource}
               onClose={() => setShowReportSidebar(false)}
               onClearSessionReport={() => setGeneratedReport(null)}
             />

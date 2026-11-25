@@ -44,7 +44,8 @@ type TableRowProps = {
     eventTicker: string,
     marketTitle: string,
     totalVolume: number,
-    eventId?: string
+    eventId?: string,
+    marketSource?: string
   ) => void;
   onReportGenerated?: (report: MarketReportData) => void;
   currentUserId: string;
@@ -327,7 +328,13 @@ function TableRow({
         (selectedMarket as any).id != null
           ? String((selectedMarket as any).id)
           : undefined;
-      onMarketSelected?.(key, selectedMarket.title ?? "", vol, eid);
+      onMarketSelected?.(
+        key,
+        selectedMarket.title ?? "",
+        vol,
+        eid,
+        (selectedMarket as any)._source,
+      );
       try {
         await generateFromMarket(selectedMarket as KalashiMarket | PolymarketMarket);
         setHasGenerated(true);

@@ -26,7 +26,7 @@ export function slugToChain(slug: string): Chain | null {
   return k as Chain;
 }
 
-/** RexScreener default landing: Base trending (`/` redirects here). */
+/** RexScreener default page: Base trending (`/` is the marketing landing page; `/screener` redirects here). */
 export const REX_SCREENER_ALL_HREF = "/base";
 
 /** Map `Chain` → single URL segment (`all` uses {@link REX_SCREENER_ALL_HREF}, not a chain slug). */

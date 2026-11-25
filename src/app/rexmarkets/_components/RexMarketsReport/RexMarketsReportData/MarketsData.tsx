@@ -109,6 +109,8 @@ type MarketsDataProps = {
   marketTitle?: string | null;
   totalVolume?: number;
   eventId?: string | null;
+  /** Market provider — disambiguates endpoint in "All" mode. */
+  marketSource?: string | null;
 };
 
 const MAX_H = 200;
@@ -118,6 +120,7 @@ export default function MarketsData({
   marketTitle,
   totalVolume,
   eventId,
+  marketSource,
 }: MarketsDataProps) {
   const { dataSource } = useDataSource();
   const pathname = usePathname();
@@ -131,6 +134,7 @@ export default function MarketsData({
     isLimitlessRoute || isMyriadRoute || isPredictFun
       ? eventTicker ?? null
       : undefined,
+    marketSource ?? null,
   );
 
   const [imageError, setImageError] = useState(false);

@@ -327,7 +327,8 @@ type DenseCardProps = {
     eventTicker: string,
     marketTitle: string,
     totalVolume: number,
-    eventId?: string
+    eventId?: string,
+    marketSource?: string
   ) => void;
   onReportGenerated?: (report: any) => void;
   currentUserId: string;
@@ -463,7 +464,7 @@ const MarketDenseCard = memo(function MarketDenseCard({
     const vol = (market as any).volume ?? (market as any).volume24hr ?? 0;
     const eid =
       (market as any).id != null ? String((market as any).id) : undefined;
-    onMarketSelected(key, market.title ?? "", vol, eid);
+    onMarketSelected(key, market.title ?? "", vol, eid, (market as any)._source);
   }, [market, onMarketSelected]);
 
   const onGenerateClick = useCallback(async () => {
@@ -879,7 +880,8 @@ export type RexMarketsCardViewProps = {
     eventTicker: string,
     marketTitle: string,
     totalVolume: number,
-    eventId?: string
+    eventId?: string,
+    marketSource?: string
   ) => void;
   onReportGenerated?: (report: any) => void;
   currentUserId: string;

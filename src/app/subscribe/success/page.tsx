@@ -124,7 +124,7 @@ export default function SubscribeSuccessPage() {
             activate your Claw Pro subscription.
           </p>
           <Link
-            href="/"
+            href="/base"
             className="inline-flex items-center justify-center px-6 py-3 rounded-full bg-[#5C3BFF] hover:bg-[#7A5CFF] text-white font-semibold text-sm transition"
           >
             Go to home
@@ -154,7 +154,7 @@ export default function SubscribeSuccessPage() {
           <h1 className="text-red-400 text-xl font-semibold mb-3">Something went wrong</h1>
           <p className="text-white/85 text-sm mb-8 leading-relaxed">{errorMessage}</p>
           <Link
-            href="/"
+            href="/base"
             className="inline-flex items-center justify-center px-6 py-3 rounded-full bg-[#5C3BFF] hover:bg-[#7A5CFF] text-white font-semibold text-sm transition"
           >
             Go to home
@@ -186,7 +186,7 @@ export default function SubscribeSuccessPage() {
             Refresh
           </button>
           <Link
-            href="/"
+            href="/base"
             className="inline-flex items-center justify-center px-6 py-3 rounded-full bg-white/10 hover:bg-white/20 text-white font-semibold text-sm transition"
           >
             Go to home

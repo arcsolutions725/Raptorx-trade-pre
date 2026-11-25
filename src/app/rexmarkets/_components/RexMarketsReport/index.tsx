@@ -12,6 +12,7 @@ type RexMarketsReportProps = {
   selectedMarketTitle?: string | null;
   selectedMarketVolume?: number;
   selectedMarketEventId?: string | null;
+  selectedMarketSource?: string | null;
   onClose?: () => void;
   /** Clears in-session report on the parent so the sidebar can show the Generate empty state and the main header can reset. */
   onClearSessionReport?: () => void;
@@ -24,6 +25,7 @@ export default function RexMarketsReport({
   selectedMarketTitle,
   selectedMarketVolume,
   selectedMarketEventId,
+  selectedMarketSource,
   onClose,
   onClearSessionReport,
 }: RexMarketsReportProps) {
@@ -70,6 +72,7 @@ export default function RexMarketsReport({
         selectedMarketTitle={selectedMarketTitle}
         selectedMarketVolume={selectedMarketVolume}
         selectedMarketEventId={selectedMarketEventId}
+        selectedMarketSource={selectedMarketSource}
         onClose={onClose}
         onClearSessionReport={onClearSessionReport}
       />

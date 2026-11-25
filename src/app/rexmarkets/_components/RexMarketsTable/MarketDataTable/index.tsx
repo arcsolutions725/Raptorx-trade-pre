@@ -153,7 +153,8 @@ type MarketDataTableProps = {
     eventTicker: string,
     marketTitle: string,
     totalVolume: number,
-    eventId?: string
+    eventId?: string,
+    marketSource?: string
   ) => void;
 };
 
@@ -696,7 +697,7 @@ export default function MarketDataTable({
       const volume = m.volume || m.volume24hr || 0;
       const eventId = m.id != null ? String(m.id) : undefined;
       if (onMarketSelected) {
-        onMarketSelected(ticker, m.title, volume, eventId);
+        onMarketSelected(ticker, m.title, volume, eventId, m._source);
       }
     },
     [onMarketSelected, dataSource, router]

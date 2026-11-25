@@ -1,11 +1,9 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
+// `/` renders the landing page (src/app/page.tsx); the old screener paths still go to /base.
 export function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
-  if (pathname === "/") {
-    return NextResponse.redirect(new URL("/base", request.url));
-  }
   if (pathname === "/screener" || pathname === "/rexscreener") {
     return NextResponse.redirect(new URL("/base", request.url));
   }
@@ -13,5 +11,5 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/", "/screener", "/rexscreener"],
+  matcher: ["/screener", "/rexscreener"],
 };

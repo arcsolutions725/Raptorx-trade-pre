@@ -124,6 +124,7 @@ type RexMarketsReportDataProps = {
   selectedMarketTitle?: string | null;
   selectedMarketVolume?: number;
   selectedMarketEventId?: string | null;
+  selectedMarketSource?: string | null;
   onClose?: () => void;
   onClearSessionReport?: () => void;
 };
@@ -137,6 +138,7 @@ export default function RexMarketsReportData({
   selectedMarketTitle,
   selectedMarketVolume,
   selectedMarketEventId,
+  selectedMarketSource,
   onClose,
   onClearSessionReport,
 }: RexMarketsReportDataProps) {
@@ -437,6 +439,7 @@ export default function RexMarketsReportData({
                   marketTitle={selectedMarketTitle}
                   totalVolume={selectedMarketVolume}
                   eventId={selectedMarketEventId}
+                  marketSource={selectedMarketSource}
                 />
               </>
             )}

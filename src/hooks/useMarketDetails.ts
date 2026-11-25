@@ -79,12 +79,19 @@ export type MarketDetails = {
   rawEventData?: unknown;
 };
 
-export function useMarketDetails(eventTicker: string | null, eventId?: string | null, slug?: string | null) {
+export function useMarketDetails(
+  eventTicker: string | null,
+  eventId?: string | null,
+  slug?: string | null,
+  /** The market's own provider — needed in "all" mode where Polymarket and
+   *  Limitless are indistinguishable by (id, slug) shape. */
+  marketSource?: string | null,
+) {
   const { dataSource } = useDataSource();
   const pathname = usePathname();
-  
+
   const query = useQuery({
-    queryKey: ["market-details", eventTicker, eventId, slug, dataSource, pathname],
+    queryKey: ["market-details", eventTicker, eventId, slug, dataSource, pathname, marketSource],
     queryFn: async () => {
       if (!eventTicker && !slug && !eventId) return null;
 
@@ -161,26 +168,64 @@ export function useMarketDetails(eventTicker: string | null, eventId?: string | 
           return null;
         }
       } else if (dataSource === "limitless") {
-        // For Limitless, prioritize slug, then id, then ticker
+        // Limitless resolves ONLY by slug / stableSlug. Its numeric `id` has no
+        // lookup endpoint (`/markets/{id}` 404s → our route 500s), so prefer the
+        // slug carried by `eventTicker` over the useless numeric id.
         if (slug) {
           apiPath = `/api/limitless/market-details?slug=${encodeURIComponent(slug)}`;
-        } else if (eventId) {
-          apiPath = `/api/limitless/market-details?id=${encodeURIComponent(eventId)}`;
         } else if (eventTicker) {
           apiPath = `/api/limitless/market-details?ticker=${encodeURIComponent(eventTicker)}`;
+        } else if (eventId) {
+          apiPath = `/api/limitless/market-details?id=${encodeURIComponent(eventId)}`;
         } else {
           return null;
         }
       } else if (dataSource === "all") {
-        // In "all" mode, try to detect source from available data
-        // Polymarket markets typically have eventId, so try Polymarket first if available
-        if (eventId) {
-          apiPath = `/api/polymarket/market-details?event_id=${encodeURIComponent(eventId)}`;
-        } else if (eventTicker) {
-          // Default to Kalshi if no eventId (Kalshi markets don't use eventId in the same way)
+        // Mixed feed: the row's own provider (_source) decides the endpoint, because
+        // Polymarket and Limitless look identical by (id, slug) shape. Without it,
+        // Limitless markets were routed to Polymarket (and resolved to nothing).
+        const src = (marketSource || "").toLowerCase();
+        if (src === "limitless") {
+          // Limitless resolves only by slug/stableSlug, never numeric id.
+          if (slug) {
+            apiPath = `/api/limitless/market-details?slug=${encodeURIComponent(slug)}`;
+          } else if (eventTicker) {
+            apiPath = `/api/limitless/market-details?ticker=${encodeURIComponent(eventTicker)}`;
+          } else if (eventId) {
+            apiPath = `/api/limitless/market-details?id=${encodeURIComponent(eventId)}`;
+          } else {
+            return null;
+          }
+        } else if (src === "myriad") {
+          const s = slug || eventTicker;
+          if (!s) return null;
+          apiPath = `/api/myriad/market-details?slug=${encodeURIComponent(s)}`;
+        } else if (src === "predictfun") {
+          const id = eventTicker || slug || eventId;
+          if (!id) return null;
+          apiPath = `/api/predictfun/market-details?id=${encodeURIComponent(id)}`;
+        } else if (src === "kalshi") {
+          if (!eventTicker) return null;
           apiPath = `/api/kalshi/market-details?event_ticker=${encodeURIComponent(eventTicker)}`;
+        } else if (src === "polymarket") {
+          if (eventId) {
+            apiPath = `/api/polymarket/market-details?event_id=${encodeURIComponent(eventId)}`;
+          } else if (slug) {
+            apiPath = `/api/polymarket/market-details?slug=${encodeURIComponent(slug)}`;
+          } else if (eventTicker) {
+            apiPath = `/api/polymarket/market-details?event_ticker=${encodeURIComponent(eventTicker)}`;
+          } else {
+            return null;
+          }
         } else {
-          return null;
+          // Unknown source — fall back to the previous heuristic (Polymarket by id, else Kalshi).
+          if (eventId) {
+            apiPath = `/api/polymarket/market-details?event_id=${encodeURIComponent(eventId)}`;
+          } else if (eventTicker) {
+            apiPath = `/api/kalshi/market-details?event_ticker=${encodeURIComponent(eventTicker)}`;
+          } else {
+            return null;
+          }
         }
       } else {
         // Default to Kalshi for kalshi mode or fallback
