@@ -8,6 +8,7 @@ import {
   TrendingUp,
   LineChart,
   AlertCircle,
+  Sparkles,
 } from "lucide-react";
 import type { TrendingToken } from "@/hooks/useTrendingTokens";
 
@@ -143,7 +144,8 @@ export default function TechnicalIndicators({
     onClick: (() => void) | undefined,
     isGenerating: boolean | undefined,
     hasGenerated: boolean | undefined,
-    countdown: number | null
+    countdown: number | null,
+    variant: "secondary" | "primary" = "secondary"
   ) => {
     const baseDisabled =
       !authenticated ||
@@ -155,109 +157,106 @@ export default function TechnicalIndicators({
 
     const isDisabled = isGenerating ? true : baseDisabled;
 
-    return (
-      <div className="relative group">
-        {/* Tooltip */}
-        <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-3 py-2 bg-black/90 text-white text-xs rounded-md opacity-0 group-hover:opacity-100 transition-opacity duration-200 pointer-events-none whitespace-nowrap z-10">
-          {disabled ? "Select a coin to enable analysis" : description}
+    // When analysis already exists and not generating → "Generated!" state
+    if (!isGenerating && hasGenerated) {
+      return (
+        <div className="ss-ind__done" role="status">
+          <Check className="h-4 w-4" aria-hidden />
+          <span>{label} · Generated!</span>
         </div>
+      );
+    }
 
-        {/* When analysis already exists and not generating → show green pill (unchanged) */}
-        {!isGenerating && hasGenerated ? (
-          <div className="flex items-center justify-center w-full p-2 rounded-md bg-[#00B050] border border-[#00B050]/50">
-            <Check className="w-5 h-5 text-white mr-2" />
-            <span className="text-white font-semibold text-sm">Generated!</span>
-          </div>
-        ) : (
-          // Always render a button; if generating, it's disabled and shows countdown INSIDE
-          <button
-            type="button"
-            onClick={!authenticated ? handleSignIn : onClick}
-            disabled={isDisabled}
-            className={`flex items-center justify-center w-full p-2 rounded-md transition-all duration-200 ${
-              isDisabled
-                ? "bg-gray-700/30 text-gray-300 cursor-not-allowed border border-gray-600/30"
-                : "bg-[#FFC000] hover:bg-[#FFC000]/80 text-black border border-[#FFC000]/50 cursor-pointer"
-            }`}
-            title={
-              isGenerating
-                ? "Generating…"
-                : !authenticated
-                ? "Sign in to generate"
-                : disabled
-                ? "Select a coin to enable analysis"
-                : description
-            }
-          >
-            {icon}
-            <span className="ml-2 font-semibold text-sm">
-              {isGenerating
-                ? `Generating… ${countdown ?? 50}s`
-                : label}
-            </span>
-          </button>
-        )}
-      </div>
+    // Always render a button; if generating, it's disabled and shows countdown INSIDE
+    return (
+      <button
+        type="button"
+        onClick={!authenticated ? handleSignIn : onClick}
+        disabled={isDisabled}
+        className={`rx-btn rx-btn--${variant} ss-ind__btn${
+          isGenerating ? " is-busy" : ""
+        }`}
+        title={
+          isGenerating
+            ? "Generating…"
+            : !authenticated
+            ? "Sign in to generate"
+            : disabled
+            ? "Select a coin to enable analysis"
+            : description
+        }
+      >
+        {isGenerating ? <span className="rx-spin" aria-hidden="true" /> : icon}
+        <span>
+          {isGenerating ? (
+            <>
+              Generating…{" "}
+              <span className="rx-num">{countdown ?? 50}s</span>
+            </>
+          ) : (
+            label
+          )}
+        </span>
+      </button>
     );
   };
 
   /* ----------------------- Render ----------------------- */
   return (
-    <div className="flex flex-col gap-3 p-3 bg-black/30 rounded-md">
+    <div className="rx-well ss-ind">
       {disabled && (
-        <div className="flex items-center justify-center p-2 mb-2 bg-black/20 rounded-md border border-white/10">
-          <AlertCircle className="w-4 h-4 text-[#FFC000] mr-2" />
-          <span className="text-white/70 text-sm">
-            Select a coin from chart view to enable analysis
-          </span>
+        <div className="ss-ind__note">
+          <AlertCircle className="h-4 w-4" aria-hidden />
+          <span>Select a coin from chart view to enable analysis</span>
         </div>
       )}
 
-      {renderButton(
-        <LineChart className="w-5 h-5" />,
-        "MACD Lines",
-        "Generate Moving Average Convergence Divergence analysis",
-        onGenerateMACD,
-        isGeneratingMACD,
-        hasMACD,
-        macdCountdown
-      )}
+      <div className="ss-ind__grid">
+        {renderButton(
+          <LineChart className="h-4 w-4" aria-hidden />,
+          "MACD Lines",
+          "Generate Moving Average Convergence Divergence analysis",
+          onGenerateMACD,
+          isGeneratingMACD,
+          hasMACD,
+          macdCountdown
+        )}
+
+        {renderButton(
+          <TrendingUp className="h-4 w-4" aria-hidden />,
+          "RSI Indicator",
+          "Generate Relative Strength Index analysis",
+          onGenerateRSI,
+          isGeneratingRSI,
+          hasRSI,
+          rsiCountdown
+        )}
+
+        {renderButton(
+          <BarChart2 className="h-4 w-4" aria-hidden />,
+          "Cup & Handle",
+          "Identify Cup & Handle chart patterns",
+          onGenerateCupHandle,
+          isGeneratingCupHandle,
+          hasCupHandle,
+          cupCountdown
+        )}
+      </div>
+
+      <div className="ss-ind__sep" aria-hidden="true" />
 
       {renderButton(
-        <TrendingUp className="w-5 h-5" />,
-        "RSI Indicator",
-        "Generate Relative Strength Index analysis",
-        onGenerateRSI,
-        isGeneratingRSI,
-        hasRSI,
-        rsiCountdown
-      )}
-
-      {renderButton(
-        <BarChart2 className="w-5 h-5" />,
-        "Cup & Handle",
-        "Identify Cup & Handle chart patterns",
-        onGenerateCupHandle,
-        isGeneratingCupHandle,
-        hasCupHandle,
-        cupCountdown
-      )}
-
-      <div className="border-t border-white/10 my-1"></div>
-
-      {renderButton(
-        <span className="text-lg" />,
+        <Sparkles className="h-4 w-4" aria-hidden />,
         "Generate All",
         "Generate all technical indicators at once",
         onGenerateAll,
         isGeneratingAll,
         hasAll,
-        allCountdown
+        allCountdown,
+        "primary"
       )}
 
-      <p className="text-white/60 text-xs mt-1 w-full text-center">
-        AI-powered analysis using TradingView data
-      </p>
+      <p className="rx-help">AI-powered analysis using TradingView data</p>
     </div>
   );
 }

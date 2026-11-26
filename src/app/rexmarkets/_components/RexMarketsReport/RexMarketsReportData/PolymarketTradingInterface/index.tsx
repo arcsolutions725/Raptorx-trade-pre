@@ -4,6 +4,14 @@ import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useMarketDetails } from "@/hooks/useMarketDetails";
 import { Select, SelectOption } from "@/components/ui/Select";
 import TradingHeader from "./components/Header/TradingHeader";
+import {
+  FeedTabs,
+  MarketPageLoading,
+  MarketPageMessage,
+  OutcomeTabs,
+  RangeSeg,
+} from "../shared/marketUi";
+import "@/styles/pages/market-venues-a.css";
 import PriceChart from "./components/Chart/PriceChart";
 import OrderBook from "./components/OrderBook/OrderBook";
 import TopHolders from "./components/TopHolders/TopHolders";
@@ -22,6 +30,21 @@ import { useRexMarketsGenerateReportOptional } from "@/app/rexmarkets/_component
 
 const INTERVALS = ["1H", "6H", "1D", "1W", "1M", "ALL"];
 
+/** Polymarket tag slug (e.g. "us-politics") as a breadcrumb label ("Us politics"). */
+function categoryLabel(slug: unknown): string | null {
+  if (typeof slug !== "string" || !slug.trim()) return null;
+  const text = slug.trim().replace(/[-_]+/g, " ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+type Props = PolymarketTradingInterfaceProps & {
+  /** Claw AI 5.0 button in the market head: opens / closes the Rex Pilot sidebar */
+  onPilotToggle?: () => void;
+  pilotOpen?: boolean;
+  /** id of the Rex Pilot sidebar element (aria-controls) */
+  pilotControlsId?: string;
+};
+
 export default function PolymarketTradingInterface({
   eventTicker,
   marketTitle,
@@ -31,7 +54,10 @@ export default function PolymarketTradingInterface({
   onReportGenerated,
   userId,
   sessionSavedReportId,
-}: PolymarketTradingInterfaceProps) {
+  onPilotToggle,
+  pilotOpen,
+  pilotControlsId,
+}: Props) {
   const { marketDetails, isLoading: isLoadingDetails } = useMarketDetails(
     eventTicker || null,
     eventId || null
@@ -360,273 +386,192 @@ export default function PolymarketTradingInterface({
     handleBuyClick(outcome);
   };
 
+  const symbolImageUrl = marketDetails?.symbol_image_url || undefined;
+  const outcomeTabs =
+    marketsForOrderBook.length > 2 ? (
+      <OutcomeTabs
+        items={marketsForOrderBook.map((market) => ({
+          key: market.clobTokenId,
+          label: market.marketTitle,
+        }))}
+        selectedIndex={selectedMarketIndex}
+        onSelect={setSelectedMarketIndex}
+      />
+    ) : null;
+
   // Loading and error states
   if (isLoadingDetails) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-white text-lg">Loading market data...</div>
+      <div className="rx-mk">
+        <MarketPageLoading />
       </div>
     );
   }
 
   if (!marketDetails || !eventTicker) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-white text-lg">No market data available</div>
+      <div className="rx-mk">
+        <MarketPageMessage title="No market data available" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-black text-white overflow-hidden">
-      <TradingHeader
-        marketTitle={marketTitle}
-        symbolImageUrl={marketDetails.symbol_image_url}
-        currentYesPrice={currentYesPrice}
-        totalVolume={totalVolume}
-        onBack={onBack}
-        onGenerateClick={handleGenerateClick}
-        isGenerating={isGenerating}
-        countdown={countdown}
-        hasGenerated={hasGenerated}
-        ready={ready}
-        canGenerate={!!marketForGeneration}
-      />
+    <div className="rx-mk">
+      <div className="mk-frame">
+        <TradingHeader
+          marketTitle={marketTitle}
+          symbolImageUrl={symbolImageUrl}
+          currentYesPrice={currentYesPrice}
+          totalVolume={totalVolume}
+          volumePrefix="$"
+          seriesVolume={
+            typeof marketDetails.total_series_volume === "number"
+              ? marketDetails.total_series_volume
+              : undefined
+          }
+          category={categoryLabel(marketDetails.category)}
+          venue="polymarket"
+          onBack={onBack}
+          onGenerateClick={handleGenerateClick}
+          isGenerating={isGenerating}
+          countdown={countdown}
+          hasGenerated={hasGenerated}
+          ready={ready}
+          canGenerate={!!marketForGeneration}
+          onPilotToggle={onPilotToggle}
+          pilotOpen={pilotOpen}
+          pilotControlsId={pilotControlsId}
+        />
 
-      {/* Main Content Area - Scrollable */}
-      <div
-        className="flex-1 overflow-y-auto rexmarkets-scroll-pane-y min-h-0 pb-2"
-        style={{ WebkitOverflowScrolling: "touch" }}
-      >
-        <div className="flex flex-col">
-          {/* Top Section - Chart and Order Book */}
-          {/* Desktop: Side by side, Mobile: Stacked vertically */}
-          <div className="flex flex-col lg:flex-row border-b border-white/10 flex-shrink-0">
-            {/* Chart - Full width on mobile with explicit min-height so it doesn't collapse, flex-1 on desktop */}
-            <div className="flex-1 flex flex-col min-w-0 w-full min-h-[400px] lg:w-auto lg:min-h-[520px]">
-              {/* Chart Controls */}
-              <div className="flex-shrink-0 flex items-center justify-start px-4 py-2 border-b border-white/10">
-                <div className="flex items-center gap-2 overflow-x-auto">
-                  {INTERVALS.map((interval) => (
-                    <button
-                      key={interval}
-                      onClick={() => setSelectedInterval(interval)}
-                      className={`px-2 py-0.5 rounded text-xs transition-colors whitespace-nowrap ${
-                        selectedInterval === interval
-                          ? "bg-[#ffc000] text-black font-semibold"
-                          : "bg-white/10 text-white/60 hover:bg-white/20"
-                      }`}
-                    >
-                      {interval}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Chart - explicit height on mobile so Recharts ResponsiveContainer can measure; flex on desktop */}
-              <div className="h-[350px] lg:h-auto lg:flex-1 lg:min-h-[450px] relative bg-[#0a0a0a]">
-                <PriceChart
-                  markets={marketsWithClobTokenIds}
-                  interval={selectedInterval}
+        {/* Everything under the market head scrolls */}
+        <div className="mk-scroll">
+          {/* Chart + trade ticket: side by side on wide screens (filling the view), stacked on narrow ones */}
+          <div className="mk-main">
+            <section className="mk-chart" aria-label="Odds over time">
+              <div className="mk-chart__head">
+                <span className="rx-eyebrow">Odds over time</span>
+                <RangeSeg
+                  ranges={INTERVALS}
+                  value={selectedInterval}
+                  onChange={setSelectedInterval}
                 />
               </div>
-            </div>
+              <PriceChart
+                markets={marketsWithClobTokenIds}
+                interval={selectedInterval}
+              />
+            </section>
 
-            {/* Mobile: Buy/Sell directly under chart; order book follows */}
-            <div className="lg:hidden w-full flex-shrink-0 border-t border-white/10">
+            <section className="mk-side" aria-label="Trade">
               <BuySellWidget
                 currentYesPrice={currentYesPrice}
                 currentNoPrice={currentNoPrice}
                 onBuyClick={handleBuyClick}
                 onSellClick={handleSellClick}
-                symbolImageUrl={marketDetails.symbol_image_url || undefined}
+                symbolImageUrl={symbolImageUrl}
                 marketTitle={marketTitle || undefined}
                 availableMarkets={availableMarkets}
                 marketsForOrderBook={marketsForOrderBook}
                 selectedMarketIndex={selectedMarketIndex}
                 onMarketIndexChange={setSelectedMarketIndex}
               />
-            </div>
-
-            {/* Mobile: Order book below buy/sell */}
-            <div className="lg:hidden w-full flex-shrink-0 border-t border-white/10 flex flex-col">
-              {/* Market Tabs - Show when there are more than 2 markets */}
-              {marketsForOrderBook.length > 2 && (
-                <div className="flex-shrink-0 border-b border-white/10 px-4 py-2">
-                  <div className="flex items-center gap-1 overflow-x-auto custom-select-scrollbar">
-                    {marketsForOrderBook.map((market, index) => (
-                      <button
-                        key={market.clobTokenId}
-                        onClick={() => setSelectedMarketIndex(index)}
-                        className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-                          selectedMarketIndex === index
-                            ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                            : "text-white/60 hover:text-white/80"
-                        }`}
-                      >
-                        {market.marketTitle}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div
-                className={`overflow-hidden ${
-                  mobileOrderBookDepthExpanded ? "min-h-[350px]" : ""
-                }`}
-              >
-                <OrderBook
-                  clobTokenId={selectedMarketClobTokenId}
-                  yesPrice={currentYesPrice}
-                  noPrice={currentNoPrice}
-                  onBuyClick={handleOrderBookBuyClick}
-                  selectedOutcome={selectedOrderBookOutcome}
-                  onDepthExpandedChange={setMobileOrderBookDepthExpanded}
-                />
-              </div>
-            </div>
-
-            {/* Desktop: Buy/Sell next to chart */}
-            <div className="hidden lg:block w-[350px] flex-shrink-0 border-l border-white/10">
-              <BuySellWidget
-                currentYesPrice={currentYesPrice}
-                currentNoPrice={currentNoPrice}
-                onBuyClick={handleBuyClick}
-                onSellClick={handleSellClick}
-                symbolImageUrl={marketDetails.symbol_image_url || undefined}
-                marketTitle={marketTitle || undefined}
-                availableMarkets={availableMarkets}
-                marketsForOrderBook={marketsForOrderBook}
-                selectedMarketIndex={selectedMarketIndex}
-                onMarketIndexChange={setSelectedMarketIndex}
-              />
-            </div>
+            </section>
           </div>
 
-          {/* Bottom Section - Top Holders/Activity and Buy/Sell */}
-          {/* Desktop: Side by side, Mobile: Stacked */}
-          <div className="flex min-h-0 flex-col flex-shrink-0 border-t border-white/10">
+          {/* Phones and tablets: order book under the ticket */}
+          <section className="mk-book mk-book--stack" aria-label="Order book">
+            <div className="mk-sec-head">
+              <span className="rx-eyebrow">Order book</span>
+            </div>
+            {outcomeTabs}
             <div
-              className="flex flex-col lg:flex-row items-stretch gap-4 p-4 flex-shrink-0"
-              style={{ maxHeight: "750px" }}
+              className={
+                mobileOrderBookDepthExpanded ? "mk-book__fill is-open" : "mk-book__fill"
+              }
             >
-              {/* Top Holders/Activity - Full width on mobile */}
-              <div className="flex-1 flex flex-col min-w-0 w-full lg:w-auto">
-                {/* Tabs and Filters */}
-                <div className="flex-shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-2 mb-4">
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setActiveTab("comments")}
-                      className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        activeTab === "comments"
-                          ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                          : "text-white/60 hover:text-white/80"
-                      }`}
-                    >
-                      Comments {commentsCount > 0 && `(${commentsCount})`}
-                    </button>
-                    <button
-                      onClick={() => setActiveTab("holders")}
-                      className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        activeTab === "holders"
-                          ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                          : "text-white/60 hover:text-white/80"
-                      }`}
-                    >
-                      Top Holders
-                    </button>
-                    <button
-                      onClick={() => setActiveTab("activity")}
-                      className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        activeTab === "activity"
-                          ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                          : "text-white/60 hover:text-white/80"
-                      }`}
-                    >
-                      Latest Activity
-                    </button>
-                  </div>
+              <OrderBook
+                clobTokenId={selectedMarketClobTokenId}
+                yesPrice={currentYesPrice}
+                noPrice={currentNoPrice}
+                onBuyClick={handleOrderBookBuyClick}
+                selectedOutcome={selectedOrderBookOutcome}
+                onDepthExpandedChange={setMobileOrderBookDepthExpanded}
+              />
+            </div>
+          </section>
 
-                  {/* Filters - Only show for Activity tab */}
-                  {activeTab === "activity" && (
-                    <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 w-full sm:w-auto">
-                      <Select
-                        value={marketFilter}
-                        onChange={setMarketFilter}
-                        options={marketOptions}
-                        placeholder="Select Market"
-                        className="w-full sm:min-w-[150px]"
-                      />
-                      <Select
-                        value={priceFilter}
-                        onChange={setPriceFilter}
-                        options={priceFilterOptions}
-                        placeholder="Select Price"
-                        className="w-full sm:min-w-[150px]"
-                      />
-                    </div>
-                  )}
-                </div>
+          {/* Comments / top holders / activity, and the order book beside them on desktop */}
+          <div className="mk-lower">
+            <section className="mk-feed" aria-label="Comments, top holders and activity">
+              <FeedTabs
+                tabs={[
+                  { key: "comments" as const, label: "Comments", count: commentsCount },
+                  { key: "holders" as const, label: "Top holders" },
+                  { key: "activity" as const, label: "Latest activity" },
+                ]}
+                active={activeTab}
+                onChange={setActiveTab}
+              />
 
-                {/* Content Area with Scroll */}
-                <div className="flex-1 min-h-0 overflow-y-auto rexmarkets-scroll-pane-y">
-                  {activeTab === "holders" ? (
-                    <TopHolders conditionId={conditionId} />
-                  ) : activeTab === "activity" ? (
-                    <ActivityFeed
-                      conditionId={conditionId}
-                      eventId={eventId}
-                      marketFilter={marketFilter}
-                      priceFilter={priceFilter}
-                    />
-                  ) : (
-                    <Comments 
-                      eventId={eventId || undefined} 
-                      seriesId={marketDetails?.series_id || undefined}
-                    />
-                  )}
-                </div>
-              </div>
-
-              {/* Desktop: Order Book moved here (swap with Buy/Sell) */}
-              <div className="hidden lg:flex w-[400px] flex-shrink-0 border-l border-white/10 flex-col min-h-0">
-                {/* Market Tabs - Show when there are more than 2 markets */}
-                {marketsForOrderBook.length > 2 && (
-                  <div className="flex-shrink-0 border-b border-white/10 px-4 py-2">
-                    <div className="flex items-center gap-1 overflow-x-auto custom-select-scrollbar">
-                      {marketsForOrderBook.map((market, index) => (
-                        <button
-                          key={market.clobTokenId}
-                          onClick={() => setSelectedMarketIndex(index)}
-                          className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-                            selectedMarketIndex === index
-                              ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                              : "text-white/60 hover:text-white/80"
-                          }`}
-                        >
-                          {market.marketTitle}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  <OrderBook
-                    clobTokenId={selectedMarketClobTokenId}
-                    yesPrice={currentYesPrice}
-                    noPrice={currentNoPrice}
-                    onBuyClick={handleOrderBookBuyClick}
-                    selectedOutcome={selectedOrderBookOutcome}
-                    showDepthToggle={false}
+              {/* Filters - Only show for Activity tab */}
+              {activeTab === "activity" && (
+                <div className="mk-feed__filters">
+                  <Select
+                    value={marketFilter}
+                    onChange={setMarketFilter}
+                    options={marketOptions}
+                    placeholder="Select Market"
+                    className="mk-select"
+                  />
+                  <Select
+                    value={priceFilter}
+                    onChange={setPriceFilter}
+                    options={priceFilterOptions}
+                    placeholder="Select Price"
+                    className="mk-select"
                   />
                 </div>
+              )}
+
+              <div className="mk-feed__body" role="tabpanel">
+                {activeTab === "holders" ? (
+                  <TopHolders conditionId={conditionId} />
+                ) : activeTab === "activity" ? (
+                  <ActivityFeed
+                    conditionId={conditionId}
+                    eventId={eventId}
+                    marketFilter={marketFilter}
+                    priceFilter={priceFilter}
+                  />
+                ) : (
+                  <Comments
+                    eventId={eventId || undefined}
+                    seriesId={marketDetails?.series_id || undefined}
+                  />
+                )}
               </div>
-            </div>
+            </section>
+
+            <section className="mk-book mk-book--side" aria-label="Order book">
+              <div className="mk-sec-head">
+                <span className="rx-eyebrow">Order book</span>
+              </div>
+              {outcomeTabs}
+              <OrderBook
+                clobTokenId={selectedMarketClobTokenId}
+                yesPrice={currentYesPrice}
+                noPrice={currentNoPrice}
+                onBuyClick={handleOrderBookBuyClick}
+                selectedOutcome={selectedOrderBookOutcome}
+                showDepthToggle={false}
+              />
+            </section>
           </div>
         </div>
       </div>
 
-      {/* Buy/Sell Modal - Mobile Only */}
+      {/* Buy/Sell sheet - phones only (opened from the order book) */}
       <BuySellModal
         isOpen={isBuySellModalOpen}
         onClose={() => setIsBuySellModalOpen(false)}
@@ -634,7 +579,7 @@ export default function PolymarketTradingInterface({
         currentNoPrice={currentNoPrice}
         onBuyClick={handleBuyClick}
         onSellClick={handleSellClick}
-        symbolImageUrl={marketDetails.symbol_image_url || undefined}
+        symbolImageUrl={symbolImageUrl}
         marketTitle={marketTitle || undefined}
         availableMarkets={availableMarkets}
         marketsForOrderBook={marketsForOrderBook}
@@ -642,12 +587,12 @@ export default function PolymarketTradingInterface({
         onMarketIndexChange={setSelectedMarketIndex}
         initialOutcome={modalInitialOutcome}
       />
-<PaywallModal
-      open={showPaywall}
-      onClose={() => setShowPaywall(false)}
-      context="rexmarkets"
-      paymentMetadata={userId ? { userId } : undefined}
-    />
+      <PaywallModal
+        open={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        context="rexmarkets"
+        paymentMetadata={userId ? { userId } : undefined}
+      />
     </div>
   );
 }

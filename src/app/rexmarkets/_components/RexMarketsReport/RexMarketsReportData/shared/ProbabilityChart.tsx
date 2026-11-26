@@ -54,6 +54,8 @@ type ProbabilityChartProps = {
   limitlessHistory?: LimitlessHistoryPoint[];
   /** Volume string for Limitless (e.g. volumeFormatted from market details) */
   limitlessVolumeFormatted?: string;
+  /** Tailwind height for the plot area (default h-[400px]); the Rex Pilot sidebar uses a shorter one. */
+  heightClassName?: string;
 };
 
 // Generate mock historical data for demonstration
@@ -179,6 +181,7 @@ export default function ProbabilityChart({
   limitlessMarketKeys,
   limitlessHistory,
   limitlessVolumeFormatted,
+  heightClassName = "h-[400px]",
 }: ProbabilityChartProps) {
   const [timeRange, setTimeRange] = useState<"1H" | "6H" | "1D" | "1W" | "1M" | "ALL">("ALL");
   const [hiddenMarketKeys, setHiddenMarketKeys] = useState<Set<string>>(new Set());
@@ -705,10 +708,10 @@ export default function ProbabilityChart({
     if (limitlessChartData && limitlessChartData.length > 0 && limitlessMarketKeys && limitlessMarketKeys.length > 0) {
       return (
         <div className="w-full">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-            <div className="text-white/80 text-sm">{formattedVolume}</div>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="rx-num text-[14px] font-semibold text-rx-text">{formattedVolume}</div>
           </div>
-          <div className="w-full h-[400px]">
+          <div className={`w-full ${heightClassName}`}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={limitlessChartData}
@@ -819,10 +822,10 @@ export default function ProbabilityChart({
     if (limitlessSingleData.length > 0) {
       return (
         <div className="w-full">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-            <div className="text-white/80 text-sm">{formattedVolume}</div>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="rx-num text-[14px] font-semibold text-rx-text">{formattedVolume}</div>
           </div>
-          <div className="w-full h-[400px]">
+          <div className={`w-full ${heightClassName}`}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={limitlessSingleData}
@@ -898,11 +901,11 @@ export default function ProbabilityChart({
     // Limitless but no data yet (loading or empty)
     return (
       <div className="w-full">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <div className="text-white/80 text-sm">{formattedVolume}</div>
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="rx-num text-[14px] font-semibold text-rx-text">{formattedVolume}</div>
         </div>
-        <div className="w-full h-[400px] flex items-center justify-center">
-          <div className="text-white/60">No chart data available</div>
+        <div className={`w-full ${heightClassName} flex items-center justify-center`}>
+          <div className="text-[13px] text-rx-text-3">No chart data available</div>
         </div>
       </div>
     );
@@ -913,26 +916,24 @@ export default function ProbabilityChart({
     if (isLoadingPolymarketChart) {
       return (
         <div className="w-full">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-            <div className="text-white/80 text-sm">{formattedVolume}</div>
-            <div className="flex items-center gap-1 bg-white/10 rounded p-1">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="rx-num text-[14px] font-semibold text-rx-text">{formattedVolume}</div>
+            <div className="rx-seg rx-seg--mono" role="group" aria-label="Chart range">
               {CHART_INTERVALS.map((range) => (
                 <button
                   key={range}
                   onClick={() => setTimeRange(range)}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                    timeRange === range
-                      ? "bg-[#ffc000] text-black"
-                      : "text-white/70 hover:text-white hover:bg-white/10"
-                  }`}
+                  type="button"
+                  aria-pressed={timeRange === range}
+                  className={`rx-seg__item${timeRange === range ? " is-active" : ""}`}
                 >
                   {range}
                 </button>
               ))}
             </div>
           </div>
-          <div className="w-full h-[400px] flex items-center justify-center">
-            <div className="text-white/60">Loading chart data...</div>
+          <div className={`w-full ${heightClassName} flex items-center justify-center`}>
+            <div className="text-[13px] text-rx-text-3">Loading chart data...</div>
           </div>
         </div>
       );
@@ -940,45 +941,41 @@ export default function ProbabilityChart({
     if (!chartDataPolymarket.length) {
       return (
         <div className="w-full">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-            <div className="text-white/80 text-sm">{formattedVolume}</div>
-            <div className="flex items-center gap-1 bg-white/10 rounded p-1">
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+            <div className="rx-num text-[14px] font-semibold text-rx-text">{formattedVolume}</div>
+            <div className="rx-seg rx-seg--mono" role="group" aria-label="Chart range">
               {CHART_INTERVALS.map((range) => (
                 <button
                   key={range}
                   onClick={() => setTimeRange(range)}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                    timeRange === range
-                      ? "bg-[#ffc000] text-black"
-                      : "text-white/70 hover:text-white hover:bg-white/10"
-                  }`}
+                  type="button"
+                  aria-pressed={timeRange === range}
+                  className={`rx-seg__item${timeRange === range ? " is-active" : ""}`}
                 >
                   {range}
                 </button>
               ))}
             </div>
           </div>
-          <div className="w-full h-[400px] flex items-center justify-center">
-            <div className="text-white/60">No chart data available</div>
+          <div className={`w-full ${heightClassName} flex items-center justify-center`}>
+            <div className="text-[13px] text-rx-text-3">No chart data available</div>
           </div>
         </div>
       );
     }
     return (
       <div className="w-full">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <div className="flex items-center gap-4">
-            <div className="text-white/80 text-sm">{formattedVolume}</div>
-            <div className="flex items-center gap-1 bg-white/10 rounded p-1">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            <div className="rx-num text-[14px] font-semibold text-rx-text">{formattedVolume}</div>
+            <div className="rx-seg rx-seg--mono" role="group" aria-label="Chart range">
               {CHART_INTERVALS.map((range) => (
                 <button
                   key={range}
                   onClick={() => setTimeRange(range)}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                    timeRange === range
-                      ? "bg-[#ffc000] text-black"
-                      : "text-white/70 hover:text-white hover:bg-white/10"
-                  }`}
+                  type="button"
+                  aria-pressed={timeRange === range}
+                  className={`rx-seg__item${timeRange === range ? " is-active" : ""}`}
                 >
                   {range}
                 </button>
@@ -986,7 +983,7 @@ export default function ProbabilityChart({
             </div>
           </div>
         </div>
-        <div className="w-full h-[400px]">
+        <div className={`w-full ${heightClassName}`}>
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={chartDataPolymarket}
@@ -1136,19 +1133,17 @@ export default function ProbabilityChart({
   if (isKalshiMode) {
     return (
       <div className="w-full">
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-          <div className="flex items-center gap-4">
-            <div className="text-white/80 text-sm">{formattedVolume}</div>
-            <div className="flex items-center gap-1 bg-white/10 rounded p-1">
+        <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="flex w-full flex-wrap items-center justify-between gap-2">
+            <div className="rx-num text-[14px] font-semibold text-rx-text">{formattedVolume}</div>
+            <div className="rx-seg rx-seg--mono" role="group" aria-label="Chart range">
               {CHART_INTERVALS.map((range) => (
                 <button
                   key={range}
                   onClick={() => setTimeRange(range)}
-                  className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                    timeRange === range
-                      ? "bg-[#ffc000] text-black"
-                      : "text-white/70 hover:text-white hover:bg-white/10"
-                  }`}
+                  type="button"
+                  aria-pressed={timeRange === range}
+                  className={`rx-seg__item${timeRange === range ? " is-active" : ""}`}
                 >
                   {range}
                 </button>
@@ -1157,11 +1152,11 @@ export default function ProbabilityChart({
           </div>
         </div>
         {kalshiTopMarkets.length === 0 ? (
-          <div className="w-full h-[400px] flex items-center justify-center">
-            <div className="text-white/60">No chart data available</div>
+          <div className={`w-full ${heightClassName} flex items-center justify-center`}>
+            <div className="text-[13px] text-rx-text-3">No chart data available</div>
           </div>
         ) : (
-          <div className="w-full h-[400px]">
+          <div className={`w-full ${heightClassName}`}>
             <ResponsiveContainer width="100%" height="100%">
               <LineChart
                 data={kalshiChartData}
@@ -1315,19 +1310,17 @@ export default function ProbabilityChart({
   return (
     <div className="w-full ">
       {/* Fallback mock chart (0–1) – only if not Kalshi/Polymarket/Limitless */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-        <div className="flex items-center gap-4">
-          <div className="text-white/80 text-sm">{formattedVolume}</div>
-          <div className="flex items-center gap-1 bg-white/10 rounded p-1">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div className="flex w-full flex-wrap items-center justify-between gap-2">
+          <div className="rx-num text-[14px] font-semibold text-rx-text">{formattedVolume}</div>
+          <div className="rx-seg rx-seg--mono" role="group" aria-label="Chart range">
             {CHART_INTERVALS.map((range) => (
               <button
                 key={range}
                 onClick={() => setTimeRange(range)}
-                className={`px-3 py-1 text-xs font-medium rounded transition-colors ${
-                  timeRange === range
-                    ? "bg-[#ffc000] text-black"
-                    : "text-white/70 hover:text-white hover:bg-white/10"
-                }`}
+                type="button"
+                  aria-pressed={timeRange === range}
+                  className={`rx-seg__item${timeRange === range ? " is-active" : ""}`}
               >
                 {range}
               </button>
@@ -1336,7 +1329,7 @@ export default function ProbabilityChart({
         </div>
       </div>
 
-      <div className="w-full h-[400px]">
+      <div className={`w-full ${heightClassName}`}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
             data={chartData}

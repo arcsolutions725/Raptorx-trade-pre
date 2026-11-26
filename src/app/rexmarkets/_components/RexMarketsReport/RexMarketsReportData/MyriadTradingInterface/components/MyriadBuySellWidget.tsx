@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo } from "react";
-import Image from "next/image";
+import { useState, useCallback, useMemo, useId } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePrivy } from "@privy-io/react-auth";
 import { formatPrice } from "@/utils/polymarketTrading";
@@ -18,19 +17,15 @@ import {
   showErrorNotification,
 } from "@/components/ui/notification";
 import LoginModal from "@/components/ui/modal/LoginModal";
+import { Select, type SelectOption } from "@/components/ui/Select";
+import { AmountField, PriceWell, SideSeg, TicketHead } from "../../shared/marketUi";
+import "@/styles/pages/market-venues-b.css";
 import {
   myriadBuyShareAmountWeiFromUsd,
   myriadPriceToWeiString,
   myriadSharesToWeiString,
 } from "@/lib/myriad/orderBookEip712";
 
-function OutcomeCheckIcon() {
-  return (
-    <svg className="h-4 w-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden>
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-    </svg>
-  );
-}
 /** Buy tab: user enters collateral notional (USD); shares = amount / price. */
 const MIN_BUY_USD = 0.01;
 
@@ -81,6 +76,7 @@ export default function MyriadBuySellWidget({
   const { placeOrder, isSubmitting: isClobSubmitting } = useMyriadOrder(ethersSigner);
   const { executeAmmTrade, isSubmitting: isAmmSubmitting } = useMyriadAmmTrade(ethersSigner);
   const isSubmitting = isClobSubmitting || isAmmSubmitting;
+  const amountId = `myriad-amount-${useId().replace(/:/g, "")}`;
   const queryClient = useQueryClient();
 
   const binaryMode = outcomeOptions.length <= 2;
@@ -378,21 +374,6 @@ export default function MyriadBuySellWidget({
     collateralDecimals,
   ]);
 
-  const outcomeSlot = (idx: number) => {
-    if (outcomeOptions.length === 2) return idx === 0 ? "yes" : "no";
-    return "neutral";
-  };
-
-  const outcomePillClass = (slot: "yes" | "no" | "neutral", selected: boolean) => {
-    if (!selected) {
-      return "bg-gray-600 text-white hover:bg-gray-500 active:scale-[0.98]";
-    }
-    if (slot === "no") {
-      return "bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-500/20";
-    }
-    return "bg-green-600 text-white hover:bg-green-700 shadow-lg shadow-green-500/20";
-  };
-
   const buyCtaLabel = (() => {
     if (!binaryMode) return multiSide === 1 ? "No" : "Yes";
     const t = outcomeOptions[orderOutcomeId]?.title?.trim();
@@ -400,248 +381,200 @@ export default function MyriadBuySellWidget({
     return orderOutcomeId === 1 ? "No" : "Yes";
   })();
 
+  /** Multi-outcome markets: outcome picker in the ticket row (same handler as the order book's picker). */
+  const outcomeSelectOptions: SelectOption[] = outcomeOptions.map((o) => ({
+    value: String(o.index),
+    label: o.title,
+  }));
+
+  const pctDisabled =
+    isSubmitting ||
+    !authenticated ||
+    (activeTab === "buy"
+      ? !collateralTokenAddress || collateralBalance <= 0
+      : sellAvailableShares <= 0 || portfolioLoading);
+
   return (
     <>
-      <div className="flex flex-col bg-[#050608]">
+      <div className="mk-ticket">
+        {/* Mini market head */}
         {marketTitle ? (
-          <div className="flex items-center gap-2 px-3 pt-3">
-            {symbolImageUrl ? (
-              <Image
-                src={symbolImageUrl}
-                alt=""
-                width={36}
-                height={36}
-                className="h-9 w-9 shrink-0 rounded-full object-cover p-0"
-              />
-            ) : (
-              <Image
-                src="/images/myriad.webp"
-                alt=""
-                width={36}
-                height={36}
-                className="h-9 w-9 shrink-0 rounded-lg object-cover p-0 opacity-90"
-              />
-            )}
-            <p className="min-w-0 flex-1 text-sm font-semibold leading-snug text-white line-clamp-2">{marketTitle}</p>
-          </div>
+          <TicketHead
+            imageUrl={symbolImageUrl || "/images/myriad.webp"}
+            title={marketTitle}
+            sub="Myriad"
+          />
         ) : null}
 
-        <div className={`flex border-b border-white/10 px-3 ${marketTitle ? "mt-2" : "pt-3"}`}>
-          <button
-            type="button"
-            onClick={() => setActiveTab("buy")}
-            className={`flex-1 px-2 py-2.5 text-sm font-semibold transition-colors rounded-t ${
-              activeTab === "buy"
-                ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                : "text-white/60 hover:text-white/80"
-            }`}
-          >
-            Buy
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab("sell")}
-            className={`flex-1 px-2 py-2.5 text-sm font-semibold transition-colors rounded-t ${
-              activeTab === "sell"
-                ? "text-[#ffc000] border-b-2 border-[#ffc000] bg-black/30"
-                : "text-white/60 hover:text-white/80"
-            }`}
-          >
-            Sell
-          </button>
+        {/* Buy / Sell (and the outcome picker on multi-outcome markets) */}
+        <div className="mk-ticket__row">
+          <SideSeg value={activeTab} onChange={setActiveTab} />
+          {!binaryMode ? (
+            <Select
+              value={String(selectedOutcomeIndex)}
+              onChange={(v) => onOutcomeIndexChange?.(Number(v))}
+              options={outcomeSelectOptions}
+              placeholder="Outcome"
+              className="mk-select"
+              searchable
+              searchPlaceholder="Search outcomes..."
+            />
+          ) : null}
         </div>
 
+        {/* Outcome buttons: the two outcomes (binary) or Yes / No on the picked outcome */}
         {binaryMode ? (
-          <div className="flex gap-3 bg-[#0a0a0a] p-3">
+          <div className="mk-yn" role="group" aria-label="Outcome">
             {outcomeOptions.map((o, idx) => {
               const selected = selectedOutcomeIndex === o.index;
-              const slot = outcomeSlot(idx);
               const label = o.title.length > 22 ? `${o.title.slice(0, 22)}…` : o.title;
+              const tone = outcomeOptions.length === 2 && idx === 1 ? "rx-no" : "rx-yes";
               return (
                 <button
                   key={o.index}
                   type="button"
                   onClick={() => onOutcomeIndexChange?.(o.index)}
-                  className={`relative flex-1 rounded-lg px-2 py-2 font-semibold transition-all ${outcomePillClass(slot, selected)}`}
+                  className={`${tone} ${tone}--l${selected ? " is-selected" : ""}`}
+                  aria-pressed={selected}
+                  title={o.title}
                 >
-                  <div className="flex flex-row items-center justify-center gap-2">
-                    {selected ? <OutcomeCheckIcon /> : null}
-                    <span className="min-w-0 truncate text-sm">{label}</span>
-                    <span className="shrink-0 text-sm font-bold tabular-nums">{formatPrice(o.price)}</span>
-                  </div>
+                  <span className="mkb-yn__name">{label}</span>{" "}
+                  <span className="rx-num">{formatPrice(o.price)}</span>
                 </button>
               );
             })}
           </div>
         ) : (
-          <div className="space-y-2 bg-[#0a0a0a] p-3">
-            <p className="text-[10px] uppercase tracking-wide text-white/40">Outcome</p>
-            <div className="flex gap-3">
-              {(
-                [
-                  { side: 0 as const, label: "Yes" },
-                  { side: 1 as const, label: "No" },
-                ] as const
-              ).map(({ side, label }) => {
-                const selected = multiSide === side;
-                const slot = side === 0 ? "yes" : "no";
-                const selectedOpt = outcomeOptions.find((o) => o.index === selectedOutcomeIndex);
-                const p = selectedOpt?.price ?? 0.5;
-                const pNo = Math.max(0.01, Math.min(0.99, 1 - p));
-                const px = side === 0 ? p : pNo;
-                return (
-                  <button
-                    key={side}
-                    type="button"
-                    onClick={() => setMultiSide(side)}
-                    className={`relative flex-1 rounded-lg px-2 py-2 font-semibold transition-all ${outcomePillClass(slot, selected)}`}
-                  >
-                    <div className="flex flex-row items-center justify-center gap-2">
-                      {selected ? <OutcomeCheckIcon /> : null}
-                      <span className="text-sm">{label}</span>
-                      <span className="shrink-0 text-sm font-bold tabular-nums">{formatPrice(px)}</span>
-                    </div>
-                  </button>
-                );
-              })}
-            </div>
-            <p className="text-[10px] text-white/40">Market: {selectedTitle}</p>
+          <div className="mk-yn" role="group" aria-label={`Outcome: ${selectedTitle}`}>
+            {(
+              [
+                { side: 0 as const, label: "Yes" },
+                { side: 1 as const, label: "No" },
+              ] as const
+            ).map(({ side, label }) => {
+              const selected = multiSide === side;
+              const tone = side === 0 ? "rx-yes" : "rx-no";
+              const selectedOpt = outcomeOptions.find((o) => o.index === selectedOutcomeIndex);
+              const p = selectedOpt?.price ?? 0.5;
+              const pNo = Math.max(0.01, Math.min(0.99, 1 - p));
+              const px = side === 0 ? p : pNo;
+              return (
+                <button
+                  key={side}
+                  type="button"
+                  onClick={() => setMultiSide(side)}
+                  className={`${tone} ${tone}--l${selected ? " is-selected" : ""}`}
+                  aria-pressed={selected}
+                >
+                  {label} <span className="rx-num">{formatPrice(px)}</span>
+                </button>
+              );
+            })}
           </div>
         )}
 
-        <div className="p-3 space-y-3">
-          {!canShow ? (
-            <p className="text-xs text-white/50 leading-relaxed">
-              {networkId <= 0
-                ? "Missing Myriad network id for this market."
-                : !marketSlug.trim()
-                  ? "Missing market slug."
-                  : isOrderBook
-                    ? "Could not resolve the on-chain market id for order-book orders."
-                    : "Market is not ready to trade."}
-            </p>
-          ) : (
-            <>
-              <div className="rounded-lg bg-white/5 p-3">
-                <p className="mb-1 text-xs text-white/60">Current Market Price</p>
-                <p className="text-lg font-bold tabular-nums text-white">{formatPrice(refPrice)}</p>
-                <p className="mt-1 text-[10px] text-white/35">
-                  {isOrderBook ? "Order book (CLOB)" : "AMM pool — trade uses quoted on-chain execution."}
+        {!canShow ? (
+          <p className="mkb-note">
+            {networkId <= 0
+              ? "Missing Myriad network id for this market."
+              : !marketSlug.trim()
+                ? "Missing market slug."
+                : isOrderBook
+                  ? "Could not resolve the on-chain market id for order-book orders."
+                  : "Market is not ready to trade."}
+          </p>
+        ) : (
+          <>
+            <div className="mkb-stack">
+              <PriceWell label="Current market price" value={formatPrice(refPrice)} />
+              <p className="rx-help">
+                {isOrderBook
+                  ? "Order book (CLOB)"
+                  : "AMM pool — trade uses quoted on-chain execution."}
+              </p>
+            </div>
+
+            <div className="mkb-stack">
+              <AmountField
+                id={amountId}
+                label={activeTab === "buy" ? "Amount ($)" : "Size (shares)"}
+                aside={
+                  activeTab === "buy" ? (
+                    <>
+                      Available ({buyBalanceLabel}):{" "}
+                      <b>
+                        {!authenticated
+                          ? "—"
+                          : collateralBalLoading
+                            ? "…"
+                            : collateralTokenAddress
+                              ? formatCurrency(collateralBalance)
+                              : "—"}
+                      </b>
+                    </>
+                  ) : (
+                    <>
+                      Available: Yes <b>{formatShares(availableYesShares)}</b>, No{" "}
+                      <b>{formatShares(availableNoShares)}</b>
+                      {portfolioLoading ? " …" : null}
+                    </>
+                  )
+                }
+                prefix={activeTab === "buy" ? "$" : undefined}
+                value={size}
+                onChange={(v) => setSize(v.replace(/[^0-9.]/g, ""))}
+                placeholder={activeTab === "buy" ? "0" : `Min ${MIN_ORDER_SIZE}`}
+                pcts={([25, 50, 75, 100] as const).map((pct) => ({
+                  label: pct === 100 ? "Max" : `${pct}%`,
+                  onClick: () => handlePercentClick(pct),
+                  disabled: pctDisabled,
+                }))}
+              />
+              {activeTab === "buy" ? (
+                <p className="rx-help">
+                  Collateral notional ({buyBalanceLabel}). Shares ≈ amount ÷ price.
                 </p>
-              </div>
+              ) : null}
+            </div>
 
-              <div>
-                <div className="flex items-start justify-between gap-2 mb-2">
-                  <label className="block text-sm text-white/80 shrink-0 pt-0.5">
-                    {activeTab === "buy" ? "Amount ($)" : "Size (shares)"}
-                  </label>
-                  <div className="flex flex-col items-end min-w-0">
-                    <span className="text-sm text-white/80 text-right">
-                      {activeTab === "buy" ? (
-                        <>
-                          Available ({buyBalanceLabel}):{" "}
-                          {!authenticated
-                            ? "—"
-                            : collateralBalLoading
-                              ? "…"
-                              : collateralTokenAddress
-                                ? formatCurrency(collateralBalance)
-                                : "—"}
-                        </>
-                      ) : (
-                        <>
-                          Available: Yes {formatShares(availableYesShares)}, No{" "}
-                          {formatShares(availableNoShares)}
-                          {portfolioLoading ? <span className="text-white/40"> …</span> : null}
-                        </>
-                      )}
-                    </span>
-                    <div className="flex flex-wrap justify-end gap-1 mt-1.5">
-                      {([25, 50, 75, 100] as const).map((pct) => (
-                        <button
-                          key={pct}
-                          type="button"
-                          onClick={() => handlePercentClick(pct)}
-                          disabled={
-                            isSubmitting ||
-                            !authenticated ||
-                            (activeTab === "buy"
-                              ? !collateralTokenAddress || collateralBalance <= 0
-                              : sellAvailableShares <= 0 || portfolioLoading)
-                          }
-                          className="py-1 px-2 rounded border border-[#ffc000]/40 bg-white/5 text-white/90 text-[10px] font-medium hover:bg-white/10 hover:border-[#ffc000]/70 disabled:opacity-45 disabled:cursor-not-allowed disabled:hover:bg-white/5 transition-colors"
-                        >
-                          {pct === 100 ? "Max" : `${pct}%`}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                </div>
-                <div className="relative">
-                  {activeTab === "buy" ? (
-                    <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/70 text-sm pointer-events-none">
-                      $
-                    </span>
-                  ) : null}
-                  <input
-                    type="text"
-                    inputMode="decimal"
-                    value={size}
-                    onChange={(e) => setSize(e.target.value.replace(/[^0-9.]/g, ""))}
-                    placeholder={activeTab === "buy" ? "0" : `Min ${MIN_ORDER_SIZE}`}
-                    className={`w-full rounded-xl border border-white/12 bg-[#0c0e12] py-2.5 text-sm text-white placeholder:text-white/25 outline-none focus:border-[#ffc000] focus:ring-1 focus:ring-[#ffc000]/25 ${
-                      activeTab === "buy" ? "pl-7 pr-3" : "px-3"
-                    }`}
-                  />
-                </div>
-                {activeTab === "buy" ? (
-                  <p className="mt-1 text-[10px] text-white/35">
-                    Collateral notional ({buyBalanceLabel}). Shares ≈ amount ÷ price.
-                  </p>
-                ) : null}
-              </div>
-
-              <div className="space-y-0.5 text-[10px] text-white/40">
+            {bestBid != null || bestAsk != null ? (
+              <dl className="mkb-kv">
                 {bestBid != null && (
-                  <div className="flex justify-between">
-                    <span>Best bid</span>
-                    <span className="tabular-nums text-white/60">{formatPrice(bestBid)}</span>
+                  <div>
+                    <dt>Best bid</dt>
+                    <dd className="rx-num">{formatPrice(bestBid)}</dd>
                   </div>
                 )}
                 {bestAsk != null && (
-                  <div className="flex justify-between">
-                    <span>Best ask</span>
-                    <span className="tabular-nums text-white/60">{formatPrice(bestAsk)}</span>
+                  <div>
+                    <dt>Best ask</dt>
+                    <dd className="rx-num">{formatPrice(bestAsk)}</dd>
                   </div>
                 )}
-              </div>
+              </dl>
+            ) : null}
 
-              <button
-                type="button"
-                disabled={
-                  isSubmitting ||
-                  !canShow ||
-                  isMyriadBuyButtonDisabled ||
-                  isMyriadSellButtonDisabled
-                }
-                onClick={() => void handleTrade()}
-                className={`w-full rounded-lg py-2.5 text-base font-bold transition-all active:scale-[0.98] disabled:pointer-events-none mt-10.5 ${
-                  activeTab === "buy"
-                    ? "bg-[#ffc000] text-black shadow-lg shadow-[#ffc000]/20 hover:bg-[#ffd000] hover:shadow-[#ffc000]/30 disabled:bg-[#ffc000]/30 disabled:text-white/70 disabled:opacity-50"
-                    : "bg-red-600 text-white shadow-lg shadow-red-500/20 hover:bg-red-700 disabled:opacity-45"
-                }`}
-              >
-                {isSubmitting
-                  ? isOrderBook
-                    ? "Signing…"
-                    : "Confirm…"
-                  : activeTab === "buy"
-                    ? `Buy ${buyCtaLabel}`
-                    : "Sell"}
-              </button>
-            </>
-          )}
-        </div>
+            <button
+              type="button"
+              disabled={
+                isSubmitting ||
+                !canShow ||
+                isMyriadBuyButtonDisabled ||
+                isMyriadSellButtonDisabled
+              }
+              onClick={() => void handleTrade()}
+              className="rx-btn rx-btn--primary rx-btn--l rx-btn--block mk-ticket__cta"
+            >
+              {isSubmitting
+                ? isOrderBook
+                  ? "Signing…"
+                  : "Confirm…"
+                : activeTab === "buy"
+                  ? `Buy ${buyCtaLabel}`
+                  : "Sell"}
+            </button>
+          </>
+        )}
       </div>
 
       <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />

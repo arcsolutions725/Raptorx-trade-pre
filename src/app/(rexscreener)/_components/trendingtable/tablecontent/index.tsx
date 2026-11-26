@@ -25,6 +25,7 @@ import {
   sortTokens,
   type TrendingToken,
   type Chain,
+  type SortField,
 } from "@/hooks/useTrendingTokens";
 import {
   useTrendingSparklines,
@@ -487,6 +488,195 @@ function ReportShortcut({
   );
 }
 
+/* ============================ Golden / Pump Reports view head ============================ */
+
+type ReportsType = "golden" | "pump";
+type ReportsLayout = "list" | "cards";
+
+const REPORTS_LAYOUT_KEY = "rx-rp-view";
+
+const REPORTS_SORTS: { field: SortField; label: string }[] = [
+  { field: "marketCap", label: "Market cap" },
+  { field: "volume", label: "Volume" },
+  { field: "liquidity", label: "Liquidity" },
+];
+
+function HeadIco({ d, size = 14 }: { d: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d={d}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.1"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+const ICO_DOC = "M6 3h9l4 4v14H6zM9 12h7M9 16h5";
+const ICO_TREND = "M3 17l6-6 4 4 8-8M15 7h6v6";
+const ICO_LIST = "M4 7h16M4 12h16M4 17h10";
+const ICO_GRID = "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z";
+
+/**
+ * Head of the Golden / Pump Reports view (design/reports.html): report type tabs with counts, the
+ * program blurb, then List / Cards, the count and the sort. Tabs switch the existing Golden / Pump
+ * filters; sort drives the same sort state as the table header.
+ */
+function ReportsViewHead({
+  type,
+  goldenCount,
+  pumpCount,
+  onSelectType,
+  layout,
+  onLayout,
+  countLabel,
+  sortField,
+  sortDirection,
+  onSort,
+  panelId,
+}: {
+  type: ReportsType;
+  goldenCount: number | null;
+  pumpCount: number | null;
+  onSelectType: (t: ReportsType) => void;
+  layout: ReportsLayout;
+  onLayout: (l: ReportsLayout) => void;
+  countLabel: string | null;
+  sortField: SortField | null;
+  sortDirection: "asc" | "desc" | null;
+  onSort: (field: SortField) => void;
+  panelId: string;
+}) {
+  const tabs: { key: ReportsType; label: string; icon: string; count: number | null }[] = [
+    { key: "golden", label: "Golden Reports", icon: ICO_DOC, count: goldenCount },
+    { key: "pump", label: "Pump Reports", icon: ICO_TREND, count: pumpCount },
+  ];
+  const onTabKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key !== "ArrowLeft" && e.key !== "ArrowRight") return;
+    e.preventDefault();
+    const next: ReportsType = type === "golden" ? "pump" : "golden";
+    onSelectType(next);
+    const btn = e.currentTarget.querySelector<HTMLButtonElement>(
+      `[data-rp-type="${next}"]`,
+    );
+    btn?.focus();
+  };
+  return (
+    <div className="rx-rp-head">
+      <div
+        className="rx-tabs rx-rp-tabs"
+        role="tablist"
+        aria-label="Report type"
+        onKeyDown={onTabKey}
+      >
+        {tabs.map((t) => {
+          const on = t.key === type;
+          return (
+            <button
+              key={t.key}
+              type="button"
+              role="tab"
+              id={`${panelId}-tab-${t.key}`}
+              data-rp-type={t.key}
+              aria-selected={on}
+              aria-controls={panelId}
+              tabIndex={on ? 0 : -1}
+              className={clsx("rx-tab", on && "is-active")}
+              onClick={() => onSelectType(t.key)}
+            >
+              <span className={clsx("rx-rp-tabs__ico", `is-${t.key}`)}>
+                <HeadIco d={t.icon} />
+              </span>
+              {t.label}
+              {t.count != null ? (
+                <span
+                  className={clsx(
+                    "rx-badge rx-num",
+                    t.key === "golden" ? "rx-badge--gold" : "rx-badge--neutral",
+                  )}
+                >
+                  {t.count}
+                </span>
+              ) : null}
+            </button>
+          );
+        })}
+      </div>
+
+      <div className={clsx("rx-raised rx-rp-intro", `is-${type}`)}>
+        <span className="rx-rp-intro__ico" aria-hidden="true">
+          <HeadIco d={type === "golden" ? ICO_DOC : ICO_TREND} size={17} />
+        </span>
+        <p>{type === "golden" ? GOLDEN_REPORTS_INFO_TEXT : PUMP_REPORTS_INFO_TEXT}</p>
+      </div>
+
+      <div className="rx-rp-tools">
+        <div className="rx-seg rx-rp-views" role="group" aria-label="Layout">
+          {(
+            [
+              { key: "list", label: "List", icon: ICO_LIST },
+              { key: "cards", label: "Cards", icon: ICO_GRID },
+            ] as const
+          ).map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              data-rp-view={v.key}
+              className={clsx("rx-seg__item", layout === v.key && "is-active")}
+              aria-pressed={layout === v.key}
+              aria-label={v.key === "list" ? "Screener list" : "Cards"}
+              onClick={() => onLayout(v.key)}
+            >
+              <HeadIco d={v.icon} size={15} />
+              <span>{v.label}</span>
+            </button>
+          ))}
+        </div>
+        <div className="rx-rp-tools__right">
+          {countLabel ? (
+            <span className="rx-rp-count rx-num" aria-live="polite">
+              {countLabel}
+            </span>
+          ) : null}
+          <div className="rx-seg rx-rp-sort" role="group" aria-label="Sort">
+            {REPORTS_SORTS.map((s) => {
+              const active = sortField === s.field && sortDirection !== null;
+              return (
+                <button
+                  key={s.field}
+                  type="button"
+                  className={clsx("rx-seg__item", active && "is-active")}
+                  aria-pressed={active}
+                  title={`Sort by ${s.label}`}
+                  aria-label={`Sort by ${s.label}${
+                    active
+                      ? sortDirection === "asc"
+                        ? ", low to high"
+                        : ", high to low"
+                      : ""
+                  }`}
+                  onClick={() => onSort(s.field)}
+                >
+                  {s.label}
+                  {active ? (
+                    <HeadIco
+                      d={sortDirection === "asc" ? "M8 14l4-4 4 4" : "M8 10l4 4 4-4"}
+                      size={12}
+                    />
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function TableEmptyState({
   title,
   body,
@@ -599,6 +789,26 @@ export function TrendingTableContent({
   const [pumpReportsOnly, setPumpReportsOnly] = useState(false);
   const [reportListsPrefetchReady, setReportListsPrefetchReady] =
     useState(false);
+
+  /** Golden / Pump Reports: List (screener rows) or Cards, remembered per browser like the design. */
+  const [reportsLayout, setReportsLayout] = useState<ReportsLayout>("cards");
+  const reportsPanelId = useId().replace(/:/g, "");
+  useEffect(() => {
+    try {
+      const v = window.localStorage.getItem(REPORTS_LAYOUT_KEY);
+      if (v === "list" || v === "cards") setReportsLayout(v);
+    } catch {
+      /* storage blocked: keep the default */
+    }
+  }, []);
+  const chooseReportsLayout = useCallback((v: ReportsLayout) => {
+    setReportsLayout(v);
+    try {
+      window.localStorage.setItem(REPORTS_LAYOUT_KEY, v);
+    } catch {
+      /* storage blocked: the choice lasts for this visit */
+    }
+  }, []);
 
   // Warm Golden/Pump lists after the main table starts, so a later tab click
   // is usually a cache hit. Clicking the tab still fetches immediately.
@@ -1483,17 +1693,42 @@ export function TrendingTableContent({
     );
   }
 
-  const tableCountLabel = goldenReportsOnly
+  const reportsMode = goldenReportsOnly || pumpReportsOnly;
+  const showReportCards = reportsMode && reportsLayout === "cards";
+
+  /** Golden / Pump: the count sits next to the sort in the view head ("8 reports"). */
+  const reportsCountLabel = goldenReportsOnly
     ? goldenTableStillLoading
       ? null
-      : `${displayRows.length} project${displayRows.length === 1 ? "" : "s"}`
+      : `${displayRows.length} report${displayRows.length === 1 ? "" : "s"}`
     : pumpReportsOnly
       ? pumpTableStillLoading
         ? null
-        : `${displayRows.length} project${displayRows.length === 1 ? "" : "s"}`
-      : isLoading && rows.length === 0
-        ? null
-        : `${displayRows.length} token${displayRows.length === 1 ? "" : "s"}`;
+        : `${displayRows.length} report${displayRows.length === 1 ? "" : "s"}`
+      : null;
+
+  const tableCountLabel = reportsMode
+    ? null
+    : isLoading && rows.length === 0
+      ? null
+      : `${displayRows.length} token${displayRows.length === 1 ? "" : "s"}`;
+
+  /** Tab badges: the loaded list when we have it, else the registry size. */
+  const goldenTabCount = Array.isArray(goldenScreenerPayload?.items)
+    ? goldenBaseItems.length
+    : goldenRegistryCount > 0
+      ? goldenRegistryCount
+      : null;
+  const pumpTabCount = Array.isArray(pumpScreenerPayload?.items)
+    ? pumpBaseItems.length
+    : pumpRegistryCount > 0
+      ? pumpRegistryCount
+      : null;
+
+  const selectReportsType = (t: ReportsType) => {
+    if (t === "golden" && !goldenReportsOnly) toggleGoldenReports();
+    if (t === "pump" && !pumpReportsOnly) togglePumpReports();
+  };
 
   /* Pinned rank + token columns only turn opaque while the table actually scrolls sideways. */
   const pinStyle = {
@@ -1730,7 +1965,27 @@ export function TrendingTableContent({
             overscrollBehaviorY: "contain",
           }}
         >
-          <div className="sticky top-0 z-40 overflow-hidden bg-[rgba(9,9,9,0.86)] backdrop-blur-md">
+          {reportsMode ? (
+            <ReportsViewHead
+              type={goldenReportsOnly ? "golden" : "pump"}
+              goldenCount={goldenTabCount}
+              pumpCount={pumpTabCount}
+              onSelectType={selectReportsType}
+              layout={reportsLayout}
+              onLayout={chooseReportsLayout}
+              countLabel={reportsCountLabel}
+              sortField={sortField}
+              sortDirection={sortDirection}
+              onSort={onSort}
+              panelId={reportsPanelId}
+            />
+          ) : null}
+
+          {/* Column header: the list only (cards carry their own labels) */}
+          <div
+            className="sticky top-0 z-40 overflow-hidden bg-[rgba(9,9,9,0.86)] backdrop-blur-md"
+            hidden={showReportCards}
+          >
             <div
               ref={headerContentRef}
               className="will-change-transform"
@@ -1757,7 +2012,17 @@ export function TrendingTableContent({
               overscrollBehaviorX: "contain",
             }}
           >
-            <div ref={contentRef} className="w-full align-top">
+            <div
+              ref={contentRef}
+              className="w-full align-top"
+              {...(reportsMode
+                ? {
+                    role: "tabpanel",
+                    id: reportsPanelId,
+                    "aria-labelledby": `${reportsPanelId}-tab-${goldenReportsOnly ? "golden" : "pump"}`,
+                  }
+                : {})}
+            >
               {!goldenReportsOnly &&
                 !pumpReportsOnly &&
                 !isLoading &&
@@ -1820,7 +2085,53 @@ export function TrendingTableContent({
                 : pumpReportsOnly
                   ? !pumpTableStillLoading && !pumpScreenerError
                   : !isLoading && !isError) &&
-                displayRows.length > 0 && (
+                displayRows.length > 0 &&
+                showReportCards && (
+                  <ul className="rx-rp-grid" aria-label={goldenReportsOnly ? "Golden Reports" : "Pump Reports"}>
+                    {displayRows.map((t, i) => {
+                      const sk = trendSparklineCacheKey(t);
+                      return (
+                        <TableRow
+                          key={t.tokenAddress ?? `${t.symbol ?? "card"}-${i}`}
+                          layout="card"
+                          cardKind={goldenReportsOnly ? "golden" : "pump"}
+                          token={t}
+                          rank={t._rank ?? i + 1}
+                          generateFromToken={generateFromToken}
+                          adminGenerateAndStoreFromToken={
+                            adminGenerateAndStoreFromToken
+                          }
+                          onOpenChart={handleOpenChart}
+                          currentUserId={currentUserId}
+                          isAdmin={isAdmin}
+                          index={i}
+                          showChainBadge
+                          sparklineY={
+                            sk && sparklineSeries[sk]?.length
+                              ? sparklineSeries[sk]
+                              : undefined
+                          }
+                          sparklinesFetching={sparklinesFetching}
+                          useGoldenGenerateArt={goldenReportsOnly}
+                          usePumpGenerateArt={pumpReportsOnly}
+                          ageLoading={
+                            (goldenAgesLoading || pumpAgesLoading) &&
+                            !hasUsableTokenCreatedAt(t.createdAt)
+                          }
+                          marketLoading={false}
+                        />
+                      );
+                    })}
+                  </ul>
+                )}
+
+              {(goldenReportsOnly
+                ? !goldenTableStillLoading && !goldenScreenerError
+                : pumpReportsOnly
+                  ? !pumpTableStillLoading && !pumpScreenerError
+                  : !isLoading && !isError) &&
+                displayRows.length > 0 &&
+                !showReportCards && (
                 <div className="w-full">
                   {displayRows.map((t, i) => {
                     const sk = trendSparklineCacheKey(t);
@@ -1904,22 +2215,8 @@ export function TrendingTableContent({
             />
           </div>
         ) : null
-      ) : (
-        <div className="rx-small rx-num shrink-0 px-[var(--rx-gutter)] py-3 text-rx-text-3">
-          {goldenReportsOnly &&
-            (goldenTableStillLoading
-              ? "…"
-              : `Golden Reports: ${displayRows.length} project${
-                  displayRows.length === 1 ? "" : "s"
-                }`)}
-          {pumpReportsOnly &&
-            (pumpTableStillLoading
-              ? "…"
-              : `Pump Reports: ${displayRows.length} project${
-                  displayRows.length === 1 ? "" : "s"
-                }`)}
-        </div>
-      )}
+      ) : null}
+      {/* Golden / Pump: the count lives in the view head, next to the sort. */}
     </div>
   );
 }

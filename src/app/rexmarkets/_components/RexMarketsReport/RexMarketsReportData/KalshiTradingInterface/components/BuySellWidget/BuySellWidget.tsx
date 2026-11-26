@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import Image from "next/image";
+import { useState, useMemo, useCallback, useEffect, useRef, useId } from "react";
 import { formatCurrency, formatShares } from "@/utils/format";
 import { calculateTotalCost, convertCentsToPrice } from "@/utils/order";
 import {
@@ -12,6 +11,14 @@ import {
   MIN_ORDER_SIZE,
 } from "@/utils/validation";
 import { Select, SelectOption } from "@/components/ui/Select";
+import {
+  AmountField,
+  PriceWell,
+  RegionBlockedNotice,
+  SideSeg,
+  TicketHead,
+  YesNoPair,
+} from "../../../shared/marketUi";
 import { formatPrice } from "@/utils/polymarketTrading";
 import { usePrivy } from "@privy-io/react-auth";
 import {
@@ -92,6 +99,7 @@ export default function BuySellWidget({
   initialOutcome,
 }: BuySellWidgetProps) {
   const [activeTab, setActiveTab] = useState<"buy" | "sell">("buy");
+  const amountUid = useId();
   const [selectedOutcome, setSelectedOutcome] = useState<"Yes" | "No" | null>(
     initialOutcome || null,
   );
@@ -866,76 +874,31 @@ export default function BuySellWidget({
   };
 
   const disableReason = getDisableReason();
+  const amountId = `kalshi-amount-${amountUid.replace(/:/g, "")}`;
 
   return (
-    <div className="flex flex-col min-h-full border border-white/10 rounded-lg overflow-hidden">
-      {/* Profile Section - pr-12 on mobile for modal close button; title max-w on mobile */}
-      <div className="flex items-center gap-3 px-4 py-3 pr-12 lg:pr-4 border-b border-white/10">
-        {symbolImageUrl ? (
-          <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
-            <Image
-              src={symbolImageUrl}
-              alt={marketTitle || "Market"}
-              width={40}
-              height={40}
-              className="object-cover"
-              unoptimized
-            />
-          </div>
-        ) : (
-          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0 bg-white/10">
-            <span className="text-white/60 text-xs">?</span>
-          </div>
-        )}
-        <div className="flex-1 min-w-0 max-w-[65%] lg:max-w-none">
-          <div className="text-sm font-medium text-white truncate">
-            {marketTitle || "Market"}
-          </div>
-          <div className="text-xs text-white/60">No change</div>
-        </div>
-      </div>
+    <div className="mk-ticket">
+      {/* Mini market head */}
+      <TicketHead imageUrl={symbolImageUrl} title={marketTitle || "Market"} sub="No change" />
 
-      {/* Buy/Sell Tabs and Market Dropdown */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => {
-              setActiveTab("buy");
-              setSelectedOutcome(null);
-            }}
-            className={`px-4 py-2 text-sm font-semibold transition-colors rounded-t ${
-              activeTab === "buy"
-                ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                : "text-white/60 hover:text-white/80"
-            }`}
-          >
-            Buy
-          </button>
-          <button
-            onClick={() => {
-              setActiveTab("sell");
-              setSelectedOutcome(null);
-            }}
-            className={`px-4 py-2 text-sm font-semibold transition-colors rounded-t ${
-              activeTab === "sell"
-                ? "text-[#ffc000] border-b-2 border-[#ffc000] bg-[#0a0a0a]"
-                : "text-white/60 hover:text-white/80"
-            }`}
-          >
-            Sell
-          </button>
-        </div>
-        <div className="min-w-[140px] max-w-[200px] flex-1">
-          <Select
-            value={selectedMarketValue}
-            onChange={handleMarketChange}
-            options={marketOptions}
-            placeholder="Market"
-            className="w-full"
-            searchable
-            searchPlaceholder="Search options..."
-          />
-        </div>
+      {/* Buy / Sell and the outcome picker */}
+      <div className="mk-ticket__row">
+        <SideSeg
+          value={activeTab}
+          onChange={(side) => {
+            setActiveTab(side);
+            setSelectedOutcome(null);
+          }}
+        />
+        <Select
+          value={selectedMarketValue}
+          onChange={handleMarketChange}
+          options={marketOptions}
+          placeholder="Market"
+          className="mk-select"
+          searchable
+          searchPlaceholder="Search options..."
+        />
       </div>
 
       {/* KYC required banner on Buy tab (Kalshi/DFlow requirement) */}
@@ -944,11 +907,11 @@ export default function BuySellWidget({
         solanaAddress &&
         !isLoadingProof &&
         !isProofVerified && (
-          <div className="mx-4 mt-2 p-3 rounded-lg bg-amber-500/10 border border-amber-500/30 flex items-center justify-between gap-3">
-            <span className="text-sm text-amber-200">
+          <div className="mk-kyc">
+            <p>
               Verify your identity to buy on Kalshi. Selling does not require
               verification.
-            </span>
+            </p>
             <button
               type="button"
               onClick={async () => {
@@ -961,202 +924,100 @@ export default function BuySellWidget({
                   );
                 }
               }}
-              className="shrink-0 py-1.5 px-3 rounded-md bg-amber-500 text-black text-sm font-medium hover:opacity-90"
+              className="rx-btn rx-btn--primary rx-btn--s"
             >
               Verify now
             </button>
           </div>
         )}
 
-      {/* Yes/No Selection Buttons - same as Polymarket */}
-      <div className="p-4 flex gap-3 bg-[#0a0a0a]">
-        <button
-          onClick={() => handleOutcomeSelect("Yes")}
-          className={`flex-1 py-2 px-2 rounded-lg font-semibold text-white transition-all relative ${
-            selectedOutcome === "Yes"
-              ? "bg-green-600 hover:bg-green-700 shadow-lg shadow-green-500/20"
-              : "bg-gray-600 hover:bg-gray-500 active:scale-[0.98]"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-center gap-2">
-            {selectedOutcome === "Yes" && (
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={3}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            )}
-            <span className="text-sm">Yes</span>
-            <span className="text-sm font-bold">
-              {formatPrice(currentYesPrice)}
-            </span>
-          </div>
-        </button>
-        <button
-          onClick={() => handleOutcomeSelect("No")}
-          className={`flex-1 py-2 px-2 rounded-lg font-semibold text-white transition-all relative ${
-            selectedOutcome === "No"
-              ? "bg-red-600 hover:bg-red-700 shadow-lg shadow-red-500/20"
-              : "bg-gray-600 hover:bg-gray-500 active:scale-[0.98]"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-center gap-2">
-            {selectedOutcome === "No" && (
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={3}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            )}
-            <span className="text-sm">No</span>
-            <span className="text-sm font-bold">
-              {formatPrice(currentNoPrice)}
-            </span>
-          </div>
-        </button>
-      </div>
+      {/* Yes / No */}
+      <YesNoPair
+        selected={selectedOutcome}
+        yesPrice={formatPrice(currentYesPrice)}
+        noPrice={formatPrice(currentNoPrice)}
+        onSelect={handleOutcomeSelect}
+      />
 
       {/* Order type: market only (Limit option hidden for Kalshi) */}
 
-      {/* Size Input Section - same as Polymarket */}
-      <div className="px-4 py-4 border-t border-white/10">
-        <div className="mb-3 bg-white/5 rounded-lg p-3">
-          <p className="text-xs text-white/60 mb-1">Current Market Price</p>
-          <p className="text-lg font-bold text-white">
-            {formatPrice(
-              selectedOutcome === "Yes" ? currentYesPrice : currentNoPrice,
-            )}
-          </p>
-        </div>
+      <PriceWell
+        label="Current market price"
+        value={formatPrice(
+          selectedOutcome === "Yes" ? currentYesPrice : currentNoPrice,
+        )}
+      />
 
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm text-white/80">
-              {activeTab === "buy" ? "Amount ($)" : "Size (shares)"}
-            </label>
-            {solanaAddress && (
-              <div className="flex flex-col items-start">
-                <span className="text-sm text-white/80">
-                  {activeTab === "buy" ? (
-                    <>Available: {formatCurrency(usdcBalance?.amount ?? 0)}</>
-                  ) : selectedOutcome ? (
-                    <>Available shares: {formatShares(availableShares)}</>
-                  ) : (
-                    <>
-                      Available: Yes {formatShares(availableSharesYes)}, No{" "}
-                      {formatShares(availableSharesNo)}
-                    </>
-                  )}
-                </span>
-                <div className="flex gap-1 mt-1.5">
-                  {([25, 50, 75, 100] as const).map((pct) => (
-                    <button
-                      key={pct}
-                      type="button"
-                      onClick={() => handlePercentClick(pct)}
-                      disabled={
-                        isSubmitting ||
-                        (activeTab === "buy"
-                          ? (usdcBalance?.amount ?? 0) <= 0
-                          : availableShares <= 0)
-                      }
-                      className="py-1 px-2 rounded border border-green-500/50 bg-white/5 text-white/90 text-[10px] font-medium hover:bg-white/10 hover:border-green-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white/5 transition-colors"
-                    >
-                      {pct === 100 ? "Max" : `${pct}%`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-          <div className="relative">
-            {activeTab === "buy" && (
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white text-sm pointer-events-none">
-                $
+      <AmountField
+        id={amountId}
+        label={activeTab === "buy" ? "Amount ($)" : "Size (shares)"}
+        aside={
+          solanaAddress ? (
+            activeTab === "buy" ? (
+              <>Available: <b>{formatCurrency(usdcBalance?.amount ?? 0)}</b></>
+            ) : selectedOutcome ? (
+              <>Available shares: <b>{formatShares(availableShares)}</b></>
+            ) : (
+              <>
+                Available: Yes <b>{formatShares(availableSharesYes)}</b>, No{" "}
+                <b>{formatShares(availableSharesNo)}</b>
+              </>
+            )
+          ) : undefined
+        }
+        prefix={activeTab === "buy" ? "$" : undefined}
+        value={size}
+        onChange={handleSizeChange}
+        disabled={isSubmitting}
+        pcts={
+          solanaAddress
+            ? ([25, 50, 75, 100] as const).map((pct) => ({
+                label: pct === 100 ? "Max" : `${pct}%`,
+                onClick: () => handlePercentClick(pct),
+                disabled:
+                  isSubmitting ||
+                  (activeTab === "buy"
+                    ? (usdcBalance?.amount ?? 0) <= 0
+                    : availableShares <= 0),
+              }))
+            : undefined
+        }
+      />
+
+      {authenticated && solanaAddress && (
+        <p className="mk-balance">
+          USDC balance <b>${usdcBalance?.formatted ?? "0.00"}</b> (
+          <b>{solBalance?.formatted ?? "0"} SOL</b>)
+        </p>
+      )}
+
+      {/* Order Summary / To Win - same as Polymarket */}
+      {selectedOutcome && inputValue > 0 && (
+        <>
+          {activeTab === "buy" && effectivePriceForCalc > 0 && (
+            <div className="rx-well mk-win">
+              <span className="mk-win__label">
+                To win
+                <span>Avg. price {formatPrice(effectivePriceForCalc)}</span>
               </span>
-            )}
-            <input
-              type="text"
-              value={size}
-              onChange={(e) => handleSizeChange(e.target.value)}
-              placeholder="0"
-              className={`w-full py-2 bg-transparent border border-white/10 rounded-lg focus:outline-none focus:border-[#ffc000] text-white text-sm placeholder-white/30 ${
-                activeTab === "buy" ? "pl-6" : "px-3"
-              }`}
-              disabled={isSubmitting}
-            />
-          </div>
-        </div>
-        {authenticated && solanaAddress && (
-          <div className="shrink-0">
-            <div className="text-xs text-white/60 space-y-1">
-              <div>
-                USDC Balance:{" "}
-                <span className="text-white font-medium">
-                  ${usdcBalance?.formatted ?? "0.00"}
-                </span>
-                (
-                <span className="text-white font-medium">
-                  {solBalance?.formatted ?? "0"} SOL
-                </span>
-                )
-              </div>
+              <span className="mk-win__value">
+                {formatCurrency(inputValue / effectivePriceForCalc)}
+              </span>
             </div>
-          </div>
-        )}
-
-        {/* Order Summary / To Win - same as Polymarket */}
-        {selectedOutcome && inputValue > 0 && (
-          <>
-            {activeTab === "buy" && effectivePriceForCalc > 0 && (
-              <div className="mt-4 bg-white/5 rounded-lg p-3 border border-white/10">
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-sm text-white/60">To win</span>
-                    <span className="text-xs text-white/60">
-                      Avg. Price {formatPrice(effectivePriceForCalc)}
-                    </span>
-                  </div>
-                  <span className="text-2xl font-bold text-green-500">
-                    {formatCurrency(inputValue / effectivePriceForCalc)}
-                  </span>
-                </div>
-              </div>
-            )}
-            {activeTab === "sell" && (
-              <div className="mt-4 bg-white/5 rounded-lg p-3 border border-white/10">
-                <div className="flex items-center justify-between">
-                  <div className="flex flex-col">
-                    <span className="text-sm text-white">You'll receive</span>
-                    <span className="text-xs text-white/60">
-                      Avg. Price {formatPrice(effectivePriceForCalc)}
-                    </span>
-                  </div>
-                  <span className="text-2xl font-bold text-green-500">
-                    {formatCurrency(inputValue * effectivePriceForCalc)}
-                  </span>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+          )}
+          {activeTab === "sell" && (
+            <div className="rx-well mk-win">
+              <span className="mk-win__label">
+                You&apos;ll receive
+                <span>Avg. price {formatPrice(effectivePriceForCalc)}</span>
+              </span>
+              <span className="mk-win__value">
+                {formatCurrency(inputValue * effectivePriceForCalc)}
+              </span>
+            </div>
+          )}
+        </>
+      )}
 
       {/* {isSubmitting && progressStep !== "idle" && (
         <div className="px-4 py-2 border-t border-white/10">
@@ -1169,28 +1030,25 @@ export default function BuySellWidget({
         </div>
       )} */}
 
-      {/* Spacer so Place Order stays at bottom when widget fills column height */}
-      <div className="flex-1 min-h-[1px]" aria-hidden="true" />
+      {/* Region-blocked notice (design/blocked.html, compact) */}
+      {isKalshiGeoblocked && (
+        <RegionBlockedNotice country={kalshiGeoblockStatus?.country} />
+      )}
 
-      <div className="p-4 border-t border-white/10 flex-shrink-0">
-        <button
-          onClick={handleTrade}
-          disabled={isTradeDisabled}
-          className={`w-full py-2.5 px-4 rounded-lg font-bold text-base transition-all ${
-            isTradeDisabled
-              ? "bg-[#ffc000]/30 cursor-not-allowed opacity-50 text-white/70"
-              : "bg-[#ffc000] hover:bg-[#ffd000] shadow-lg shadow-[#ffc000]/20 hover:shadow-[#ffc000]/30 active:scale-[0.98] text-black"
-          }`}
-        >
-          {isSubmitting
-            ? "Submitting..."
-            : !authenticated
-              ? activeTab === "buy"
-                ? "Place Order"
-                : "Sell"
-                : disableReason || (activeTab === "buy" ? "Place Order" : "Sell")}
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={handleTrade}
+        disabled={isTradeDisabled}
+        className="rx-btn rx-btn--primary rx-btn--l rx-btn--block mk-ticket__cta"
+      >
+        {isSubmitting
+          ? "Submitting..."
+          : !authenticated
+            ? activeTab === "buy"
+              ? "Place order"
+              : "Sell"
+              : disableReason || (activeTab === "buy" ? "Place order" : "Sell")}
+      </button>
 
       <LoginModal
         isOpen={showLoginModal}
@@ -1199,28 +1057,26 @@ export default function BuySellWidget({
 
       {/* Proof KYC modal: required for Kalshi prediction market buying */}
       {showProofKycModal && (
-        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4">
+        <div className="mk-modal mk-modal--center">
+          <div className="mk-modal__scrim" aria-hidden="true" />
           <div
-            className="rounded-lg border border-white/20 bg-[#0d0d0d] p-6 max-w-md w-full shadow-xl"
+            className="mk-dialog"
             role="dialog"
+            aria-modal="true"
             aria-labelledby="proof-kyc-title"
           >
-            <h2
-              id="proof-kyc-title"
-              className="text-lg font-semibold text-white mb-2"
-            >
-              Identity verification required
-            </h2>
-            <p className="text-sm text-white/80 mb-4">
+            <span className="rx-eyebrow">Kalshi</span>
+            <h2 id="proof-kyc-title">Identity verification required</h2>
+            <p>
               Kalshi requires identity verification (KYC) to buy on prediction
               markets. You can still sell without verification. Complete
               verification once to keep buying.
             </p>
-            <div className="flex gap-3">
+            <div className="mk-dialog__acts">
               <button
                 type="button"
                 onClick={() => setShowProofKycModal(false)}
-                className="flex-1 py-2.5 rounded-lg border border-white/20 text-white/90 hover:bg-white/10 transition"
+                className="rx-btn rx-btn--secondary"
               >
                 Cancel
               </button>
@@ -1236,7 +1092,7 @@ export default function BuySellWidget({
                     );
                   }
                 }}
-                className="flex-1 py-2.5 rounded-lg bg-[#14F195] text-black font-medium hover:opacity-90 transition"
+                className="rx-btn rx-btn--primary"
               >
                 Complete KYC
               </button>

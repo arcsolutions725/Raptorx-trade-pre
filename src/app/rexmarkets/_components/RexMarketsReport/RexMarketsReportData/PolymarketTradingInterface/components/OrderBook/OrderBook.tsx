@@ -136,142 +136,117 @@ export default function OrderBook({
   };
 
   return (
-    <div
-      className={`w-full flex-shrink-0 flex flex-col min-h-0 ${
-        effectiveExpanded ? "h-full" : "h-auto"
-      }`}
-    >
-      <div className="flex-shrink-0 px-4 py-3 border-b border-white/10">
+    <div className={`mk-ob${effectiveExpanded ? " mk-ob--full" : ""}`}>
+      <div className="mk-ob__top">
         {/* Outcome Buttons Header — desktop only (mobile uses Buy/Sell widget) */}
-        <div className="hidden lg:flex gap-2">
+        <div className="mk-ob__buy">
           <button
             type="button"
             onClick={() => onBuyClick?.("Yes")}
-            className={`flex-1 py-1.5 px-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded transition-all text-xs ${
-              selectedOutcome === "Yes" ? "opacity-100" : "opacity-50"
-            }`}
+            className={`rx-yes${selectedOutcome === "Yes" ? " is-selected" : ""}`}
+            aria-pressed={selectedOutcome === "Yes"}
           >
-            Buy Yes {formatPriceCents(yesPrice)}
+            Buy Yes <span className="rx-num">{formatPriceCents(yesPrice)}</span>
           </button>
           <button
             type="button"
             onClick={() => onBuyClick?.("No")}
-            className={`flex-1 py-1.5 px-2 bg-red-600 hover:bg-red-700 text-white font-medium rounded transition-all text-xs ${
-              selectedOutcome === "No" ? "opacity-100" : "opacity-50"
-            }`}
+            className={`rx-no${selectedOutcome === "No" ? " is-selected" : ""}`}
+            aria-pressed={selectedOutcome === "No"}
           >
-            Buy No {formatPriceCents(noPrice)}
+            Buy No <span className="rx-num">{formatPriceCents(noPrice)}</span>
           </button>
         </div>
         {showDepthToggle ? (
-          <div className="flex justify-center mt-3">
-            <button
-              type="button"
-              onClick={toggleDepth}
-              aria-expanded={depthExpanded}
-              className="text-xs font-medium text-[#ffc000] hover:text-[#ffc000]/85 border border-white/20 rounded-md px-3 py-1.5 transition-colors"
-            >
-              {depthExpanded ? "Minimize" : "Show order book"}
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={toggleDepth}
+            aria-expanded={depthExpanded}
+            className="rx-btn rx-btn--secondary rx-btn--s mk-ob__toggle"
+          >
+            {depthExpanded ? "Minimize" : "Show order book"}
+          </button>
         ) : null}
       </div>
 
       {effectiveExpanded ? (
-      <div className="flex-1 overflow-y-auto min-h-0 rexmarkets-scroll-pane-y">
-        <div className="px-2 py-2">
-          <div className="text-xs text-white/60 mb-2 px-2 flex justify-between">
-            <span>Price (¢)</span>
-            <span>Shares</span>
-            <span>Total (USD)</span>
-          </div>
+      <div className="mk-ob__body">
+        <div className="mk-ob__cols" aria-hidden="true">
+          <span>Price (¢)</span>
+          <span>Shares</span>
+          <span>Total (USD)</span>
+        </div>
 
-          {/* Asks (Sell Orders) - Top */}
-          <div className="space-y-0.5 mb-4">
-            <div className="text-xs font-semibold text-red-400 px-2 mb-1">
-              Asks {selectedOutcome === "Yes" ? "(Sell Yes)" : "(Sell No)"}
+        {/* Asks (Sell Orders) - Top */}
+        <div className="mk-ob__group mk-ob__group--ask">
+          <div className="mk-ob__label">
+            Asks {selectedOutcome === "Yes" ? "(Sell Yes)" : "(Sell No)"}
+          </div>
+          {isLoadingOrderBook ? (
+            <div className="mk-ob__msg">Loading...</div>
+          ) : orderBookError ? (
+            <div className="mk-ob__msg mk-ob__msg--error">
+              Error loading orders
             </div>
-            {isLoadingOrderBook ? (
-              <div className="text-xs text-white/60 px-2 py-1">Loading...</div>
-            ) : orderBookError ? (
-              <div className="text-xs text-red-400 px-2 py-1">
-                Error loading orders
+          ) : orderBook.asks.length > 0 ? (
+            orderBook.asks.map((ask, idx) => (
+              <div key={idx} className="mk-ob__row">
+                <span>{formatPrice(ask.price)}</span>
+                <span>
+                  {ask.size.toLocaleString(undefined, {
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+                <span>{formatCurrencyWithCommas(ask.total)}</span>
               </div>
-            ) : orderBook.asks.length > 0 ? (
-              orderBook.asks.map((ask, idx) => (
-                <div
-                  key={idx}
-                  className="flex justify-between text-xs px-2 py-0.5 bg-red-500/10 hover:bg-red-500/20 cursor-pointer"
-                >
-                  <span className="text-red-400 font-medium">
-                    {formatPrice(ask.price)}
-                  </span>
-                  <span className="text-white/80">
-                    {ask.size.toLocaleString(undefined, {
-                      maximumFractionDigits: 2,
-                    })}
-                  </span>
-                  <span className="text-white/60">
-                    {formatCurrencyWithCommas(ask.total)}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <div className="text-xs text-white/60 px-2 py-1">No asks</div>
-            )}
+            ))
+          ) : (
+            <div className="mk-ob__msg">No asks</div>
+          )}
+        </div>
+
+        {/* Spread */}
+        {orderBook.bids.length > 0 &&
+        orderBook.asks.length > 0 &&
+        orderBookData ? (
+          <div className="mk-ob__spread">
+            Spread <b>{formatPrice(orderBookData.spread || 0)}</b>
+            {orderBookData.spreadPercent ? (
+              <span className="rx-num">
+                ({orderBookData.spreadPercent.toFixed(2)}%)
+              </span>
+            ) : null}
           </div>
+        ) : (
+          <div className="mk-ob__spread" aria-hidden="true" />
+        )}
 
-          {/* Spread */}
-          {orderBook.bids.length > 0 &&
-            orderBook.asks.length > 0 &&
-            orderBookData && (
-              <div className="text-xs text-center py-2 border-y border-white/10 flex flrex-row items-center gap-1 justify-center">
-                <div className="text-white/60">Spread</div>
-                <div className="text-[#ffc000] font-semibold">
-                  {formatPrice(orderBookData.spread || 0)}
-                </div>
-                {orderBookData.spreadPercent && (
-                  <div className="text-white/60 text-[10px]">
-                    ({orderBookData.spreadPercent.toFixed(2)}%)
-                  </div>
-                )}
-              </div>
-            )}
-
-          {/* Bids (Buy Orders) - Bottom */}
-          <div className="space-y-0.5 mt-4">
-            <div className="text-xs font-semibold text-green-400 px-2 mb-1">
-              Bids {selectedOutcome === "Yes" ? "(Buy Yes)" : "(Buy No)"}
+        {/* Bids (Buy Orders) - Bottom */}
+        <div className="mk-ob__group mk-ob__group--bid">
+          <div className="mk-ob__label">
+            Bids {selectedOutcome === "Yes" ? "(Buy Yes)" : "(Buy No)"}
+          </div>
+          {isLoadingOrderBook ? (
+            <div className="mk-ob__msg">Loading...</div>
+          ) : orderBookError ? (
+            <div className="mk-ob__msg mk-ob__msg--error">
+              Error loading orders
             </div>
-            {isLoadingOrderBook ? (
-              <div className="text-xs text-white/60 px-2 py-1">Loading...</div>
-            ) : orderBookError ? (
-              <div className="text-xs text-red-400 px-2 py-1">
-                Error loading orders
+          ) : orderBook.bids.length > 0 ? (
+            orderBook.bids.map((bid, idx) => (
+              <div key={idx} className="mk-ob__row">
+                <span>{formatPrice(bid.price)}</span>
+                <span>
+                  {bid.size.toLocaleString(undefined, {
+                    maximumFractionDigits: 2,
+                  })}
+                </span>
+                <span>{formatCurrencyWithCommas(bid.total)}</span>
               </div>
-            ) : orderBook.bids.length > 0 ? (
-              orderBook.bids.map((bid, idx) => (
-                <div
-                  key={idx}
-                  className="flex justify-between text-xs px-2 py-0.5 bg-green-500/10 hover:bg-green-500/20 cursor-pointer"
-                >
-                  <span className="text-green-400 font-medium">
-                    {formatPrice(bid.price)}
-                  </span>
-                  <span className="text-white/80">
-                    {bid.size.toLocaleString(undefined, {
-                      maximumFractionDigits: 2,
-                    })}
-                  </span>
-                  <span className="text-white/60">
-                    {formatCurrencyWithCommas(bid.total)}
-                  </span>
-                </div>
-              ))
-            ) : (
-              <div className="text-xs text-white/60 px-2 py-1">No bids</div>
-            )}
-          </div>
+            ))
+          ) : (
+            <div className="mk-ob__msg">No bids</div>
+          )}
         </div>
       </div>
       ) : null}

@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useMemo } from "react";
-import { createPortal } from "react-dom";
+import { useMemo, useRef, type ReactNode } from "react";
+import Image from "next/image";
 import { HelioCheckout } from "@heliofi/checkout-react";
+import { AcctModal, AcctModalHead } from "@/components/ui/modal/accountUi";
 
 /** RaptorX Pro pay link; override with NEXT_PUBLIC_HELIO_PAYLINK_ID for testnet or custom link. */
 const PAYLINK_ID =
@@ -74,7 +75,7 @@ export function PaywallModal({ open, onClose, context, limitCode, paymentMetadat
     [paymentMetadata?.userId, paymentMetadata?.privyId, onClose]
   );
 
-  const title = "Free Tier has ended for the day.";
+  const title = "Free tier has ended for the day";
   const subtitle =
     context === "claw"
       ? "Subscribe to Claw AI 5.0 Pro for maximum usage."
@@ -82,29 +83,43 @@ export function PaywallModal({ open, onClose, context, limitCode, paymentMetadat
         ? "Subscribe to Claw AI 5.0 Pro to unlock full Prediction Markets intelligence."
         : "Subscribe to Claw AI 5.0 Pro to unlock full RexScreener reports.";
 
-  const body = (
-    <div className="fixed inset-0 z-[999] flex items-center justify-center bg-black/70">
-      <div className="relative max-w-md w-full mx-4 rounded-3xl border border-[#FFC000] bg-[#050505] px-8 py-10 text-center shadow-[0_0_30px_rgba(255,192,0,0.4)]">
-        <button
-          type="button"
-          onClick={onClose}
-          className="absolute top-3 right-3 flex items-center justify-center min-w-11 min-h-11 bg-transparent text-white/70 hover:text-white text-3xl font-light transition-colors"
-          aria-label="Close"
-        >
-          ×
-        </button>
-
-        <p className="text-[#FFC000] text-xl font-semibold mb-3">{title}</p>
-        <p className="text-white/85 text-sm mb-6 leading-relaxed">{subtitle}</p>
-
-        <div className="min-h-[52px] flex items-center justify-center">
-          <HelioCheckout config={helioConfig} />
-        </div>
-      </div>
-    </div>
-  );
-
   if (!open) return null;
-  if (typeof document === "undefined") return body;
-  return createPortal(body, document.body);
+
+  return (
+    <PaywallDialog title={title} subtitle={subtitle} onClose={onClose}>
+      <HelioCheckout config={helioConfig} />
+    </PaywallDialog>
+  );
+}
+
+/** Popup family shell (AcctModal), above other overlays as before. Closes only from its X, as before. */
+function PaywallDialog({
+  title,
+  subtitle,
+  onClose,
+  children,
+}: {
+  title: string;
+  subtitle: string;
+  onClose: () => void;
+  children: ReactNode;
+}) {
+  const modalRef = useRef<HTMLDivElement>(null);
+  return (
+    <AcctModal labelledBy="paywall-title" variant="plain" modalRef={modalRef} zIndex={999}>
+      <AcctModalHead
+        id="paywall-title"
+        eyebrow="Claw AI 5.0 Pro"
+        title={title}
+        onClose={onClose}
+      />
+      <div className="acct-modal__body pw-body">
+        <span className="pw-mark" aria-hidden="true">
+          <Image src="/images/claw-logo-96.webp" alt="" width={40} height={40} />
+        </span>
+        <p>{subtitle}</p>
+        <div className="pw-checkout">{children}</div>
+      </div>
+    </AcctModal>
+  );
 }

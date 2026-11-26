@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useCallback, useMemo, useEffect } from "react";
-import Image from "next/image";
+import { useState, useCallback, useMemo, useEffect, useId } from "react";
 import { formatPrice } from "@/utils/polymarketTrading";
 import { usePrivy, useWallets } from "@privy-io/react-auth";
 import { utils, BigNumber, providers } from "ethers";
@@ -32,6 +31,8 @@ import {
 } from "@/lib/predictfun/predictFunRedeemHistory";
 import { predictFunPositionsAddressCandidates } from "@/lib/predictfun/positionsAddress";
 import { Select, type SelectOption } from "@/components/ui/Select";
+import { AmountField, TicketHead, YesNoPair } from "../../shared/marketUi";
+import "@/styles/pages/market-venues-b.css";
 import type { PredictFunApiMarket, PredictFunOutcome } from "@/lib/predictfun/mapPredictFunMarketRow";
 import {
   buildPredictFunLimitOrder,
@@ -133,6 +134,7 @@ export default function PredictFunBuySellWidget({
   const [redeemedLockKeys, setRedeemedLockKeys] = useState<Set<string>>(new Set());
   const [fallbackSigner, setFallbackSigner] =
     useState<providers.JsonRpcSigner | null>(null);
+  const amountId = `predictfun-amount-${useId().replace(/:/g, "")}`;
 
   const { redeem, isRedeeming: isRedeemingPosition } = usePredictFunRedeem();
 
@@ -790,7 +792,7 @@ export default function PredictFunBuySellWidget({
   };
 
   return (
-    <div className="flex w-full flex-col border border-white/10 rounded-lg overflow-hidden bg-[#0a0a0a] lg:h-full lg:min-h-0">
+    <div className="mk-ticket">
       <LoginModal isOpen={showLoginModal} onClose={() => setShowLoginModal(false)} />
       <DepositWithdrawModal
         isOpen={showDepositModal}
@@ -804,244 +806,130 @@ export default function PredictFunBuySellWidget({
         defaultPlatform="predictfun"
       />
 
-      <div className="flex items-center gap-3 px-4 py-3 pr-12 lg:pr-4 border-b border-white/10">
-        {symbolImageUrl ? (
-          <div className="relative w-10 h-10 rounded-full overflow-hidden shrink-0">
-            <Image
-              src={symbolImageUrl}
-              alt={marketTitle || "Market"}
-              width={40}
-              height={40}
-              className="object-cover"
-              unoptimized
-            />
-          </div>
-        ) : (
-          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-            <span className="text-white/60 text-xs">?</span>
-          </div>
-        )}
-        <div className="flex-1 min-w-0 max-w-[65%] lg:max-w-none">
-          <div className="text-sm font-medium text-white truncate">
-            {marketTitle ?? "Market"}
-          </div>
-          <div className="text-xs text-white/60">Predict.fun</div>
-        </div>
-      </div>
+      {/* Mini market head */}
+      <TicketHead imageUrl={symbolImageUrl} title={marketTitle ?? "Market"} sub="Predict.fun" />
 
       {marketResolved ? (
-        <div className="px-4 py-2 border-b border-white/10 bg-amber-500/10">
-          <p className="text-xs text-amber-200/90 leading-snug">
-            {redeemMode
-              ? "This market has ended. Claim your winning shares for USDT."
-              : redeemPending
-                ? "Redeem submitted. Your position will update shortly."
-                : marketPosition && marketPosition.shares > 0
-                  ? "This market has ended. No winning shares to redeem for this outcome."
-                  : "This market has ended. Trading is closed."}
-          </p>
+        <div className="mkb-notice" role="status">
+          {redeemMode
+            ? "This market has ended. Claim your winning shares for USDT."
+            : redeemPending
+              ? "Redeem submitted. Your position will update shortly."
+              : marketPosition && marketPosition.shares > 0
+                ? "This market has ended. No winning shares to redeem for this outcome."
+                : "This market has ended. Trading is closed."}
         </div>
       ) : null}
 
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10 gap-2">
-        <div className="flex items-center gap-1 shrink-0">
-          {redeemMode ? (
-            <span className="px-4 py-2 text-sm font-semibold text-[#A855F7] border-b-2 border-[#A855F7]">
-              Redeem
-            </span>
-          ) : (
-            <>
-              <button
-                type="button"
-                onClick={() => setActiveTab("buy")}
-                disabled={!marketTradable}
-                className={`px-4 py-2 text-sm font-semibold transition-colors rounded-t ${
-                  activeTab === "buy"
-                    ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                    : "text-white/60 hover:text-white/80"
-                } ${!marketTradable ? "opacity-40 cursor-not-allowed" : ""}`}
-              >
-                Buy
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("sell")}
-                disabled={!marketTradable}
-                className={`px-4 py-2 text-sm font-semibold transition-colors rounded-t ${
-                  activeTab === "sell"
-                    ? "text-[#ffc000] border-b-2 border-[#ffc000] bg-[#0a0a0a]"
-                    : "text-white/60 hover:text-white/80"
-                } ${!marketTradable ? "opacity-40 cursor-not-allowed" : ""}`}
-              >
-                Sell
-              </button>
-            </>
-          )}
-        </div>
-        {subMarketOptions.length > 1 ? (
-          <div className="min-w-[120px] max-w-[200px] flex-1">
-            <Select
-              value={selectedSubMarketId ?? subMarketOptions[0]?.id ?? ""}
-              onChange={(value) => onSubMarketIdChange?.(value)}
-              options={subMarketSelectOptions}
-              placeholder="Market"
-              className="w-full"
-              searchable
-              searchPlaceholder="Search outcomes..."
-            />
+      {/* Buy / Sell (or Redeem) and the sub-market picker */}
+      <div className="mk-ticket__row">
+        {redeemMode ? (
+          <div className="rx-seg mk-side-seg" role="group" aria-label="Side">
+            <span className="rx-seg__item is-active mkb-seg-static">Redeem</span>
           </div>
+        ) : (
+          <div className="rx-seg mk-side-seg" role="group" aria-label="Side">
+            <button
+              type="button"
+              onClick={() => setActiveTab("buy")}
+              disabled={!marketTradable}
+              className={`rx-seg__item${activeTab === "buy" ? " is-active is-buy" : ""}`}
+              aria-pressed={activeTab === "buy"}
+            >
+              Buy
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab("sell")}
+              disabled={!marketTradable}
+              className={`rx-seg__item${activeTab === "sell" ? " is-active is-sell" : ""}`}
+              aria-pressed={activeTab === "sell"}
+            >
+              Sell
+            </button>
+          </div>
+        )}
+        {subMarketOptions.length > 1 ? (
+          <Select
+            value={selectedSubMarketId ?? subMarketOptions[0]?.id ?? ""}
+            onChange={(value) => onSubMarketIdChange?.(value)}
+            options={subMarketSelectOptions}
+            placeholder="Market"
+            className="mk-select"
+            searchable
+            searchPlaceholder="Search outcomes..."
+          />
         ) : null}
       </div>
 
-      <div className="p-4 flex gap-3 bg-[#0a0a0a]">
-        <button
-          type="button"
-          onClick={() => handleOutcomeSelect("Yes")}
-          className={`flex-1 py-2 px-2 rounded-lg font-semibold text-white transition-all ${
-            selectedOutcomeKind === "Yes"
-              ? "bg-green-600 hover:bg-green-700 shadow-lg shadow-green-500/20"
-              : "bg-gray-600 hover:bg-gray-500"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-center gap-2">
-            {selectedOutcomeKind === "Yes" ? (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={3}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            ) : null}
-            <span className="text-sm">{firstOutcomeLabel}</span>
-            <span className="text-sm font-bold">{formatPrice(displayYesPrice)}</span>
-          </div>
-        </button>
-        <button
-          type="button"
-          onClick={() => handleOutcomeSelect("No")}
-          className={`flex-1 py-2 px-2 rounded-lg font-semibold text-white transition-all ${
-            selectedOutcomeKind === "No"
-              ? "bg-red-600 hover:bg-red-700 shadow-lg shadow-red-500/20"
-              : "bg-gray-600 hover:bg-gray-500"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-center gap-2">
-            {selectedOutcomeKind === "No" ? (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={3}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            ) : null}
-            <span className="text-sm">{secondOutcomeLabel}</span>
-            <span className="text-sm font-bold">{formatPrice(displayNoPrice)}</span>
-          </div>
-        </button>
-      </div>
+      {/* Outcomes (Yes / No, Up / Down, …) */}
+      <YesNoPair
+        selected={selectedOutcomeKind}
+        yesLabel={firstOutcomeLabel}
+        noLabel={secondOutcomeLabel}
+        yesPrice={formatPrice(displayYesPrice)}
+        noPrice={formatPrice(displayNoPrice)}
+        onSelect={handleOutcomeSelect}
+      />
 
-      <div className="flex flex-col px-4 pb-4 space-y-3 lg:min-h-0 lg:flex-1">
-        {redeemMode ? (
-          <div className="rounded-lg border border-[#A855F7]/30 bg-[#A855F7]/10 px-3 py-3 space-y-1">
-            <p className="text-xs text-white/70">Redeemable position</p>
-            <p className="text-lg font-semibold text-white tabular-nums">
-              {redeemShares.toFixed(4)} {marketPosition?.outcomeLabel ?? selected?.title ?? ""}
-            </p>
-            <p className="text-[11px] text-white/50">
-              Converts winning outcome tokens to USDT on BNB Chain.
-            </p>
-          </div>
-        ) : (
-          <div>
-            <div className="mb-1 flex items-center justify-between gap-2">
-              <label className="text-xs text-white/60 block">
-                {activeTab === "buy" ? "Amount" : "Size (shares)"}
-              </label>
-              <div className="text-xs text-white/50 text-right">
-                {activeTab === "buy" ? (
-                  <span>Available: ${availableAmount.toFixed(2)}</span>
-                ) : (
-                  <span>
-                    Available: {availableAmount.toFixed(2)}{" "}
-                    {selected?.title?.trim() || firstOutcomeLabel}
-                  </span>
-                )}
-              </div>
-            </div>
-            <div className="mb-2 flex items-center justify-end gap-1">
-              {([25, 50, 75, 100] as const).map((pct) => (
-                <button
-                  key={pct}
-                  type="button"
-                  onClick={() => handleQuickPercent(pct)}
-                  disabled={availableAmount <= 0 || !marketTradable}
-                  className={`rounded border px-2 py-0.5 text-[11px] leading-4 transition-colors ${
-                    availableAmount > 0 && marketTradable
-                      ? "border-[#ffc000]/60 text-white/90 hover:bg-[#ffc000]/20"
-                      : "border-white/15 text-white/35 cursor-not-allowed"
-                  }`}
-                >
-                  {pct === 100 ? "Max" : `${pct}%`}
-                </button>
-              ))}
-            </div>
-            <div className="relative">
-              {activeTab === "buy" ? (
-                <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white/50 text-sm">
-                  $
-                </span>
-              ) : null}
-              <input
-                type="text"
-                inputMode="decimal"
-                value={size}
-                onChange={(e) => setSize(e.target.value)}
-                placeholder={activeTab === "buy" ? "0" : "0.00"}
-                disabled={!marketTradable}
-                className={`w-full bg-transparent border border-white/10 rounded-lg py-2.5 text-white text-sm focus:outline-none focus:border-[#ffc000] placeholder-white/30 disabled:opacity-40 ${
-                  activeTab === "buy" ? "pl-6 pr-3" : "px-3"
-                }`}
-              />
-            </div>
-          </div>
-        )}
+      {redeemMode ? (
+        <div className="rx-well mk-win">
+          <span className="mk-win__label">
+            Redeemable position
+            <span>Converts winning outcome tokens to USDT on BNB Chain.</span>
+          </span>
+          <span className="mk-win__value">
+            {redeemShares.toFixed(4)} {marketPosition?.outcomeLabel ?? selected?.title ?? ""}
+          </span>
+        </div>
+      ) : (
+        <AmountField
+          id={amountId}
+          label={activeTab === "buy" ? "Amount" : "Size (shares)"}
+          aside={
+            activeTab === "buy" ? (
+              <>
+                Available: <b>${availableAmount.toFixed(2)}</b>
+              </>
+            ) : (
+              <>
+                Available: <b>{availableAmount.toFixed(2)}</b>{" "}
+                {selected?.title?.trim() || firstOutcomeLabel}
+              </>
+            )
+          }
+          prefix={activeTab === "buy" ? "$" : undefined}
+          value={size}
+          onChange={setSize}
+          placeholder={activeTab === "buy" ? "0" : "0.00"}
+          disabled={!marketTradable}
+          pcts={([25, 50, 75, 100] as const).map((pct) => ({
+            label: pct === 100 ? "Max" : `${pct}%`,
+            onClick: () => handleQuickPercent(pct),
+            disabled: availableAmount <= 0 || !marketTradable,
+          }))}
+        />
+      )}
 
-        <button
-          type="button"
-          disabled={primaryButtonDisabled}
-          onClick={handlePrimaryClick}
-          className={`w-full shrink-0 py-2.5 rounded-lg font-semibold text-sm transition-colors lg:mt-auto ${
-            primaryButtonDisabled
-              ? redeemMode
-                ? "bg-[#A855F7]/40 text-white/50 cursor-not-allowed"
-                : activeTab === "sell"
-                  ? "bg-red-600/40 text-white/50 cursor-not-allowed"
-                  : "bg-[#ffc000]/40 text-black/50 cursor-not-allowed"
-              : redeemMode
-                ? "bg-[#A855F7] text-white hover:bg-[#9333EA]"
-                : showDepositCta || activeTab === "buy"
-                  ? "bg-[#ffc000] text-black hover:bg-[#ffc000]/90"
-                  : "bg-red-600 text-white hover:bg-red-700 shadow-lg shadow-red-500/20"
-          }`}
-        >
-          {isSubmitting || isRedeemingPosition(redeemLockKey ?? "")
-            ? redeemMode
-              ? "Redeeming…"
-              : "Submitting…"
-            : primaryButtonLabel}
-        </button>
-        <p className="shrink-0 text-[10px] text-white/40 text-center leading-snug">
-          {redeemMode
-            ? "Redeem is an on-chain transaction via Predict.fun (BNB Chain)."
-            : isBuy
-              ? `Trades are signed with your wallet. Minimum buy size is $${PREDICT_FUN_MIN_ORDER_USD.toFixed(1)} USDT.`
-              : "Trades are signed with your connected wallet and submitted to Predict.fun."}
-        </p>
-      </div>
+      <button
+        type="button"
+        disabled={primaryButtonDisabled}
+        onClick={handlePrimaryClick}
+        className="rx-btn rx-btn--primary rx-btn--l rx-btn--block mk-ticket__cta"
+      >
+        {isSubmitting || isRedeemingPosition(redeemLockKey ?? "")
+          ? redeemMode
+            ? "Redeeming…"
+            : "Submitting…"
+          : primaryButtonLabel}
+      </button>
+      <p className="mkb-foot">
+        {redeemMode
+          ? "Redeem is an on-chain transaction via Predict.fun (BNB Chain)."
+          : isBuy
+            ? `Trades are signed with your wallet. Minimum buy size is $${PREDICT_FUN_MIN_ORDER_USD.toFixed(1)} USDT.`
+            : "Trades are signed with your connected wallet and submitted to Predict.fun."}
+      </p>
     </div>
   );
 }

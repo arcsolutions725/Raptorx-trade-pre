@@ -2,7 +2,6 @@
 
 import { memo, useEffect, useMemo, useState } from "react";
 import Image from "next/image";
-import clsx from "clsx";
 import { useQuery } from "@tanstack/react-query";
 import type { TrendingToken } from "@/hooks/useTrendingTokens";
 import { toDexChainSlug, type DexScreenerPair } from "@/lib/api/dexscreener";
@@ -15,7 +14,8 @@ import { useReportGenStatus } from "@/lib/storage/reportGenStore";
 import { useMarketReportStream } from "@/lib/storage/marketReportStreamStore";
 import { isBscForBnbAnalyticsSections } from "@/utils/detectChain";
 import { RexPilotReportSectionsStream } from "./RexPilotReportSectionsStream";
-import { renderRexPilotMarkdownSection } from "./rexPilotReportMarkdown";
+import { renderScreenerReportMarkdown } from "./rexPilotReportMarkdown";
+import { SkeletonLines } from "@/app/rexmarkets/_components/RexMarketsReport/RexMarketsReportData/pilotUi";
 
 function contractMatchesReportToken(
   tokenAddr: string,
@@ -34,36 +34,13 @@ const StreamSkeleton = memo(function StreamSkeleton({
   compact?: boolean;
 }) {
   return (
-    <div
-      className={clsx("space-y-4 pt-1", compact && "mt-5 opacity-50")}
-      aria-hidden
-    >
-      <div className="space-y-2.5">
-        <div className="h-3 w-[60%] max-w-[14rem] rounded-md bg-white/[0.08] animate-pulse" />
-        <div className="h-2.5 w-full rounded-md bg-white/[0.06] animate-pulse" />
-        <div className="h-2.5 w-[92%] rounded-md bg-white/[0.06] animate-pulse" />
-      </div>
-      <div className="space-y-2.5 pt-1">
-        <div className="h-3 w-[42%] max-w-[10rem] rounded-md bg-white/[0.08] animate-pulse" />
-        <div className="h-2.5 w-full rounded-md bg-white/[0.06] animate-pulse" />
-        <div className="h-2.5 w-[88%] rounded-md bg-white/[0.05] animate-pulse" />
-      </div>
-      {!compact ? (
-        <div className="space-y-2.5 pt-1">
-          <div className="h-3 w-[40%] max-w-[11rem] rounded-md bg-white/[0.08] animate-pulse" />
-          <div className="flex gap-3 rounded-xl border border-white/[0.06] bg-white/[0.03] p-3">
-            <div className="h-16 w-20 shrink-0 rounded-lg bg-white/[0.06] animate-pulse" />
-            <div className="min-w-0 flex-1 space-y-2 pt-0.5">
-              <div className="h-2.5 w-full rounded-md bg-white/[0.06] animate-pulse" />
-              <div className="h-2.5 w-[80%] rounded-md bg-white/[0.05] animate-pulse" />
-            </div>
-          </div>
-        </div>
-      ) : null}
+    <div className={compact ? "ss-skel--compact" : undefined} aria-hidden="true">
+      <SkeletonLines widths={compact ? [60, 92, 84] : [42, 90, 76, 84, 38, 70, 82]} />
     </div>
   );
 });
 
+/** Token logo + name above the report while it streams (pilot.css .rep-head). */
 const TokenStreamHeader = memo(function TokenStreamHeader({
   title,
   imageUrl,
@@ -76,37 +53,24 @@ const TokenStreamHeader = memo(function TokenStreamHeader({
     setImgErr(false);
   }, [imageUrl]);
   return (
-    <div className="mb-4 flex shrink-0 items-start gap-3 border-b border-white/[0.12] pb-3 pl-1.5 sm:pl-2">
-      <div
-        className={clsx(
-          "relative h-14 w-14 sm:h-16 sm:w-16 shrink-0 overflow-hidden rounded-xl",
-          "bg-gradient-to-br from-white/12 to-white/[0.04]",
-          "ring-2 ring-amber-400/30 ring-inset",
-        )}
-      >
+    <div className="rep-head">
+      <div className="rep-head__img">
         {imageUrl && !imgErr ? (
           <Image
             src={imageUrl}
             alt=""
             fill
-            className="object-cover object-center"
-            sizes="(max-width: 640px) 56px, 64px"
+            sizes="44px"
             unoptimized={
               imageUrl.startsWith("http://") || imageUrl.startsWith("https://")
             }
             onError={() => setImgErr(true)}
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center text-[10px] text-white/35">
-            —
-          </div>
+          <span aria-hidden="true">—</span>
         )}
       </div>
-      <div className="min-w-0 flex-1 pt-1">
-        <h2 className="text-left text-base font-semibold leading-snug text-white/95 sm:text-lg [word-break:break-word]">
-          {title}
-        </h2>
-      </div>
+      <h2>{title}</h2>
     </div>
   );
 });
@@ -271,18 +235,15 @@ export function RexScreenerStreamingReport({
     !mdForDisplay.trim();
 
   return (
-    <div className="mb-6 rounded-xl bg-black/40 px-3 py-4 sm:px-4">
+    <div className="ss-stream" aria-busy={isGenerating || undefined}>
       <TokenStreamHeader title={title} imageUrl={logo} />
       {mdForDisplay ? (
-        <div className="rex-markets-report-md rex-markets-report-md--fluid whitespace-pre-wrap wrap-break-word overflow-x-hidden text-white/90 pl-0.5">
+        <div>
           {preambleMarkdown ? (
-            <div className="mb-6 space-y-3">
-              {renderRexPilotMarkdownSection(preambleMarkdown)}
+            <div className="ss-stream__pre">
+              {renderScreenerReportMarkdown(preambleMarkdown)}
               {showCaret && reportSections.length === 0 ? (
-                <span
-                  className="inline-block w-2 h-4 bg-[#ffc000]/85 animate-pulse ml-0.5 align-middle"
-                  aria-hidden
-                />
+                <span className="ss-caret" aria-hidden="true" />
               ) : null}
             </div>
           ) : null}
@@ -294,14 +255,9 @@ export function RexScreenerStreamingReport({
               showTrailingCaret={showCaret}
             />
           ) : preambleMarkdown ? null : (
-            <div className="space-y-3">
-              {renderRexPilotMarkdownSection(mdForDisplay)}
-              {showCaret ? (
-                <span
-                  className="inline-block w-2 h-4 bg-[#ffc000]/85 animate-pulse ml-0.5 align-middle"
-                  aria-hidden
-                />
-              ) : null}
+            <div className="ss-report">
+              {renderScreenerReportMarkdown(mdForDisplay)}
+              {showCaret ? <span className="ss-caret" aria-hidden="true" /> : null}
             </div>
           )}
         </div>

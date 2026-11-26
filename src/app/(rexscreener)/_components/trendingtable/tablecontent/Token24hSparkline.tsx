@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import clsx from "clsx";
 
 function syntheticNormalizedSeries(pct: number | undefined, n = 24): number[] {
@@ -109,6 +109,8 @@ type Props = {
   /** Normalized 0–1 series (older → newer). Empty = use synthetic from % */
   seriesY: number[] | undefined;
   isFetching?: boolean;
+  /** `area`: full-width line with a soft fill under it (Golden / Pump report cards). */
+  variant?: "row" | "area";
 };
 
 /** 24h trend line (hourly from Birdeye; falls back to a shape drawn from the 24h %). */
@@ -116,7 +118,10 @@ export function Token24hSparkline({
   changePct24h,
   seriesY,
   isFetching,
+  variant = "row",
 }: Props) {
+  const area = variant === "area";
+  const fillId = `rx-spark-${useId().replace(/:/g, "")}`;
   const points = useMemo(() => {
     if (seriesY && seriesY.length >= 2) return seriesY;
     return syntheticNormalizedSeries(changePct24h);
@@ -125,8 +130,8 @@ export function Token24hSparkline({
   const color = strokeColor(changePct24h);
   const waiting = Boolean(isFetching && (!seriesY || seriesY.length < 2));
 
-  const w = 80;
-  const h = 28;
+  const w = area ? 320 : 80;
+  const h = area ? 56 : 28;
   const padX = 1;
   const padY = 3;
 
@@ -139,10 +144,10 @@ export function Token24hSparkline({
         return `${i === 0 ? "M" : "L"}${x.toFixed(1)} ${yy.toFixed(1)}`;
       })
       .join("");
-  }, [points]);
+  }, [points, w, h]);
 
   return (
-    <div className="relative h-7 w-20 shrink-0">
+    <div className={clsx("relative shrink-0", area ? "h-14 w-full" : "h-7 w-20")}>
       {waiting ? (
         <span
           className="rx-skel absolute inset-x-2 top-1/2 h-1 -translate-y-1/2"
@@ -157,6 +162,17 @@ export function Token24hSparkline({
         preserveAspectRatio="none"
         aria-hidden
       >
+        {area && pathD ? (
+          <>
+            <defs>
+              <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0" stopColor={color} stopOpacity="0.28" />
+                <stop offset="1" stopColor={color} stopOpacity="0" />
+              </linearGradient>
+            </defs>
+            <path d={`${pathD}L${w - padX} ${h}L${padX} ${h}Z`} fill={`url(#${fillId})`} />
+          </>
+        ) : null}
         <path
           d={pathD}
           fill="none"

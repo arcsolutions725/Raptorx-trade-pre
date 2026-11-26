@@ -15,6 +15,93 @@ import type { RouteExecutionUpdate } from "@lifi/widget";
 import { ClientOnly } from "./ClientOnly";
 import { getHeliusRpcUrl } from "@/lib/rpc";
 import { PhantomStandardWalletRegistrar } from "./solana-phantom-bridge/PhantomStandardWalletRegistrar";
+import "@/styles/pages/swap.css";
+
+/**
+ * Appearance only: the RaptorX design-system look for the Li.Fi widget (the prototype's
+ * swap card). Colours mirror the `--rx-*` tokens in raptorx-ds.css — the widget derives
+ * shades from these in JS, so they have to be literal hex values, not CSS variables.
+ * Everything the theme API can't reach (card titles as eyebrows, the flip button, the
+ * header row, the wallet icon button) is styled in src/styles/pages/swap.css under `.rx-swap`.
+ *
+ * Module-level so the widget gets the same object every render (it memoises on it).
+ */
+const RX_SWAP_THEME: WidgetConfig["theme"] = {
+  container: {
+    // `height: fit-content` is load-bearing (the widget derives its max-height from it).
+    height: "fit-content",
+    boxShadow: "none",
+    borderRadius: 0,
+    border: "none",
+    // Sit on the host panel's surface instead of painting a black box inside it.
+    background: "transparent",
+    // Fill the panel (the widget caps itself at 416px by default) but don't sprawl.
+    maxWidth: 640,
+    minWidth: 0,
+  },
+  palette: {
+    mode: "dark",
+    primary: { main: "#FFB800" }, // --rx-gold
+    secondary: { main: "#FFD15C" }, // --rx-gold-hi ("Best" route label, selected rows)
+    success: { main: "#45E3A3" }, // --rx-up
+    error: { main: "#FF7A7A" }, // --rx-down
+    warning: { main: "#FFB800" },
+    background: {
+      default: "#121211", // pages that need a solid ground (token list, sheets)
+      paper: "#0D0D0C", // wells: rgba(0,0,0,.35) over the raised panel
+    },
+    text: { primary: "#F5F3F0", secondary: "#8A8988" }, // --rx-text / --rx-text-3
+    grey: {
+      200: "#B3B2B1",
+      300: "#363534", // --rx-line-strong
+      700: "#8A8988",
+      800: "#262524", // --rx-line: card borders, avatar placeholders
+    },
+    divider: "#262524",
+  },
+  shape: {
+    borderRadius: 12, // wells (--rx-r-m)
+    borderRadiusSecondary: 13, // buttons (.rx-btn--l)
+    borderRadiusTertiary: 10, // flip button
+  },
+  typography: {
+    fontFamily: "var(--rx-ui)",
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        // Primary action = .rx-btn--primary.rx-btn--l
+        contained: {
+          minHeight: 48,
+          fontSize: 15,
+          fontWeight: 600,
+          color: "#1A1206",
+          background: "linear-gradient(180deg, #FFCB45 0%, #F2A900 100%)",
+          boxShadow:
+            "inset 0 1px 0 rgba(255,255,255,.45), 0 6px 18px rgba(255,184,0,.22)",
+          "&:hover": {
+            color: "#1A1206",
+            background: "linear-gradient(180deg, #FFCB45 0%, #F2A900 100%)",
+            boxShadow:
+              "inset 0 1px 0 rgba(255,255,255,.45), 0 6px 18px rgba(255,184,0,.22)",
+            filter: "brightness(1.06)",
+          },
+          "&.Mui-disabled, &.Mui-disabled:hover": {
+            background: "#1F1E1D",
+            color: "#8A8988",
+            boxShadow: "none",
+            filter: "none",
+          },
+        },
+      },
+    },
+  },
+};
+
+/** Prototype wording for the two labels the widget shares with the design. */
+const RX_SWAP_LANGUAGE: WidgetConfig["languageResources"] = {
+  en: { header: { exchange: "Swap", send: "You send" } },
+};
 
 interface SwapWidgetProps {
   currentUserId: string;
@@ -102,36 +189,8 @@ export function SwapWidget({
     slippage: 0.03,
     // buildUrl: true,
     hiddenUI: ["bridgesSettings", "appearance", "language", "poweredBy"],
-    theme: {
-      container: {
-        boxShadow: "0px 8px 32px rgba(0, 0, 0, 0.08)",
-        borderRadius: "16px",
-        height: "fit-content",
-        border: "none",
-      },
-      palette: {
-        primary: { main: "#ffc000" },
-        secondary: { main: "#00b050" },
-        background: { paper: "#1a1a1a", default: "#0a0a0a" },
-        mode: "dark",
-      },
-      shape: { borderRadius: 12 },
-      components: {
-        MuiButton: {
-          styleOverrides: {
-            containedPrimary: {
-              color: "#ffc000",
-            },
-            outlinedPrimary: {
-              color: "#ffc000",
-            },
-            textPrimary: {
-              color: "#fff",
-            },
-          },
-        },
-      },
-    },
+    theme: RX_SWAP_THEME,
+    languageResources: RX_SWAP_LANGUAGE,
     sdkConfig: {
       rpcUrls: {
         [ChainId.SOL]: [getHeliusRpcUrl()],
@@ -418,17 +477,17 @@ export function SwapWidget({
   }, [widgetEvents, handleSwapCompleted]);
 
   return (
-    <div ref={containerRef} className="w-full h-full bg-black">
+    <div ref={containerRef} className="rx-swap">
       {/* Registers Wallet Standard "Phantom" when the extension isn't injected
           (mobile / no extension) so Li.Fi lists it like MetaMask on EVM. */}
       <PhantomStandardWalletRegistrar />
-      <div className="h-full overflow-y-auto overflow-x-hidden">
+      <div className="rx-swap__scroll">
         {/* Explicit BSC configuration */}
         {resolvedChain === "bsc" && (
           <div className="w-full p-0">
             <ClientOnly
               fallback={
-                <div className="flex items-center justify-center h-full">
+                <div className="rx-swap__fallback">
                   <WidgetSkeleton
                     config={{
                       ...baseWidgetConfig,
@@ -459,7 +518,7 @@ export function SwapWidget({
           <div className="w-full p-0">
             <ClientOnly
               fallback={
-                <div className="flex items-center justify-center h-full">
+                <div className="rx-swap__fallback">
                   <WidgetSkeleton
                     config={{
                       ...baseWidgetConfig,
@@ -490,7 +549,7 @@ export function SwapWidget({
           <div className="w-full p-0">
             <ClientOnly
               fallback={
-                <div className="flex items-center justify-center h-full">
+                <div className="rx-swap__fallback">
                   <WidgetSkeleton
                     config={{
                       ...baseWidgetConfig,
@@ -522,7 +581,7 @@ export function SwapWidget({
           <div className="h-full w-full p-0">
             <ClientOnly
               fallback={
-                <div className="flex items-center justify-center h-full bg-gray-800">
+                <div className="rx-swap__fallback">
                   <WidgetSkeleton
                     config={{
                       ...baseWidgetConfig,
@@ -571,7 +630,7 @@ export function SwapWidget({
           <div className="h-full w-full p-0">
             <ClientOnly
               fallback={
-                <div className="flex items-center justify-center h-full bg-gray-800">
+                <div className="rx-swap__fallback">
                   <WidgetSkeleton
                     config={{
                       ...baseWidgetConfig,
@@ -602,7 +661,7 @@ export function SwapWidget({
           <div className="w-full p-0">
             <ClientOnly
               fallback={
-                <div className="flex items-center justify-center h-full">
+                <div className="rx-swap__fallback">
                   <WidgetSkeleton
                     config={{
                       ...baseWidgetConfig,
@@ -633,7 +692,7 @@ export function SwapWidget({
           <div className="h-full w-full p-0">
             <ClientOnly
               fallback={
-                <div className="flex items-center justify-center h-full bg-gray-800">
+                <div className="rx-swap__fallback">
                   <WidgetSkeleton
                     config={{
                       ...baseWidgetConfig,

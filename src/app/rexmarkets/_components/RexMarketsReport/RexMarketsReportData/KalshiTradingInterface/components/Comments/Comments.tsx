@@ -3,6 +3,7 @@
 import { useState, useMemo } from "react";
 import { useKalshiComments, type KalshiComment, type KalshiPost } from "@/hooks/useKalshiComments";
 import HolderAvatar from "../../../PolymarketTradingInterface/components/shared/HolderAvatar";
+import { IconHeart } from "../../../shared/marketUi";
 
 type KalshiCommentsProps = {
   eventTicker?: string;
@@ -25,6 +26,20 @@ function getTimeAgo(timestamp: number): string {
   }
   const days = Math.floor(diffInSeconds / 86400);
   return `${days}d ago`;
+}
+
+function MediaList({ media }: { media?: Array<{ url: string }> | null }) {
+  if (!media || !Array.isArray(media) || media.length === 0) return null;
+  return (
+    <div className="mk-media">
+      {media.map((item, idx) => {
+        if (!item || typeof item !== "object" || typeof item.url !== "string") {
+          return null;
+        }
+        return <img key={idx} src={item.url} alt="Media" />;
+      })}
+    </div>
+  );
 }
 
 function CommentItem({
@@ -50,82 +65,45 @@ function CommentItem({
   const reactionCount = comment.likes_count || 0;
 
   return (
-    <div className={`${level > 0 ? "ml-8 mt-3" : ""}`}>
-      <div className="flex gap-3">
-        <div className="flex-shrink-0">
-          <HolderAvatar
-            name={displayName}
-            profileImage={
-              typeof comment.profile_image_path === "string"
-                ? comment.profile_image_path
-                : undefined
-            }
-            size={32}
-          />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-medium text-white">
-              {displayName}
-            </span>
-            <span className="text-xs text-white/60">{timeAgo}</span>
+    <div className="mk-cmt">
+      <div className="mk-cmt-row">
+        <HolderAvatar
+          name={displayName}
+          profileImage={
+            typeof comment.profile_image_path === "string"
+              ? comment.profile_image_path
+              : undefined
+          }
+          size={32}
+          tone="gold"
+        />
+        <div className="mk-cmt-main">
+          <div className="mk-meta">
+            <span className="mk-who">{displayName}</span>
+            <span className="mk-time">{timeAgo}</span>
           </div>
           {comment.content &&
             typeof comment.content === "string" &&
             comment.content.trim() && (
-              <p className="text-sm text-white/90 mb-2 whitespace-pre-wrap break-words">
-                {comment.content}
-              </p>
+              <p className="mk-text">{comment.content}</p>
             )}
-          {comment.media &&
-            Array.isArray(comment.media) &&
-            comment.media.length > 0 && (
-              <div className="mb-2">
-                {comment.media.map((media, idx) => {
-                  if (
-                    !media ||
-                    typeof media !== "object" ||
-                    typeof media.url !== "string"
-                  ) {
-                    return null;
-                  }
-                  return (
-                    <img
-                      key={idx}
-                      src={media.url}
-                      alt="Media"
-                      className="max-w-full rounded"
-                    />
-                  );
-                })}
-              </div>
-            )}
-          <div className="flex items-center gap-4">
+          <MediaList media={comment.media} />
+          <div className="mk-acts">
             <button
+              type="button"
               onClick={() => setIsLiked(!isLiked)}
-              className="flex items-center gap-1 text-xs text-white/60 hover:text-white transition-colors"
+              aria-pressed={isLiked}
+              aria-label={`Like, ${reactionCount + (isLiked ? 1 : 0)} likes`}
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill={isLiked ? "currentColor" : "none"}
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-              </svg>
-              <span>{reactionCount + (isLiked ? 1 : 0)}</span>
+              <IconHeart size={14} filled={isLiked} />
+              <span className="rx-num">{reactionCount + (isLiked ? 1 : 0)}</span>
             </button>
-            <button className="text-xs text-white/60 hover:text-white transition-colors">
-              Reply
-            </button>
+            <button type="button">Reply</button>
             {hasReplies && level === 0 && (
               <button
+                type="button"
                 onClick={() => setShowReplies(!showReplies)}
-                className="text-xs text-white/60 hover:text-white transition-colors"
+                aria-expanded={showReplies}
               >
                 {showReplies ? "Hide" : "Show"} {nestedReplies.length}{" "}
                 {nestedReplies.length === 1 ? "Reply" : "Replies"}
@@ -133,7 +111,7 @@ function CommentItem({
             )}
           </div>
           {showReplies && hasReplies && (
-            <div className="mt-3 space-y-0">
+            <div className="mk-replies">
               {nestedReplies.map((reply) => (
                 <CommentItem
                   key={reply.id}
@@ -160,90 +138,48 @@ function PostItem({ post }: { post: KalshiPost }) {
   const topLevelComments = allComments.filter((c) => c && c.depth === 0);
 
   return (
-    <div className="pb-4 border-b border-white/10 last:border-b-0">
-      <div className="flex gap-3 mb-3">
-        <div className="flex-shrink-0">
-          <HolderAvatar
-            name={displayName}
-            profileImage={
-              typeof post.profile_image_path === "string"
-                ? post.profile_image_path
-                : undefined
-            }
-            size={40}
-          />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-medium text-white">
-              {displayName}
-            </span>
-            <span className="text-xs text-white/60">{timeAgo}</span>
+    <article className="mk-post">
+      <div className="mk-cmt-row">
+        <HolderAvatar
+          name={displayName}
+          profileImage={
+            typeof post.profile_image_path === "string"
+              ? post.profile_image_path
+              : undefined
+          }
+          size={40}
+          tone="gold"
+        />
+        <div className="mk-cmt-main">
+          <div className="mk-meta">
+            <span className="mk-who">{displayName}</span>
+            <span className="mk-time">{timeAgo}</span>
             {post.market_title &&
               typeof post.market_title === "string" &&
               post.market_title.trim() && (
-                <span className="text-xs text-white/40">
-                  • {post.market_title}
-                </span>
+                <span className="mk-topic">· {post.market_title}</span>
               )}
           </div>
           {post.content &&
             typeof post.content === "string" &&
-            post.content.trim() && (
-              <p className="text-sm text-white/90 mb-2 whitespace-pre-wrap break-words">
-                {post.content}
-              </p>
-            )}
-          {post.media &&
-            Array.isArray(post.media) &&
-            post.media.length > 0 && (
-              <div className="mb-2">
-                {post.media.map((media, idx) => {
-                  if (
-                    !media ||
-                    typeof media !== "object" ||
-                    typeof media.url !== "string"
-                  ) {
-                    return null;
-                  }
-                  return (
-                    <img
-                      key={idx}
-                      src={media.url}
-                      alt="Media"
-                      className="max-w-full rounded"
-                    />
-                  );
-                })}
-              </div>
-            )}
-          <div className="flex items-center gap-4">
+            post.content.trim() && <p className="mk-text">{post.content}</p>}
+          <MediaList media={post.media} />
+          <div className="mk-acts">
             <button
+              type="button"
               onClick={() => setIsLiked(!isLiked)}
-              className="flex items-center gap-1 text-xs text-white/60 hover:text-white transition-colors"
+              aria-pressed={isLiked}
+              aria-label={`Like, ${post.likes_count + (isLiked ? 1 : 0)} likes`}
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill={isLiked ? "currentColor" : "none"}
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-              </svg>
-              <span>{post.likes_count + (isLiked ? 1 : 0)}</span>
+              <IconHeart size={14} filled={isLiked} />
+              <span className="rx-num">{post.likes_count + (isLiked ? 1 : 0)}</span>
             </button>
-            <button className="text-xs text-white/60 hover:text-white transition-colors">
-              Comment
-            </button>
+            <button type="button">Comment</button>
           </div>
         </div>
       </div>
       {topLevelComments.length > 0 && (
-        <div className="ml-12 mt-3 space-y-3">
+        <div className="mk-replies">
           {topLevelComments
             .filter((comment) => comment && comment.id)
             .map((comment) => (
@@ -255,7 +191,7 @@ function PostItem({ post }: { post: KalshiPost }) {
             ))}
         </div>
       )}
-    </div>
+    </article>
   );
 }
 
@@ -282,23 +218,23 @@ export default function KalshiComments({ eventTicker }: KalshiCommentsProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <div className="text-sm text-white/60">Loading comments...</div>
+      <div className="mk-msg" role="status">
+        Loading comments...
       </div>
     );
   }
 
   if (!posts || posts.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-8">
-        <div className="text-sm text-white/60 mb-2">No comments yet</div>
-        <div className="text-xs text-white/40">Be the first to comment!</div>
+      <div className="mk-msg">
+        <b>No comments yet</b>
+        Be the first to comment!
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 px-1">
+    <div className="mk-posts">
       {posts
         .filter((post) => post && post.id)
         .map((post) => (

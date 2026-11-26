@@ -5,14 +5,6 @@ import type React from "react";
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import Image from "next/image";
-import {
-  Check,
-  RotateCcw,
-  ArrowLeft,
-  Share2,
-  Square,
-  X,
-} from "lucide-react";
 import copy from "copy-to-clipboard";
 import {
   parseRexScreenerReportSections,
@@ -22,7 +14,6 @@ import {
 import {
   mergeGoldenTeamUpdatesSections,
 } from "@/lib/goldenReportTeamUpdate";
-import { ReportMenuDropdown } from "@/components/report/ReportMenuDropdown";
 import {
   useReportWithConversation,
   useAppendMessage,
@@ -34,7 +25,6 @@ import {
 } from "@/components/ui/modal/WhatsNewModal";
 import { ProjectSocialLinks } from "@/components/ui/ProjectSocialLinks";
 import { collectProjectSocials } from "@/lib/api/projectSocials";
-import { GlossyReportButton } from "@/app/(rexscreener)/_components/trendingtable/tablecontent/GlossyReportButton";
 import { useWhatsNew } from "@/hooks/useWhatsNew";
 import { showErrorNotification } from "@/components/ui/notification";
 import { CoinOMetry } from "@/components/CoinOMetry";
@@ -42,14 +32,27 @@ import { HolderAnalyticsComponent } from "@/components/analytics/HolderAnalytics
 import { BirdeyeSafetyAnalyticsComponent } from "@/components/analytics/BirdeyeSafetyAnalytics";
 import type { HolderAnalytics } from "@/lib/api/bnbAnalytics";
 import type { SecurityAnalytics } from "@/lib/api/birdeyeSecurtiy";
-import { formatRexPilotChatLines } from "@/lib/formatRexPilotChatLines";
 import { useMarketReportStream } from "@/lib/storage/marketReportStreamStore";
 import { isBscForBnbAnalyticsSections } from "@/utils/detectChain";
 import {
-  getRexPilotReportSectionIcon,
-  renderRexPilotMarkdownSection,
+  renderScreenerReportMarkdown,
+  screenerReportSectionBadge,
 } from "./rexPilotReportMarkdown";
-import { PilotReportHistoryButton } from "./PilotReportHistoryButton";
+import {
+  AskBar,
+  QaThread,
+  SkeletonLines,
+} from "@/app/rexmarkets/_components/RexMarketsReport/RexMarketsReportData/pilotUi";
+import {
+  IconCheck,
+  IconCopy,
+  IconExt,
+  IconNews,
+  IconRefresh,
+  IconShare,
+  ReportPaneHead,
+  SectionNav,
+} from "./screenerSideUi";
 import { hrefForScreenerToken } from "@/lib/rexscreenerRoutes";
 import { resolveSwapChain } from "@/lib/swapChain";
 
@@ -102,57 +105,32 @@ type Props = {
   onCloseSidebar?: () => void;
   /** Bring up the panel's swap for this report's token (What's New "Trade" card); `full` = Exchange only. */
   onOpenExchange?: (opts?: { full?: boolean }) => void;
+  /** Minimize control in the pane head (the sidebar's Exchange then takes the column). */
+  onMinimize?: () => void;
 };
 
+/** Pane head while a saved report is open: Back, title, Report history, minimize (and close if given). */
 function PilotSessionTopChrome({
   onBack,
   onViewHistory,
   onCloseSidebar,
+  onMinimize,
   reportHistoryCount,
 }: {
   onBack?: () => void;
   onViewHistory?: () => void;
   onCloseSidebar?: () => void;
+  onMinimize?: () => void;
   reportHistoryCount: number;
 }) {
-  if (!onBack && !onViewHistory && !onCloseSidebar) return null;
   return (
-    <div className="z-40 flex w-full shrink-0 items-center justify-between gap-2 bg-transparent px-3 py-2 sm:px-4">
-      <div className="flex min-w-0 flex-1 justify-start">
-        {onBack ? (
-          <button
-            type="button"
-            onClick={onBack}
-            className="inline-flex cursor-pointer items-center gap-2 text-white/70 transition hover:text-white"
-            aria-label="Back to Generate Report"
-            title="Back"
-          >
-            <ArrowLeft className="h-6 w-6 shrink-0" />
-            <span className="text-lg">Back</span>
-          </button>
-        ) : null}
-      </div>
-      <div className="flex shrink-0 items-center justify-end gap-2">
-        {onViewHistory ? (
-          <PilotReportHistoryButton
-            count={reportHistoryCount}
-            onOpen={onViewHistory}
-            className="shrink-0"
-          />
-        ) : null}
-        {onCloseSidebar ? (
-          <button
-            type="button"
-            onClick={onCloseSidebar}
-            className="flex h-9 w-9 shrink-0 cursor-pointer items-center justify-center rounded-lg bg-[#3C3C3C] text-white transition-colors hover:bg-[#4C4C4C]"
-            aria-label="Close sidebar"
-            title="Close"
-          >
-            <X width={16} height={16} />
-          </button>
-        ) : null}
-      </div>
-    </div>
+    <ReportPaneHead
+      onBack={onBack}
+      onHistory={onViewHistory}
+      historyCount={reportHistoryCount}
+      onMinimize={onMinimize}
+      onClose={onCloseSidebar}
+    />
   );
 }
 
@@ -169,6 +147,7 @@ export default function ChatInterface({
   reportHistoryCount = 0,
   onCloseSidebar,
   onOpenExchange,
+  onMinimize,
 }: Props) {
   const {
     data: reportData,
@@ -646,21 +625,17 @@ export default function ChatInterface({
       !isRefreshingTweets
     ) {
       return (
-        <div className="text-center py-6 sm:py-8 text-white/60">
-          <div className="w-6 h-6 sm:w-8 sm:h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-3 sm:mb-4"></div>
-          <p className="text-sm sm:text-base">Loading tweet data...</p>
+        <div className="ss-tw-state" role="status">
+          <span className="rx-spin" aria-hidden="true" />
+          <p className="m-0">Loading tweet data...</p>
         </div>
       );
     }
 
     if (isRefreshingTweets || isRegenerating) {
       return (
-        <div className="space-y-4 sm:space-y-5">
-          <div className="text-center py-2">
-            <p className="!text-yellow-400 font-semibold tabular-nums text-lg sm:text-xl">
-              {topTweetsFetchCountdown}s
-            </p>
-          </div>
+        <div className="ss-tw-state" role="status">
+          <span className="ss-tw-count">{topTweetsFetchCountdown}s</span>
         </div>
       );
     }
@@ -668,7 +643,7 @@ export default function ChatInterface({
     if (tweetsData && Array.isArray(tweetsData) && tweetsData.length > 0) {
       // Use the structured tweets data with enriched information
       return (
-        <div className="space-y-4 sm:space-y-6">
+        <div className="ss-tweets">
           {tweetsData.map((tweet: any, idx: number) => {
             const tweeter = tweet.tweeter || {};
             const username = tweeter.userName || tweeter.username || "unknown";
@@ -700,146 +675,138 @@ export default function ChatInterface({
             };
 
             return (
-              <div
-                key={tweet.id || idx}
-                className="bg-black/20 rounded-lg p-3 sm:p-4 md:p-5 border border-white/10 hover:border-blue-400/50 transition-colors"
-              >
-                <div className="flex items-start gap-2 sm:gap-3 md:gap-4">
-                  {/* Avatar - responsive sizing */}
-                  <div className="w-8 h-8 sm:w-10 sm:h-10 md:w-12 md:h-12 bg-blue-500 rounded-full flex items-center justify-center shrink-0 overflow-hidden">
-                    {profileImage ? (
-                      <Image
-                        src={profileImage}
-                        alt={`${displayName}`}
-                        width={48}
-                        height={48}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <span className="text-white text-xs sm:text-sm font-bold">
-                        {displayName.charAt(0).toUpperCase()}
-                      </span>
+              <article key={tweet.id || idx} className="ss-tw">
+                <div className="ss-tw__ava">
+                  {profileImage ? (
+                    <Image
+                      src={profileImage}
+                      alt={`${displayName}`}
+                      width={36}
+                      height={36}
+                    />
+                  ) : (
+                    <span aria-hidden="true">
+                      {displayName.charAt(0).toUpperCase()}
+                    </span>
+                  )}
+                </div>
+
+                <div className="ss-tw__main">
+                  <div className="ss-tw__top">
+                    <div className="ss-tw__who">
+                      <div className="ss-tw__by">
+                        <b>{displayName}</b>
+                        {isVerified && (
+                          <svg
+                            className="ss-tw__verified"
+                            viewBox="0 0 24 24"
+                            role="img"
+                            aria-label={`Verified ${verifiedType || "account"}`}
+                          >
+                            <path
+                              d="M12 2l2.4 1.8 3-.2.9 2.9 2.5 1.7-.9 2.9.9 2.9-2.5 1.7-.9 2.9-3-.2L12 22l-2.4-1.8-3 .2-.9-2.9-2.5-1.7.9-2.9-.9-2.9 2.5-1.7.9-2.9 3 .2z"
+                              fill="currentColor"
+                            />
+                            <path
+                              d="M8 12.2l2.6 2.6L16.2 9"
+                              fill="none"
+                              stroke="#fff"
+                              strokeWidth="2"
+                              strokeLinecap="round"
+                              strokeLinejoin="round"
+                            />
+                          </svg>
+                        )}
+                        <span>@{username}</span>
+                        {tweet.createdAt && (
+                          <span>· {formatTimestamp(tweet.createdAt)}</span>
+                        )}
+                      </div>
+                      {(followers > 0 || location) && (
+                        <div className="ss-tw__sub">
+                          {followers > 0 && (
+                            <span className="is-fol">
+                              {formatNumber(followers)} followers
+                            </span>
+                          )}
+                          {location && (
+                            <span>
+                              <svg width="11" height="11" viewBox="0 0 24 24" aria-hidden="true">
+                                <path
+                                  d="M12 21s-7-6.2-7-11.5A7 7 0 0 1 19 9.5C19 14.8 12 21 12 21z"
+                                  fill="none"
+                                  stroke="currentColor"
+                                  strokeWidth="2"
+                                />
+                                <circle cx="12" cy="9.5" r="2.5" fill="currentColor" />
+                              </svg>
+                              <span className="truncate">{location}</span>
+                            </span>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {tweet.url && (
+                      <a
+                        href={tweet.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="ss-tw__open"
+                        aria-label={`View the post by @${username} on X`}
+                      >
+                        View on X
+                        <IconExt />
+                      </a>
                     )}
                   </div>
 
-                  <div className="flex-1 min-w-0">
-                    {/* User info header - mobile responsive layout */}
-                    <div className="mb-2 sm:mb-3">
-                      {/* Main user info line - wraps on mobile */}
-                      <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1 sm:gap-2">
-                        <div className="flex flex-col min-w-0">
-                          {/* Name and verification line */}
-                          <div className="flex items-center gap-1 sm:gap-2 flex-wrap min-w-0">
-                            <span className="font-semibold text-white text-sm sm:text-base truncate">
-                              {displayName}
-                            </span>
-                            {isVerified && (
-                              <span
-                                className="text-blue-400 shrink-0"
-                                title={`Verified ${verifiedType || "account"}`}
-                              >
-                                {verifiedType === "Blue" ? "🔹" : "✓"}
-                              </span>
-                            )}
-                            <span className="text-white/50 text-xs sm:text-sm truncate">
-                              @{username}
-                            </span>
-                            {tweet.createdAt && (
-                              <>
-                                <span className="text-white/30 hidden sm:inline">
-                                  ·
-                                </span>
-                                <span className="text-white/50 text-xs sm:text-sm shrink-0">
-                                  {formatTimestamp(tweet.createdAt)}
-                                </span>
-                              </>
-                            )}
-                          </div>
-
-                          {/* Secondary info line - stacks on mobile */}
-                          <div className="flex items-center gap-2 sm:gap-3 mt-0.5 sm:mt-1 text-xs sm:text-sm text-white/50 flex-wrap">
-                            {followers > 0 && (
-                              <span className="shrink-0">
-                                {formatNumber(followers)} followers
-                              </span>
-                            )}
-                            {location && (
-                              <>
-                                {followers > 0 && (
-                                  <span className="hidden sm:inline">·</span>
-                                )}
-                                <span className="truncate">📍 {location}</span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-
-                        {/* View on X link - better mobile positioning */}
-                        {tweet.url && (
-                          <a
-                            href={tweet.url}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-blue-400 hover:text-blue-300 text-xs sm:text-sm transition-colors shrink-0 self-start mt-1 sm:mt-0"
-                          >
-                            <span className="hidden sm:inline">
-                              View on X →
-                            </span>
-                            <span className="sm:hidden">View →</span>
-                          </a>
-                        )}
-                      </div>
+                  {/* Reply context */}
+                  {tweet.isReply && tweet.inReplyToUsername && (
+                    <div className="ss-tw__reply">
+                      Replying to @{tweet.inReplyToUsername}
                     </div>
+                  )}
 
-                    {/* Reply context */}
-                    {tweet.isReply && tweet.inReplyToUsername && (
-                      <div className="text-white/50 text-xs sm:text-sm mb-2">
-                        Replying to @{tweet.inReplyToUsername}
-                      </div>
-                    )}
+                  <p className="ss-tw__text">{text}</p>
 
-                    {/* Tweet content - better mobile text sizing */}
-                    <p className="text-white/90 leading-relaxed mb-3 whitespace-pre-wrap text-sm sm:text-base">
-                      {text}
-                    </p>
-
-                    {/* Tweet entities - mobile responsive */}
-                    {tweet.entities && (
-                      <div className="space-y-2 mb-3">
-                        {/* External Links - better mobile overflow handling */}
-                        {tweet.entities.urls &&
-                          tweet.entities.urls.length > 0 && (
-                            <div className="space-y-1">
-                              {tweet.entities.urls.map(
-                                (urlEntity: any, urlIdx: number) => (
-                                  <div
-                                    key={urlIdx}
-                                    className="text-blue-400 text-xs sm:text-sm"
-                                  >
-                                    <span className="mr-1">🔗</span>
-                                    <a
-                                      href={urlEntity.expanded_url}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="hover:underline break-all"
-                                    >
-                                      {urlEntity.display_url}
-                                    </a>
-                                  </div>
-                                )
-                              )}
-                            </div>
+                  {tweet.entities && (
+                    <>
+                      {tweet.entities.urls && tweet.entities.urls.length > 0 && (
+                        <div className="ss-tw__urls">
+                          {tweet.entities.urls.map(
+                            (urlEntity: any, urlIdx: number) => (
+                              <a
+                                key={urlIdx}
+                                href={urlEntity.expanded_url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                              >
+                                <svg width="12" height="12" viewBox="0 0 24 24" aria-hidden="true">
+                                  <path
+                                    d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    strokeWidth="2"
+                                    strokeLinecap="round"
+                                  />
+                                </svg>
+                                {urlEntity.display_url}
+                              </a>
+                            )
                           )}
+                        </div>
+                      )}
 
-                        {/* Hashtags and Mentions - better mobile wrapping */}
-                        <div className="flex flex-wrap gap-1 sm:gap-2">
+                      {((tweet.entities.hashtags &&
+                        tweet.entities.hashtags.length > 0) ||
+                        (tweet.entities.user_mentions &&
+                          tweet.entities.user_mentions.length > 0)) && (
+                        <div className="ss-tw__tags">
                           {tweet.entities.hashtags &&
                             tweet.entities.hashtags.map(
                               (hashtag: any, hashIdx: number) => (
-                                <span
-                                  key={hashIdx}
-                                  className="text-blue-400 text-xs sm:text-sm break-all"
-                                >
+                                <span key={hashIdx} className="is-tag">
                                   #{hashtag.text}
                                 </span>
                               )
@@ -847,93 +814,118 @@ export default function ChatInterface({
                           {tweet.entities.user_mentions &&
                             tweet.entities.user_mentions.map(
                               (mention: any, mentionIdx: number) => (
-                                <span
-                                  key={mentionIdx}
-                                  className="text-green-400 text-xs sm:text-sm"
-                                >
+                                <span key={mentionIdx} className="is-at">
                                   @{mention.screen_name}
                                 </span>
                               )
                             )}
                         </div>
-                      </div>
-                    )}
+                      )}
+                    </>
+                  )}
 
-                    {/* Media - mobile responsive */}
-                    {tweet.media?.mediaUrl && (
-                      <div className="mt-2 sm:mt-3 mb-2 sm:mb-3">
-                        <Image
-                          src={tweet.media.mediaPreview || tweet.media.mediaUrl}
-                          alt="Tweet media"
-                          width={400}
-                          height={250}
-                          className="rounded-md border border-white/10 w-full h-auto"
+                  {tweet.media?.mediaUrl && (
+                    <Image
+                      src={tweet.media.mediaPreview || tweet.media.mediaUrl}
+                      alt="Tweet media"
+                      width={400}
+                      height={250}
+                      className="ss-tw__media"
+                    />
+                  )}
+
+                  <div className="ss-tw__meta">
+                    <span aria-label={`${tweet.replyCount || 0} replies`}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M4 5h16v11H9l-5 4z"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinejoin="round"
                         />
-                      </div>
+                      </svg>
+                      {formatNumber(tweet.replyCount || 0)}
+                    </span>
+                    <span aria-label={`${tweet.retweetCount || 0} reposts`}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M7 7h11v5M17 17H6v-5M15 4l3 3-3 3M9 20l-3-3 3-3"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                      {formatNumber(tweet.retweetCount || 0)}
+                    </span>
+                    <span className="is-like" aria-label={`${tweet.likeCount || 0} likes`}>
+                      <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+                        <path
+                          d="M12 20s-7-4.4-9-9a4.8 4.8 0 0 1 9-3 4.8 4.8 0 0 1 9 3c-2 4.6-9 9-9 9z"
+                          fill="currentColor"
+                        />
+                      </svg>
+                      {formatNumber(tweet.likeCount || 0)}
+                    </span>
+                    {tweet.viewCount && (
+                      <span aria-label={`${tweet.viewCount} views`}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M2 12s3.6-7 10-7 10 7 10 7-3.6 7-10 7S2 12 2 12z"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                          />
+                          <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="2" />
+                        </svg>
+                        {formatNumber(tweet.viewCount)}
+                      </span>
                     )}
-
-                    {/* Engagement metrics - improved mobile grid */}
-                    <div className="grid grid-cols-3 sm:grid-cols-4 lg:grid-cols-6 gap-2 sm:gap-3 md:gap-4 text-xs sm:text-sm text-white/60 pt-2 sm:pt-3 border-t border-white/10">
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span className="shrink-0">💬</span>
-                        <span className="truncate">
-                          {formatNumber(tweet.replyCount || 0)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span className="shrink-0">🔄</span>
-                        <span className="truncate">
-                          {formatNumber(tweet.retweetCount || 0)}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-1 min-w-0">
-                        <span className="shrink-0">❤️</span>
-                        <span className="truncate">
-                          {formatNumber(tweet.likeCount || 0)}
-                        </span>
-                      </div>
-                      {tweet.viewCount && (
-                        <div className="flex items-center gap-1 min-w-0">
-                          <span className="shrink-0">👁️</span>
-                          <span className="truncate">
-                            {formatNumber(tweet.viewCount)}
-                          </span>
-                        </div>
-                      )}
-                      {tweet.quoteCount && tweet.quoteCount > 0 && (
-                        <div className="flex items-center gap-1 min-w-0">
-                          <span className="shrink-0">💭</span>
-                          <span className="truncate">
-                            {formatNumber(tweet.quoteCount)}
-                          </span>
-                        </div>
-                      )}
-                      {tweet.bookmarkCount && tweet.bookmarkCount > 0 && (
-                        <div className="flex items-center gap-1 min-w-0">
-                          <span className="shrink-0">🔖</span>
-                          <span className="truncate">
-                            {formatNumber(tweet.bookmarkCount)}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-
-                    {/* Additional metadata - mobile responsive */}
-                    {(tweet.source || tweet.lang !== "en") && (
-                      <div className="mt-2 pt-2 border-t border-white/10 flex flex-wrap gap-2 sm:gap-4 text-xs text-white/40">
-                        {tweet.source && (
-                          <span className="truncate">via {tweet.source}</span>
-                        )}
-                        {tweet.lang && tweet.lang !== "en" && (
-                          <span className="shrink-0">
-                            lang: {tweet.lang}
-                          </span>
-                        )}
-                      </div>
+                    {tweet.quoteCount && tweet.quoteCount > 0 && (
+                      <span aria-label={`${tweet.quoteCount} quotes`}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M7 7h4v4c0 3-1.5 5-4 6M14 7h4v4c0 3-1.5 5-4 6"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        {formatNumber(tweet.quoteCount)}
+                      </span>
+                    )}
+                    {tweet.bookmarkCount && tweet.bookmarkCount > 0 && (
+                      <span aria-label={`${tweet.bookmarkCount} bookmarks`}>
+                        <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+                          <path
+                            d="M6 3h12v18l-6-4-6 4z"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                        {formatNumber(tweet.bookmarkCount)}
+                      </span>
                     )}
                   </div>
+
+                  {(tweet.source || tweet.lang !== "en") && (
+                    <div className="ss-tw__extra">
+                      {tweet.source && (
+                        <span className="truncate">via {tweet.source}</span>
+                      )}
+                      {tweet.lang && tweet.lang !== "en" && (
+                        <span>lang: {tweet.lang}</span>
+                      )}
+                    </div>
+                  )}
                 </div>
-              </div>
+              </article>
             );
           })}
         </div>
@@ -941,26 +933,17 @@ export default function ChatInterface({
     }
 
     return (
-      <div className="flex flex-col items-center justify-center py-6 sm:py-8 gap-2">
+      <div className="ss-tw-state">
         <button
           type="button"
           onClick={handleRefreshTweetsOnly}
           disabled={isRegenerating || isRefreshingTweets}
-          className={`w-17.5 h-7.5 flex items-center justify-center transition ${
-            isRegenerating || isRefreshingTweets
-              ? "opacity-60 cursor-wait"
-              : "cursor-pointer"
-          }`}
+          className="rx-btn rx-btn--report rx-btn--s"
           aria-label="Fetch latest tweets from X"
           title="Fetches live tweets via Twitter API (lib/api/tweet.ts on the server)"
         >
-          <Image
-            src="/images/generate.webp"
-            alt="Generate"
-            width={100}
-            height={40}
-            className="object-contain hover:scale-[1.05] transition"
-          />
+          <IconRefresh size={13} />
+          Generate
         </button>
       </div>
     );
@@ -982,22 +965,22 @@ export default function ChatInterface({
       // Hide Safety Analytics section entirely for non-BNB chains
       if (!isBNBToken) return "";
       return (
-        <div className="space-y-6">
-          {renderRexPilotMarkdownSection(body)}
+        <>
+          {renderScreenerReportMarkdown(body)}
 
           {securityAnalytics && isBNBToken && (
-            <div className="mt-8">
+            <div className="mt-2">
               <BirdeyeSafetyAnalyticsComponent data={securityAnalytics} />
             </div>
           )}
 
           {analyticsLoading && isBNBToken && (
-            <div className="text-center py-8 text-white/60">
-              <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p>Loading safety analytics...</p>
+            <div className="ss-loading" role="status">
+              <span className="rx-spin" aria-hidden="true" />
+              <p className="m-0">Loading safety analytics...</p>
             </div>
           )}
-        </div>
+        </>
       );
     }
 
@@ -1005,42 +988,48 @@ export default function ChatInterface({
       // Hide Holder Analytics section entirely for non-BNB chains
       if (!isBNBToken) return "";
       return (
-        <div className="space-y-6">
-          {renderRexPilotMarkdownSection(body)}
+        <>
+          {renderScreenerReportMarkdown(body)}
 
           {holderAnalytics && isBNBToken && (
-            <div className="mt-8">
+            <div className="mt-2">
               <HolderAnalyticsComponent data={holderAnalytics} />
             </div>
           )}
 
           {analyticsLoading && isBNBToken && (
-            <div className="text-center py-8 text-white/60">
-              <div className="w-8 h-8 border-2 border-blue-400 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
-              <p>Loading holder analytics...</p>
+            <div className="ss-loading" role="status">
+              <span className="rx-spin" aria-hidden="true" />
+              <p className="m-0">Loading holder analytics...</p>
             </div>
           )}
-        </div>
+        </>
       );
     }
 
     // Default case - just render markdown
-    return renderRexPilotMarkdownSection(body);
+    return renderScreenerReportMarkdown(body);
   }
 
   function renderReportFromSections(sections: RexReportSection[]): React.ReactNode {
     return (
-      <div className="space-y-8">
+      <div className="ss-report">
         {sections.map(({ title, body, id }) => (
-          <div key={id} id={id} className="scroll-mt-24">
-            <h2 className="rex-pilot-section-heading mb-4 flex items-center gap-3">
+          <section
+            key={id}
+            id={id}
+            className={`ss-sec${
+              title.toLowerCase().includes("team updates") ? " ss-sec--gold" : ""
+            }`}
+          >
+            <h2 className="ss-sec__title">
               {displayReportSectionTitle(title)}
-              {getRexPilotReportSectionIcon(title)}
+              {screenerReportSectionBadge(title)}
             </h2>
-            <div className="space-y-3">
+            <div className="ss-sec__body">
               {renderSectionContent(title, body)}
             </div>
-          </div>
+          </section>
         ))}
       </div>
     );
@@ -1056,26 +1045,25 @@ export default function ChatInterface({
 
     return (
       <button
+        type="button"
         onClick={handleRegenerate}
         disabled={isRegenerating}
-        className={`mr-2 p-1 rounded transition relative ${
-          isRegenerating ? "opacity-70 cursor-wait" : ""
+        className={`rx-icon-btn${
+          isRegenerating && countdown !== null
+            ? " ss-rh__count"
+            : hasRegenerated
+            ? " ss-rh__done"
+            : ""
         }`}
         title={title}
         aria-label={title}
       >
         {isRegenerating && countdown !== null ? (
-          <div className="flex items-center justify-center w-12.5 h-12.5">
-            <div className="text-[#FFD700] font-bold text-lg animate-pulse">
-              {countdown}s
-            </div>
-          </div>
+          <span className="animate-pulse motion-reduce:animate-none">{countdown}s</span>
         ) : hasRegenerated ? (
-          <div className="flex items-center justify-center rounded-sm bg-[#FFD700] px-2 py-1">
-            <span className="text-black font-bold! text-xs">Regenerated!</span>
-          </div>
+          <span>Regenerated!</span>
         ) : (
-          <RotateCcw className="w-6 h-6 text-white hover:text-[#FFD700] transition-colors" />
+          <IconRefresh />
         )}
       </button>
     );
@@ -1095,20 +1083,22 @@ export default function ChatInterface({
     }, [reportData?.chain, reportData?.contractAddress]);
 
     return (
-      <button
-        type="button"
-        onClick={onShare}
-        className="relative mr-1 inline-flex items-center justify-center rounded p-1 text-white transition hover:text-[#FFD700]"
-        title={copied ? "Link copied" : "Share report link"}
-        aria-label={copied ? "Link copied" : "Share report link"}
-      >
-        <Share2 className="h-6 w-6" />
+      <span className="ss-tipwrap">
+        <button
+          type="button"
+          onClick={onShare}
+          className={`rx-icon-btn${copied ? " ss-rh__ok" : ""}`}
+          title={copied ? "Link copied" : "Share report link"}
+          aria-label={copied ? "Link copied" : "Share report link"}
+        >
+          {copied ? <IconCheck /> : <IconShare />}
+        </button>
         {copied ? (
-          <span className="absolute -bottom-7 left-1/2 z-10 -translate-x-1/2 whitespace-nowrap rounded-md border border-[#ffc000] bg-black/90 px-2 py-0.5 text-[10px] text-[#ffc000]">
+          <span className="ss-tip" role="status">
             Link copied
           </span>
         ) : null}
-      </button>
+      </span>
     );
   }
 
@@ -1126,21 +1116,13 @@ export default function ChatInterface({
 
     return (
       <button
+        type="button"
         onClick={onCopy}
-        className="p-1 rounded transition relative z-50"
-        title={copied ? "Copied!" : "Copy Report"}
-        aria-label={copied ? "Copied!" : "Copy Report"}
+        className={`rx-icon-btn${copied ? " ss-rh__ok" : ""}`}
+        title={copied ? "Copied!" : "Copy contract address"}
+        aria-label={copied ? "Copied!" : "Copy contract address"}
       >
-        {copied ? (
-          <Check className="w-12.5 h-12.5 text-white transition-transform" />
-        ) : (
-          <Image
-            src={"/images/copy.png"}
-            alt="copy button"
-            width={50}
-            height={50}
-          />
-        )}
+        {copied ? <IconCheck /> : <IconCopy />}
       </button>
     );
   }
@@ -1276,30 +1258,35 @@ export default function ChatInterface({
 
   if (isLoading || isFetching) {
     return (
-      <div className="rex-pilot-panel relative mx-auto flex h-full min-h-0 w-full min-w-0 max-w-360 flex-1 flex-col">
+      <div className="ss-chat">
         <PilotSessionTopChrome
           onBack={onBack}
           onViewHistory={onViewHistory}
           onCloseSidebar={onCloseSidebar}
+          onMinimize={onMinimize}
           reportHistoryCount={reportHistoryCount}
         />
-        <div className="flex flex-1 items-center justify-center">
-          <div className="text-white/60">Loading…</div>
+        <div className="sb-body" role="status">
+          <span className="sr-only">Loading…</span>
+          <SkeletonLines widths={[46, 90, 76, 84, 60, 38, 82, 70]} />
         </div>
       </div>
     );
   }
   if (!reportData) {
     return (
-      <div className="rex-pilot-panel relative mx-auto flex h-full min-h-0 w-full min-w-0 max-w-360 flex-1 flex-col">
+      <div className="ss-chat">
         <PilotSessionTopChrome
           onBack={onBack}
           onViewHistory={onViewHistory}
           onCloseSidebar={onCloseSidebar}
+          onMinimize={onMinimize}
           reportHistoryCount={reportHistoryCount}
         />
-        <div className="flex flex-1 items-center justify-center">
-          <div className="text-white/60">No report selected</div>
+        <div className="sb-body">
+          <div className="empty">
+            <p>No report selected</p>
+          </div>
         </div>
       </div>
     );
@@ -1309,203 +1296,98 @@ export default function ChatInterface({
 
   return (
     <>
-    <div
-      className="rex-pilot-panel relative flex h-full min-h-0 w-full min-w-0 max-w-360 flex-1 flex-col mx-auto"
-      style={{
-        maxHeight: "100dvh", // Use dynamic viewport height for mobile
-      }}
-    >
+    <div className="ss-chat">
       <PilotSessionTopChrome
         onBack={onBack}
         onViewHistory={onViewHistory}
         onCloseSidebar={onCloseSidebar}
+        onMinimize={onMinimize}
         reportHistoryCount={reportHistoryCount}
       />
       <div
         ref={scrollContainerRef}
-        className="min-h-0 flex-1 overflow-y-auto overflow-x-hidden scrollbar-none p-4"
+        className="sb-body ss-chat__scroll"
         style={{
           WebkitOverflowScrolling: "touch",
           touchAction: "pan-y",
           overscrollBehavior: "contain",
-          paddingBottom: "0.5rem", // Reduced padding on mobile
         }}
       >
-        <div className="rounded-lg relative max-w-full px-0 py-2">
-          <div className="flex flex-col w-full justify-center items-center gap-4">
-            <div className="flex items-center gap-5">
-              {logo && (
-                <Image
-                  src={logo}
-                  alt="Token Logo"
-                  width={30}
-                  height={30}
-                  className="rounded-full border border-white/10"
-                />
-              )}
-              <h2 className="rex-pilot-market-title text-center">
-                {reportData.ticker}{" "}
-                {reportData.projectName ? `(${reportData.projectName})` : ""}
-              </h2>
-            </div>
+        {/* Report head (prototype .rep-head): token, links, updated, actions */}
+        <header className="ss-rh">
+          {logo && (
+            <span className="ss-rh__ava">
+              <Image src={logo} alt="" width={40} height={40} />
+            </span>
+          )}
+          <h2>
+            {reportData.ticker}
+            {reportData.projectName ? ` · ${reportData.projectName}` : ""}
+          </h2>
 
-            <ProjectSocialLinks
-              links={projectLinks}
-              className="justify-center"
+          <ProjectSocialLinks
+            links={projectLinks}
+            className="ss-rh__links justify-center"
+          />
+
+          <span className="ss-rh__upd">
+            {formatRelativeTime(reportData.updatedAt)}
+          </span>
+
+          {headerImage && (
+            <Image
+              src={headerImage}
+              alt=""
+              width={600}
+              height={200}
+              className="ss-rh__banner"
             />
+          )}
 
-            {/* Last updated timestamp (placed outside row for proper centering) */}
-            <p className="text-sm text-white/60 -mt-2 text-center w-full">
-              {formatRelativeTime(reportData.updatedAt)}
-            </p>
-
-            <div className="flex flex-col gap-5">
-              {headerImage && (
-                <Image
-                  src={headerImage}
-                  alt="Header"
-                  width={75}
-                  height={25}
-                  className="rounded-lg border border-white/10 object-cover w-[200] h-[60]"
-                />
-              )}
-            </div>
-          </div>
-
-          <div className="w-full flex flex-wrap items-center justify-between gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <RegenerateButton />
-              <GlossyReportButton
-                label="What's New"
-                variant="whats-new"
-                onClick={onWhatsNewClick}
-                disabled={whatsNewLoading}
-                ariaLabel="What's New"
-              />
-              <ShareReportLinkButton />
-            </div>
-            <div className="flex items-center">
-              <CopyContractAddressButton
-                contractaddress={reportData?.contractAddress ?? ""}
-              />
-            </div>
-          </div>
-
-          <div className="rex-markets-report-md rex-markets-report-md--fluid whitespace-pre-wrap wrap-break-word overflow-x-hidden pt-4">
-            {renderReportFromSections(reportSectionsDisplay)}
-          </div>
-        </div>
-
-        <div className="flex flex-col w-full">
-          {msgs.map((m: any) => (
-            <div
-              key={m.id}
-              className={`mb-4 ${
-                m.role === "user"
-                  ? "flex items-start justify-end"
-                  : "flex justify-end items-end"
-              }`}
+          <div className="ss-rh__tools">
+            <RegenerateButton />
+            <button
+              type="button"
+              className="rx-btn rx-btn--news rx-btn--s"
+              onClick={onWhatsNewClick}
+              disabled={whatsNewLoading}
+              aria-label="What's New"
             >
-              <div className="max-w-full p-4 rounded-lg wrap-break-word">
-                <div className="flex items-center gap-2 mb-2">
-                  {m.role === "user" ? (
-                    <div className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-500">
-                      <span className="text-white text-xs">U</span>
-                    </div>
-                  ) : (
-                    <div>
-                      <Image
-                        src="/images/assistant_banner.png"
-                        alt="Assistant avatar"
-                        width={120}
-                        height={80}
-                      />
-                    </div>
-                  )}
-                </div>
-                <div className="rex-pilot-body-text wrap-break-word">
-                  {formatRexPilotChatLines(m.content)}
-                </div>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {streamingContent && (
-          <div className="mb-4 flex justify-end">
-            <div className="p-4 rounded-lg max-w-full wrap-break-word">
-              <div className="flex items-center">
-                <Image
-                  src="/images/assistant_banner.png"
-                  alt="Assistant avatar"
-                  width={120}
-                  height={80}
-                />
-              </div>
-              <div className="rex-pilot-body-text wrap-break-word">
-                {formatRexPilotChatLines(streamingContent)}
-                <span className="inline-block w-2 h-4 bg-white/60 animate-pulse ml-1" />
-              </div>
-            </div>
+              {whatsNewLoading ? (
+                <span className="rx-spin" aria-hidden="true" />
+              ) : (
+                <IconNews />
+              )}
+              What&apos;s New
+            </button>
+            <ShareReportLinkButton />
+            <CopyContractAddressButton
+              contractaddress={reportData?.contractAddress ?? ""}
+            />
           </div>
-        )}
+        </header>
+
+        {renderReportFromSections(reportSectionsDisplay)}
+
+        {/* Follow-up questions (right) and Rex Pilot answers (left, claw mark) */}
+        <QaThread messages={msgs} streaming={streamingContent} />
 
         <div ref={endRef} />
       </div>
 
-      <ReportMenuDropdown items={reportMenuItems} scrollRootRef={scrollContainerRef} />
+      <SectionNav items={reportMenuItems} scrollRootRef={scrollContainerRef} />
 
-      <div
-        className="px-4 sm:px-8 w-full max-w-360 mx-auto shrink-0 pb-2 sm:pb-2"
-        style={{
-          paddingBottom: "0.5rem", // Consistent padding on mobile
-          position: "sticky",
-          bottom: 0,
-          backgroundColor: "#000",
-          zIndex: 10,
-        }}
-      >
-        <div className="relative">
-          <textarea
-            ref={taRef}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Ask any follow-up questions!"
-            disabled={sending}
-            className="w-full max-w-full bg-[#262626] border-[0.5px] border-[#3C3C3C] text-[#BEBEBE] placeholder-[#BEBEBE] rounded-lg pl-4 pr-[4.5rem] py-2.5 resize-none outline-none disabled:opacity-50 min-h-[50px] max-h-[200px] break-words text-[15px] leading-[1.65]"
-            rows={2}
-            aria-label="Message input"
-          />
-          {sending ? (
-            <button
-              type="button"
-              onClick={handleStop}
-              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg bg-white/10 text-white/70 transition-colors hover:bg-white/15 hover:text-white"
-              aria-label="Stop generating"
-              title="Stop generating"
-            >
-              <Square className="h-4 w-4 fill-current text-white" />
-            </button>
-          ) : (
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!inputMessage.trim()}
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md font-semibold text-sm text-white transition-all duration-200 disabled:cursor-not-allowed disabled:opacity-50"
-              aria-label="Send message"
-            >
-              <Image
-                src="/images/banner.png"
-                width={40}
-                height={40}
-                alt="Send button"
-                className="scale-100 transition-transform duration-300"
-              />
-            </button>
-          )}
-        </div>
-      </div>
+      <AskBar
+        value={inputMessage}
+        onChange={setInputMessage}
+        onSend={handleSend}
+        onStop={handleStop}
+        onKeyDown={onKeyDown}
+        isSending={sending}
+        placeholder="Ask a follow-up question"
+        label="Ask a follow-up question"
+        taRef={taRef}
+      />
     </div>
     <PaywallModal
       open={showPaywall}
@@ -1529,6 +1411,15 @@ export default function ChatInterface({
       fallbackLinks={projectLinks}
       imageUrl={logo}
       symbol={reportData?.ticker}
+      facts={{
+        priceUsd: dexData?.priceUsd != null ? Number(dexData.priceUsd) : null,
+        change24h: dexData?.priceChange?.h24 ?? null,
+        marketCap: dexData?.marketCap ?? null,
+        volume24h: dexData?.volume?.h24 ?? null,
+        liquidityUsd: dexData?.liquidity?.usd ?? null,
+        createdAt: dexData?.pairCreatedAt ?? null,
+        contract: reportData?.contractAddress ?? null,
+      }}
       trade={
         onOpenExchange && reportData?.ticker && reportData?.contractAddress
           ? {

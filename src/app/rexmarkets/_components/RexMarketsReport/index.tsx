@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import type { MarketReport } from "@/hooks/useGenerateMarketReport";
 
 import RexMarketsReportData from "./RexMarketsReportData";
+import "@/styles/pages/pilot.css";
 
 type RexMarketsReportProps = {
   generatedReport?: MarketReport | null;
@@ -60,10 +61,9 @@ export default function RexMarketsReport({
   }, [generatedReport?.id]);
 
   return (
-    <div
-      className="flex h-full min-h-0 w-full max-h-[100dvh] flex-col overflow-hidden border-0 lg:max-h-none lg:border-l lg:border-l-[#ffc000]"
-    >
-      <RexMarketsReportData 
+    // .rx-pilot: the docked Rex Pilot sidebar (design/market.html aside.pilot-sb); styles/pages/pilot.css
+    <div className="rx-pilot">
+      <RexMarketsReportData
         generatedReport={generatedReport} 
         userId={userId}
         selectedReportId={selectedReportId}

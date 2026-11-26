@@ -3,6 +3,10 @@
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
 import Footer from "@/components/ui/layout/Footer";
 import RexHeader from "@/components/ui/layout/Header";
+import {
+  MarketPageLoading,
+  MarketPageMessage,
+} from "../../_components/RexMarketsReport/RexMarketsReportData/shared/marketUi";
 import { useMarketDetails } from "@/hooks/useMarketDetails";
 import { usePrivy } from "@privy-io/react-auth";
 import { useParams, useRouter } from "next/navigation";
@@ -157,7 +161,7 @@ function KalshiEventPageContent() {
               }}
             />
             <div className="flex-1 flex items-center justify-center">
-              <div className="text-white text-lg">Loading market data...</div>
+              <MarketPageLoading />
             </div>
             <Footer />
           </div>
@@ -179,7 +183,7 @@ function KalshiEventPageContent() {
               }}
             />
             <div className="flex-1 flex items-center justify-center">
-              <div className="text-white text-lg">Invalid market URL</div>
+              <MarketPageMessage title="Invalid market URL" />
             </div>
             <Footer />
           </div>
@@ -201,9 +205,7 @@ function KalshiEventPageContent() {
               }}
             />
             <div className="flex-1 flex items-center justify-center">
-              <div className="text-white text-lg">
-                {error?.message || "Market not found"}
-              </div>
+              <MarketPageMessage title={error?.message || "Market not found"} />
             </div>
             <Footer />
           </div>
@@ -242,6 +244,9 @@ function KalshiEventPageContent() {
               onReportGenerated={handleReportGenerated}
               userId={currentUserId}
               sessionSavedReportId={generatedReport?.id ?? null}
+              onPilotToggle={() => setShowReportSidebar((v) => !v)}
+              pilotOpen={showReportSidebar}
+              pilotControlsId="rex-pilot-sidebar"
             />
           </div>
           <Footer />
@@ -254,6 +259,7 @@ function KalshiEventPageContent() {
               : "translate-x-full lg:absolute pointer-events-none"
           }`}
           role="dialog"
+          id="rex-pilot-sidebar"
           aria-modal="true"
           aria-hidden={!showReportSidebar}
           style={{
@@ -301,7 +307,7 @@ export default function KalshiEventPage() {
       fallback={
         <div className="relative w-full h-screen flex flex-col overflow-hidden">
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-white text-lg">Loading...</div>
+            <MarketPageLoading label="Loading..." />
           </div>
         </div>
       }

@@ -1,6 +1,6 @@
 "use client";
 
-import Image from "next/image";
+import clsx from "clsx";
 
 type GlossyButtonProps = {
   label: string;
@@ -8,23 +8,17 @@ type GlossyButtonProps = {
   onClick: () => void;
   disabled?: boolean;
   ariaLabel: string;
+  /** What's New request in flight: the bolt turns into a spinner. */
+  loading?: boolean;
+  /** Antique-gold Full Report (screener rows, report cards). Default is the dark token-bar style. */
+  gold?: boolean;
+  className?: string;
 };
 
-const BUTTON_ART = {
-  "full-report": {
-    src: "/images/full-report-transparent.png",
-    width: 100,
-    height: 40,
-  },
-  "whats-new": {
-    src: "/images/whats-new-transparent.png",
-    width: 100,
-    height: 40,
-  },
-} as const;
-
 /**
- * Same slot as the previous Generate control (`w-17.5 h-7.5`).
+ * Full Report / What's New (RaptorX design `.rx-btn--report` / `.rx-btn--news`): the token bar
+ * uses the dark report style with the white 3D report emoji; rows and cards use the gold style with
+ * the black report mark. What's New carries the 3D lightning bolt.
  */
 export function GlossyReportButton({
   label,
@@ -32,8 +26,16 @@ export function GlossyReportButton({
   onClick,
   disabled = false,
   ariaLabel,
+  loading = false,
+  gold = false,
+  className,
 }: GlossyButtonProps) {
-  const art = BUTTON_ART[variant];
+  const report = variant === "full-report";
+  const icon = report
+    ? gold
+      ? "/images/emoji/report-ink.svg"
+      : "/images/emoji/report.webp"
+    : "/images/emoji/bolt.webp";
   return (
     <button
       type="button"
@@ -41,20 +43,26 @@ export function GlossyReportButton({
       disabled={disabled}
       aria-label={ariaLabel}
       title={label}
-      className={`relative flex h-7.5 w-17.5 shrink-0 items-center justify-center bg-transparent p-0 transition ${
-        disabled
-          ? "cursor-wait opacity-60"
-          : "cursor-pointer hover:scale-[1.05] active:scale-[0.98]"
-      }`}
-      style={{ flexShrink: 0 }}
+      className={clsx(
+        "rx-btn rx-btn--s font-bold hover:-translate-y-px disabled:translate-none",
+        report ? "rx-btn--report" : "rx-btn--news",
+        report && gold && "rx-btn--gold disabled:filter-none",
+        className,
+      )}
     >
-      <Image
-        src={art.src}
-        alt={label}
-        width={art.width}
-        height={art.height}
-        className="h-full w-full object-contain"
-      />
+      {loading ? (
+        <span className="rx-spin size-3 border-[1.5px]" aria-hidden />
+      ) : (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          className={clsx("rx-emo", report && gold && "rx-emo--ink")}
+          src={icon}
+          alt=""
+          width={16}
+          height={16}
+        />
+      )}
+      {label}
     </button>
   );
 }

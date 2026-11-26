@@ -1,31 +1,31 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useId } from "react";
 import { useQueries } from "@tanstack/react-query";
 import {
-  LineChart,
-  Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
-  Legend,
   ResponsiveContainer,
 } from "recharts";
 import { getPolymarketInterval } from "@/utils/polymarketTrading";
-import { Checkbox } from "@/components/ui/checkbox";
+import { ChartLegend } from "../../../shared/marketUi";
 import {
   computeSeriesStats,
   ChartStatsDot,
   getStatsLabelsForPoint,
   CHART_STATS_DOT_MARGIN,
-  CHART_LEGEND_WRAPPER_STYLE,
-  isChartLegendCheckboxTarget,
 } from "../../../shared/ChartStatsDot";
 import {
   formatChartAxisPercent,
   formatChartPercentValue,
 } from "../../../shared/chartPercentFormat";
+
+/** Plot margin: room above / below for the Highest / Lowest labels; the y axis sits on the right. */
+const CHART_MARGIN = { ...CHART_STATS_DOT_MARGIN, left: 36, right: 0, bottom: 12 };
 
 type MarketWithClobToken = {
   clobTokenId: string;
@@ -153,90 +153,29 @@ const CustomTooltip = ({
   });
 
   return (
-    <div
-      style={{
-        backgroundColor: "#000",
-        border: "1px solid rgba(255, 192, 0, 0.3)",
-        borderRadius: "6px",
-        padding: "8px",
-        color: "#fff",
-        minWidth: "200px",
-        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.5)",
-        zIndex: 30,
-      }}
-    >
-      <div
-        style={{
-          color: "#ffc000",
-          fontWeight: "bold",
-          marginBottom: "6px",
-          fontSize: "11px",
-          borderBottom: "1px solid rgba(255, 192, 0, 0.2)",
-          paddingBottom: "4px",
-        }}
-      >
-        {mainTimestamp}
-      </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: "4px" }}>
-        {marketData.map(({ market, price }) => {
-          const hasPrice =
-            price !== null && price !== undefined && !isNaN(price);
-
-          return (
-            <div
-              key={market.key}
-              style={{
-                display: "flex",
-                justifyContent: "space-between",
-                alignItems: "center",
-                padding: "3px 0",
-                borderBottom: "1px solid rgba(255, 255, 255, 0.05)",
-              }}
-            >
-              <div
-                style={{ display: "flex", alignItems: "center", gap: "6px" }}
-              >
-                <div
-                  style={{
-                    width: "8px",
-                    height: "8px",
-                    borderRadius: "2px",
-                    backgroundColor: market.color,
-                  }}
-                />
-                <span style={{ fontSize: "11px", color: "#fff" }}>
-                  {market.title}
-                </span>
-              </div>
-              <div style={{ display: "flex", alignItems: "center" }}>
-                {hasPrice ? (
-                  <span
-                    style={{
-                      fontSize: "12px",
-                      fontWeight: "bold",
-                      color: market.color,
-                    }}
-                  >
-                    {typeof price === "number"
-                      ? `${formatChartPercentValue(price, 2)}%`
-                      : "N/A"}
-                  </span>
-                ) : (
-                  <span
-                    style={{
-                      fontSize: "10px",
-                      color: "#ffffff40",
-                      fontStyle: "italic",
-                    }}
-                  >
-                    No data
-                  </span>
-                )}
-              </div>
-            </div>
-          );
-        })}
-      </div>
+    <div className="mk-tip">
+      <div className="mk-tip__time">{mainTimestamp}</div>
+      {marketData.map(({ market, price }) => {
+        const hasPrice =
+          price !== null && price !== undefined && !isNaN(price);
+        return (
+          <div key={market.key} className="mk-tip__row">
+            <span className="mk-tip__name">
+              <i style={{ backgroundColor: market.color }} />
+              <span>{market.title}</span>
+            </span>
+            {hasPrice ? (
+              <span className="mk-tip__val" style={{ color: market.color }}>
+                {typeof price === "number"
+                  ? `${formatChartPercentValue(price, 2)}%`
+                  : "N/A"}
+              </span>
+            ) : (
+              <span className="mk-tip__none">No data</span>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 };
@@ -423,7 +362,10 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
     });
   }, [marketsWithValidData]);
 
-  // Legend checkboxes: hidden = unchecked (line hidden). Default all visible.
+  // Unique ids for the area gradients (several charts can be on one page)
+  const fillId = `mkfill-${useId().replace(/:/g, "")}`;
+
+  // Legend toggles: hidden = unchecked (line hidden). Default all visible.
   const [hiddenMarketKeys, setHiddenMarketKeys] = useState<Set<string>>(new Set());
   const visibleMarketKeys = useMemo(
     () => marketKeys.filter((m) => !hiddenMarketKeys.has(m.key)),
@@ -484,12 +426,14 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
     return [low, high];
   }, [chartDataFormatted, visibleMarketKeys]);
 
-  // Y-axis ticks at 5% steps within domain (85, 90, 95, …)
+  // Y-axis ticks at 5% steps within domain (85, 90, 95, …); wider steps (10, 20, 25%) on tall
+  // ranges so the right-hand axis keeps a few clean labels like the prototype. Domain is unchanged.
   const yTicks = useMemo(() => {
     const [low, high] = yDomain;
-    const step = 5;
+    const step =
+      [5, 10, 20, 25].find((s) => (high - low) / s <= 7) ?? 25;
     const ticks: number[] = [];
-    for (let v = low; v <= high; v += step) ticks.push(v);
+    for (let v = Math.ceil(low / step) * step; v <= high; v += step) ticks.push(v);
     return ticks;
   }, [yDomain]);
 
@@ -565,8 +509,8 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
 
   if (isLoadingChart) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-white/60">Loading chart data...</div>
+      <div className="mk-chart__plot mk-chart__empty" role="status">
+        Loading chart data...
       </div>
     );
   }
@@ -576,61 +520,70 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
     const queriesWithErrors = marketQueries.filter((q) => q.error);
 
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-2">
-        <div className="text-white/60">No chart data available</div>
+      <div className="mk-chart__plot mk-chart__empty">
+        <span>No chart data available</span>
         {markets.length === 0 && (
-          <div className="text-white/40 text-xs">
-            No markets with CLOB token IDs found
-          </div>
+          <small>No markets with CLOB token IDs found</small>
         )}
         {markets.length > 0 && (
-          <div className="text-white/40 text-xs">
+          <small className="rx-num">
             Markets: {markets.length}, Loaded: {queriesWithData.length}, Errors:{" "}
             {queriesWithErrors.length}
-          </div>
+          </small>
         )}
-        {queriesWithErrors.length > 0 && (
-          <div className="text-xs text-red-400">
-            {queriesWithErrors.map((q, i) => (
-              <div key={i}>Error: {q.error?.message || "Unknown error"}</div>
-            ))}
-          </div>
-        )}
+        {queriesWithErrors.length > 0 &&
+          queriesWithErrors.map((q, i) => (
+            <span key={i} className="mk-chart__err">
+              Error: {q.error?.message || "Unknown error"}
+            </span>
+          ))}
         {queriesWithData.length > 0 && (
-          <div className="text-white/40 text-xs max-w-md text-center">
-            <div>Data received but no points to display.</div>
-            <div className="mt-2 text-xs">
-              {queriesWithData.map((q, i) => {
-                const { market, data } = q.data!;
-                return (
-                  <div key={i} className="mb-1">
-                    {market.marketTitle}: {data.t?.length || 0} timestamps,{" "}
-                    {data.c?.length || 0} prices
-                  </div>
-                );
-              })}
-            </div>
-          </div>
+          <>
+            <small>Data received but no points to display.</small>
+            {queriesWithData.map((q, i) => {
+              const { market, data } = q.data!;
+              return (
+                <small key={i}>
+                  {market.marketTitle}: {data.t?.length || 0} timestamps,{" "}
+                  {data.c?.length || 0} prices
+                </small>
+              );
+            })}
+          </>
         )}
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full min-h-[280px] w-full">
-      <div className="flex-1 min-h-0 w-full">
+    <>
+      <div className="mk-chart__plot">
         <ResponsiveContainer width="100%" height="100%">
-          <LineChart
-            data={chartDataFormatted}
-            margin={CHART_STATS_DOT_MARGIN}
-          >
-            <CartesianGrid strokeDasharray="3 3" stroke="#ffffff10" />
+          <AreaChart data={chartDataFormatted} margin={CHART_MARGIN}>
+            <defs>
+              {marketKeys.map((market, index) => (
+                <linearGradient
+                  key={market.key}
+                  id={`${fillId}-${index}`}
+                  x1="0"
+                  y1="0"
+                  x2="0"
+                  y2="1"
+                >
+                  <stop offset="0" stopColor={market.color} stopOpacity={0.16} />
+                  <stop offset="1" stopColor={market.color} stopOpacity={0} />
+                </linearGradient>
+              ))}
+            </defs>
+            <CartesianGrid vertical={false} />
             <XAxis
               dataKey="time"
               type="number"
               domain={["dataMin", "dataMax"]}
-              stroke="#ffffff40"
-              tick={{ fill: "#ffc000", fontSize: 11 }}
+              axisLine={false}
+              tickLine={false}
+              tickMargin={8}
+              minTickGap={24}
               interval="preserveStartEnd"
               tickFormatter={(value) => {
                 // value is time in milliseconds
@@ -642,8 +595,11 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
               }}
             />
             <YAxis
-              stroke="#ffffff40"
-              tick={{ fill: "#ffc000", fontSize: 11 }}
+              orientation="right"
+              width={44}
+              axisLine={false}
+              tickLine={false}
+              tickMargin={6}
               domain={yDomain}
               ticks={yTicks}
               allowDataOverflow={false}
@@ -657,6 +613,7 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
               filterNull={false}
               allowEscapeViewBox={{ x: false, y: true }}
               wrapperStyle={{ zIndex: 10000 }}
+              cursor={{ stroke: "rgba(255,236,205,.22)", strokeWidth: 1 }}
               content={(props) => (
                 <CustomTooltip
                   {...props}
@@ -664,43 +621,6 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
                   chartData={chartDataFormatted}
                   visibleMarketKeys={visibleMarketKeys}
                 />
-              )}
-            />
-            <Legend
-              wrapperStyle={CHART_LEGEND_WRAPPER_STYLE}
-              content={() => (
-                <div className="flex flex-wrap items-center justify-center gap-x-4 gap-y-1 mt-2 pointer-events-auto touch-manipulation">
-                  {marketKeys.map((market) => {
-                    const visible = !hiddenMarketKeys.has(market.key);
-                    const lastPrice = lastPrices.get(market.key);
-                    return (
-                      <div
-                        key={market.key}
-                        className="flex items-center gap-2 select-none cursor-pointer touch-manipulation"
-                        onClick={(e) => {
-                          if (isChartLegendCheckboxTarget(e.target)) return;
-                          toggleMarketVisibility(market.key);
-                        }}
-                      >
-                        <Checkbox
-                          checked={visible}
-                          onChange={() => toggleMarketVisibility(market.key)}
-                          size="sm"
-                        />
-                        <span
-                          className="inline-block w-2 h-2 rounded-sm shrink-0"
-                          style={{ backgroundColor: market.color }}
-                        />
-                        <span className="text-white/90">
-                          {market.title}{" "}
-                          {lastPrice !== undefined
-                            ? `${formatChartPercentValue(lastPrice, 2)}%`
-                            : ""}
-                        </span>
-                      </div>
-                    );
-                  })}
-                </div>
               )}
             />
             {marketKeys.map((market, index) => {
@@ -717,14 +637,21 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
 
               const stats = seriesStatsMap.get(market.key);
               return (
-                <Line
+                <Area
                   key={market.key}
                   type="monotone"
                   dataKey={market.key}
                   name={market.title}
                   stroke={market.color}
                   strokeWidth={2}
-                  activeDot={{ r: 4, fill: market.color }}
+                  fill={`url(#${fillId}-${index})`}
+                  fillOpacity={1}
+                  activeDot={{
+                    r: 4,
+                    fill: market.color,
+                    stroke: "#0B0806",
+                    strokeWidth: 1.5,
+                  }}
                   connectNulls={true}
                   isAnimationActive={false}
                   dot={(props: any) => {
@@ -751,9 +678,27 @@ export default function PriceChart({ markets, interval }: PriceChartProps) {
                 />
               );
             })}
-          </LineChart>
+          </AreaChart>
         </ResponsiveContainer>
       </div>
-    </div>
+
+      {/* Series toggles: coloured checks with each series' latest value */}
+      <ChartLegend
+        items={marketKeys.map((market) => {
+          const lastPrice = lastPrices.get(market.key);
+          return {
+            key: market.key,
+            label: market.title,
+            color: market.color,
+            value:
+              lastPrice !== undefined
+                ? `${formatChartPercentValue(lastPrice, 2)}%`
+                : undefined,
+            on: !hiddenMarketKeys.has(market.key),
+          };
+        })}
+        onToggle={toggleMarketVisibility}
+      />
+    </>
   );
 }

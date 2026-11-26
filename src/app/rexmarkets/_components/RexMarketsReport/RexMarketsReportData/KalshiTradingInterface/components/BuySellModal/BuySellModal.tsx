@@ -2,6 +2,7 @@
 
 import { useEffect, useRef } from "react";
 import BuySellWidget from "../BuySellWidget/BuySellWidget";
+import { IconClose } from "../../../shared/marketUi";
 
 type BuySellModalProps = {
   isOpen: boolean;
@@ -88,44 +89,38 @@ export default function BuySellModal({
   if (!isOpen) return null;
 
   return (
-    <>
+    <div className="mk-modal mk-modal--sheet">
+      <div className="mk-modal__scrim" onClick={onClose} aria-hidden="true" />
       <div
-        className="fixed inset-0 bg-black/50 backdrop-blur-sm z-[100] lg:hidden"
-        onClick={onClose}
-      />
-      <div className="fixed inset-0 z-[101] flex items-center justify-center p-4 lg:hidden pointer-events-none">
-        <div
-          ref={modalRef}
-          className="relative w-full max-w-[360px] max-h-[90vh] bg-black border border-white/10 rounded-2xl shadow-2xl pointer-events-auto overflow-y-auto custom-sidebar-scrollbar"
-          onClick={(e) => e.stopPropagation()}
+        ref={modalRef}
+        className="mk-modal__panel"
+        role="dialog"
+        aria-modal="true"
+        aria-label={marketTitle ? `Trade ${marketTitle}` : "Trade"}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          type="button"
+          onClick={onClose}
+          className="rx-icon-btn mk-modal__close"
+          aria-label="Close modal"
         >
-          <button
-            type="button"
-            onClick={onClose}
-            className="absolute top-3 right-3 z-10 p-2 rounded-lg text-white/60 hover:text-white hover:bg-white/10 transition-colors touch-manipulation"
-            aria-label="Close modal"
-          >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
-          <div className="p-0">
-            <BuySellWidget
-              currentYesPrice={currentYesPrice}
-              currentNoPrice={currentNoPrice}
-              onBuyClick={onBuyClick}
-              onSellClick={onSellClick}
-              symbolImageUrl={symbolImageUrl}
-              marketTitle={marketTitle}
-              availableMarkets={availableMarkets}
-              marketsForOrderBook={marketsForOrderBook}
-              selectedMarketIndex={selectedMarketIndex}
-              onMarketIndexChange={onMarketIndexChange}
-              initialOutcome={initialOutcome}
-            />
-          </div>
-        </div>
+          <IconClose size={16} />
+        </button>
+        <BuySellWidget
+          currentYesPrice={currentYesPrice}
+          currentNoPrice={currentNoPrice}
+          onBuyClick={onBuyClick}
+          onSellClick={onSellClick}
+          symbolImageUrl={symbolImageUrl}
+          marketTitle={marketTitle}
+          availableMarkets={availableMarkets}
+          marketsForOrderBook={marketsForOrderBook}
+          selectedMarketIndex={selectedMarketIndex}
+          onMarketIndexChange={onMarketIndexChange}
+          initialOutcome={initialOutcome}
+        />
       </div>
-    </>
+    </div>
   );
 }

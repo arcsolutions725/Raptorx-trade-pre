@@ -26,11 +26,18 @@ import { ArrowRight, Check, Clock, Copy, List, X } from "lucide-react";
 type AcctModalProps = {
   /** id of the heading that names the dialog */
   labelledBy: string;
-  /** "rw": Account and referrals (warm aura); "orders": wide orders dialog */
-  variant: "rw" | "orders";
+  /** "rw": reward family (Account, Daily missions, Leaderboard: warm aura); "orders": wide orders
+   *  dialog; "plain": the standard 480px dialog (Deposit and withdraw, Log in, Paywall, Terms) */
+  variant: "rw" | "orders" | "plain";
   /** The dialog box. Callers use it for their click-outside handling. */
   modalRef: RefObject<HTMLDivElement | null>;
   children: ReactNode;
+  /** 720px dialog (full leaderboard, Terms of service). Phones are a bottom sheet either way. */
+  wide?: boolean;
+  /** Stacking order of the portal root (default 80, from account.css) for dialogs that must sit above other overlays. */
+  zIndex?: number;
+  /** Clicking the scrim calls this (for dialogs that close on a backdrop click). */
+  onScrimClick?: () => void;
 };
 
 const noopSubscribe = () => () => {};
@@ -41,6 +48,9 @@ export function AcctModal({
   variant,
   modalRef,
   children,
+  wide = false,
+  zIndex,
+  onScrimClick,
 }: AcctModalProps) {
   const lastFocus = useRef<Element | null>(null);
   // false on the server and while hydrating (no <body> portal there), true for client renders
@@ -66,8 +76,8 @@ export function AcctModal({
   if (!isClient) return null;
 
   return createPortal(
-    <div className="rx-acct">
-      <div className="acct-scrim" aria-hidden="true" />
+    <div className="rx-acct" style={zIndex != null ? { zIndex } : undefined}>
+      <div className="acct-scrim" aria-hidden="true" onClick={onScrimClick} />
       <div
         ref={modalRef}
         role="dialog"
@@ -78,6 +88,7 @@ export function AcctModal({
           "acct-modal",
           variant === "rw" && "acct-modal--rw",
           variant === "orders" && "acct-modal--orders",
+          wide && "acct-modal--wide",
         )}
       >
         {variant === "rw" ? (
@@ -100,15 +111,21 @@ export function AcctModalHead({
   eyebrow,
   description,
   onClose,
+  lead,
+  closeLabel = "Close",
 }: {
   id: string;
   title: string;
   eyebrow?: string;
   description?: string;
   onClose: () => void;
+  /** Optional mark before the title (logo chip, venue icon). */
+  lead?: ReactNode;
+  closeLabel?: string;
 }) {
   return (
     <div className="acct-modal__head">
+      {lead ? <span className="acct-modal__lead">{lead}</span> : null}
       <div className="min-w-0">
         {eyebrow ? <span className="rx-eyebrow">{eyebrow}</span> : null}
         <h2 id={id}>{title}</h2>
@@ -118,10 +135,39 @@ export function AcctModalHead({
         type="button"
         className="rx-icon-btn rx-icon-btn--s"
         onClick={onClose}
-        aria-label="Close"
+        aria-label={closeLabel}
       >
         <X className="size-3.5" aria-hidden="true" />
       </button>
+    </div>
+  );
+}
+
+/** Empty / error / sign-in note for a popup body: icon tile, title, text and an optional action. */
+export function AcctEmpty({
+  icon,
+  title,
+  children,
+  tone = "gold",
+  action,
+}: {
+  icon: ReactNode;
+  title: string;
+  children?: ReactNode;
+  tone?: "gold" | "error";
+  action?: ReactNode;
+}) {
+  return (
+    <div className="o-empty">
+      <span
+        className={clsx("o-empty__ico", tone === "error" && "is-error")}
+        aria-hidden="true"
+      >
+        {icon}
+      </span>
+      <b>{title}</b>
+      {children ? <p>{children}</p> : null}
+      {action}
     </div>
   );
 }

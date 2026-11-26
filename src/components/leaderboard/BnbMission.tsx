@@ -1,6 +1,8 @@
 "use client";
 
+import "@/styles/pages/rewards.css";
 import { useState, useEffect } from "react";
+import clsx from "clsx";
 import { Wallet, CheckCircle, Circle, Loader2 } from "lucide-react";
 import { useBnbMission } from "@/hooks/useBnbMission";
 import { getWalletModal } from "@/components/providers/WagamiProvider";
@@ -194,10 +196,14 @@ export function BnbMission({ userId }: BnbMissionProps) {
 
   if (loading && !mission) {
     return (
-      <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-        <div className="flex items-center justify-center py-4">
-          <Loader2 className="w-6 h-6 animate-spin text-[#ffc000]" />
-          <p className="ml-3 text-gray-400">Loading BNB mission...</p>
+      <div className="bnb-mission rx-flat" role="status">
+        <div className="bnb-mission__head">
+          <span className="dm-card__ico">
+            <Loader2 className="size-5 animate-spin" aria-hidden="true" />
+          </span>
+          <div className="dm-card__t">
+            <span className="dm-card__m">Loading BNB mission…</span>
+          </div>
         </div>
       </div>
     );
@@ -205,117 +211,114 @@ export function BnbMission({ userId }: BnbMissionProps) {
 
   if (!mission) return null;
 
+  const steps = [
+    {
+      key: "connect",
+      title: "Connect wallet to BSC",
+      text: "Connect Metamask or compatible wallet to BSC network",
+      done: mission.walletConnected,
+    },
+    {
+      key: "sign",
+      title: "Complete on-chain signature",
+      text: "Sign a message with your BNB wallet",
+      done: mission.signatureCompleted,
+    },
+  ];
+
   return (
-    <div className="bg-gray-800 rounded-xl p-4 border border-gray-700">
-      <div className="flex items-center justify-between mb-3">
-        <div className="flex items-center gap-3">
-          <div className="bg-yellow-600 p-2 rounded-lg">
-            <Wallet className="w-5 h-5 text-white" />
-          </div>
-          <div>
-            <h4 className="font-semibold text-white">BNB Chain Mission</h4>
-            <p className="text-xs text-gray-400">
-              Connect wallet & sign to earn +250 points
-            </p>
-          </div>
+    <div
+      className={clsx("bnb-mission rx-flat", mission.isCompleted && "is-done")}
+    >
+      <div className="bnb-mission__head">
+        <span className="dm-card__ico">
+          <Wallet className="size-5" aria-hidden="true" />
+        </span>
+        <div className="dm-card__t">
+          <b>BNB Chain mission</b>
+          <span className="dm-card__m">
+            Connect wallet &amp; sign to earn <b>+250</b> pts
+          </span>
         </div>
         <span
-          className={`px-2 py-1 rounded-full text-xs font-medium ${
-            mission.isCompleted
-              ? "bg-green-500/20 text-green-400"
-              : "bg-yellow-500/20 text-yellow-400"
-          }`}
+          className={clsx(
+            "rx-badge",
+            mission.isCompleted ? "rx-badge--up" : "rx-badge--gold",
+          )}
         >
-          {mission.isCompleted ? "Completed!" : "Available"}
+          {mission.isCompleted ? "Completed" : "Available"}
         </span>
       </div>
 
-      <div className="space-y-3">
-        {/* Step 1: Connect BNB Wallet */}
-        <div className="flex items-center gap-3">
-          {mission.walletConnected ? (
-            <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
-          ) : (
-            <Circle className="w-5 h-5 text-gray-500 flex-shrink-0" />
-          )}
-          <div className="flex-1">
-            <p className="text-white text-sm">Connect wallet to BSC</p>
-            <p className="text-xs text-gray-400">
-              Connect Metamask or compatible wallet to BSC network
-            </p>
-          </div>
-          {!mission.walletConnected && (
-            <button
-              onClick={handleConnectBnbWallet}
-              disabled={isConnecting}
-              className="bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 text-white text-xs px-3 py-1 rounded-lg transition-colors flex items-center gap-1"
-            >
-              {isConnecting ? (
-                <>
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Connecting...
-                </>
-              ) : (
-                "Connect"
+      <ol className="bnb-mission__steps">
+        {steps.map((step) => (
+          <li key={step.key} className={clsx(step.done && "is-done")}>
+            {step.done ? (
+              <CheckCircle className="size-5 shrink-0 text-rx-up" aria-hidden="true" />
+            ) : (
+              <Circle className="size-5 shrink-0 text-rx-text-3" aria-hidden="true" />
+            )}
+            <span className="bnb-mission__t">
+              <b>{step.title}</b>
+              <span>{step.text}</span>
+            </span>
+            {step.key === "connect" && !mission.walletConnected && (
+              <button
+                type="button"
+                onClick={handleConnectBnbWallet}
+                disabled={isConnecting}
+                aria-busy={isConnecting || undefined}
+                className="rx-btn rx-btn--report rx-btn--s"
+              >
+                {isConnecting ? (
+                  <>
+                    <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+                    Connecting…
+                  </>
+                ) : (
+                  "Connect"
+                )}
+              </button>
+            )}
+            {step.key === "sign" &&
+              mission.walletConnected &&
+              !mission.signatureCompleted && (
+                <button
+                  type="button"
+                  onClick={handleSignMessage}
+                  disabled={isSigning}
+                  aria-busy={isSigning || undefined}
+                  className="rx-btn rx-btn--report rx-btn--s"
+                >
+                  {isSigning ? (
+                    <>
+                      <Loader2 className="size-3 animate-spin" aria-hidden="true" />
+                      Signing…
+                    </>
+                  ) : (
+                    "Sign"
+                  )}
+                </button>
               )}
-            </button>
-          )}
+            {step.key === "sign" && !mission.walletConnected && (
+              <span className="rx-help">Connect wallet first</span>
+            )}
+          </li>
+        ))}
+      </ol>
+
+      {mission.isCompleted && (
+        <div className="acct-alert acct-alert--up" role="status">
+          <CheckCircle className="size-4" aria-hidden="true" />
+          <p>
+            <b>+250 points earned!</b> BNB mission completed successfully.
+          </p>
         </div>
+      )}
 
-        {/* Step 2: Complete On-Chain Signature */}
-        <div className="flex items-center gap-3">
-          {mission.signatureCompleted ? (
-            <CheckCircle className="w-5 h-5 text-green-500 flex-shrink-0" />
-          ) : (
-            <Circle className="w-5 h-5 text-gray-500 flex-shrink-0" />
-          )}
-          <div className="flex-1">
-            <p className="text-white text-sm">Complete on-chain signature</p>
-            <p className="text-xs text-gray-400">
-              Sign a message with your BNB wallet
-            </p>
-          </div>
-          {mission.walletConnected && !mission.signatureCompleted && (
-            <button
-              onClick={handleSignMessage}
-              disabled={isSigning}
-              className="bg-yellow-600 hover:bg-yellow-700 disabled:opacity-50 text-white text-xs px-3 py-1 rounded-lg transition-colors flex items-center gap-1"
-            >
-              {isSigning ? (
-                <>
-                  <Loader2 className="w-3 h-3 animate-spin" />
-                  Signing...
-                </>
-              ) : (
-                "Sign"
-              )}
-            </button>
-          )}
-          {!mission.walletConnected && (
-            <span className="text-xs text-gray-500">Connect wallet first</span>
-          )}
-        </div>
-
-        {/* Reward Display */}
-        {mission.isCompleted && (
-          <div className="bg-green-600/20 rounded-lg p-3 border border-green-500/30">
-            <div className="text-center text-green-400">
-              <CheckCircle className="w-6 h-6 mx-auto mb-1" />
-              <p className="font-semibold">+250 Points Earned!</p>
-              <p className="text-xs opacity-80">
-                BNB mission completed successfully
-              </p>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Instructions */}
-      <div className="mt-4 pt-3 border-t border-gray-700">
-        <p className="text-xs text-gray-400">
-          • BNB Chain only • Supports Metamask & Trust Wallet • Resets daily
-        </p>
-      </div>
+      <p className="rx-help bnb-mission__foot">
+        BNB Chain only · Supports Metamask &amp; Trust Wallet · Resets daily
+      </p>
     </div>
   );
 }

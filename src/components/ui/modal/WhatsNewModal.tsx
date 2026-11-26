@@ -4,6 +4,7 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import Link from "next/link";
+import copy from "copy-to-clipboard";
 import type { WhatsNewTweet } from "@/lib/api/tweetQuality";
 import type { ProjectSocialLinks } from "@/lib/api/projectSocials";
 import type { SwapChain } from "@/lib/swapChain";
@@ -46,6 +47,18 @@ export type WhatsNewTrade = {
   onFullExchange?: () => void;
 };
 
+/** Market numbers for the "Key facts" card (design whats-new.html rail). Only values main already has. */
+export type WhatsNewFacts = {
+  priceUsd?: number | null;
+  change24h?: number | null;
+  marketCap?: number | null;
+  volume24h?: number | null;
+  liquidityUsd?: number | null;
+  /** Pair creation time (ms). */
+  createdAt?: number | null;
+  contract?: string | null;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -58,6 +71,8 @@ type Props = {
   symbol?: string | null;
   /** Trade card: shown when the popup is about a tradable token. */
   trade?: WhatsNewTrade | null;
+  /** Key facts card (price, 24h, market cap, volume, liquidity, age, contract). */
+  facts?: WhatsNewFacts | null;
 };
 
 /** Source icons (design/assets/whats-new). */
@@ -132,6 +147,44 @@ function updatedLabel(raw?: string): string | null {
   const h = Math.floor(m / 60);
   if (h < 24) return `updated ${h} h ago`;
   return `updated ${d.toLocaleDateString("en-US", { month: "short", day: "numeric" })}`;
+}
+
+const isNum = (v: unknown): v is number => typeof v === "number" && Number.isFinite(v);
+
+function fmtUsdCompact(n: number): string {
+  const a = Math.abs(n);
+  if (a >= 1e12) return `$${(n / 1e12).toFixed(2)}T`;
+  if (a >= 1e9) return `$${(n / 1e9).toFixed(2)}B`;
+  if (a >= 1e6) return `$${(n / 1e6).toFixed(2)}M`;
+  if (a >= 1e3) return `$${(n / 1e3).toFixed(2)}K`;
+  return `$${n.toFixed(2)}`;
+}
+
+function fmtPrice(n: number): string {
+  if (n >= 1000) return `$${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+  if (n >= 1) return `$${n.toFixed(2)}`;
+  if (n >= 0.01) return `$${n.toFixed(4)}`;
+  return `$${n.toPrecision(3)}`;
+}
+
+/** Compact age from a timestamp: "5h", "3d", "11mo", "2y". */
+function fmtAge(ms: number): string {
+  const sec = Math.max(0, (Date.now() - ms) / 1000);
+  const h = sec / 3600;
+  if (h < 1) return `${Math.max(1, Math.floor(sec / 60))}m`;
+  if (h < 24) return `${Math.floor(h)}h`;
+  const d = h / 24;
+  if (d < 30) return `${Math.floor(d)}d`;
+  if (d < 365) return `${Math.floor(d / 30)}mo`;
+  return `${Math.floor(d / 365)}y`;
+}
+
+function hasFacts(f?: WhatsNewFacts | null): f is WhatsNewFacts {
+  if (!f) return false;
+  return (
+    [f.priceUsd, f.change24h, f.marketCap, f.volume24h, f.liquidityUsd, f.createdAt].some(isNum) ||
+    !!f.contract
+  );
 }
 
 function paragraphsFromResult(result: WhatsNewResult): WhatsNewParagraph[] {
@@ -283,6 +336,71 @@ export function WhatsNewTradeCard({
   );
 }
 
+const IconCopy = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M9 9h11v11H9zM5 15H4V4h11v1" fill="none" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
+  </svg>
+);
+const IconCheck = () => (
+  <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M5 12l5 5 9-10" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+/** "Key facts" card (design whats-new.html .rail-card .facts). */
+export function WhatsNewFactsCard({ facts, className = "" }: { facts: WhatsNewFacts; className?: string }) {
+  const titleId = useId();
+  const [copied, setCopied] = useState(false);
+  const rows: { label: string; value: string; tone?: "up" | "down" }[] = [];
+  if (isNum(facts.priceUsd)) rows.push({ label: "Price", value: fmtPrice(facts.priceUsd) });
+  if (isNum(facts.change24h))
+    rows.push({
+      label: "24h",
+      value: `${facts.change24h >= 0 ? "▲" : "▼"} ${Math.abs(facts.change24h).toFixed(2)}%`,
+      tone: facts.change24h >= 0 ? "up" : "down",
+    });
+  if (isNum(facts.marketCap)) rows.push({ label: "Market cap", value: fmtUsdCompact(facts.marketCap) });
+  if (isNum(facts.volume24h)) rows.push({ label: "Volume 24h", value: fmtUsdCompact(facts.volume24h) });
+  if (isNum(facts.liquidityUsd)) rows.push({ label: "Liquidity", value: fmtUsdCompact(facts.liquidityUsd) });
+  if (isNum(facts.createdAt) && facts.createdAt > 0) rows.push({ label: "Age", value: fmtAge(facts.createdAt) });
+  const ca = facts.contract?.trim() || "";
+
+  return (
+    <section className={`rx-raised rx-wn-facts ${className}`} aria-labelledby={titleId}>
+      <h3 id={titleId}>Key facts</h3>
+      <dl>
+        {rows.map((r) => (
+          <div key={r.label}>
+            <dt>{r.label}</dt>
+            <dd className={r.tone ? `is-${r.tone}` : undefined}>{r.value}</dd>
+          </div>
+        ))}
+        {ca ? (
+          <div>
+            <dt>Contract</dt>
+            <dd>
+              <span title={ca}>{ca.length > 12 ? `${ca.slice(0, 6)}…${ca.slice(-4)}` : ca}</span>
+              <button
+                type="button"
+                className="rx-wn-facts__copy"
+                onClick={() => {
+                  copy(ca);
+                  setCopied(true);
+                  window.setTimeout(() => setCopied(false), 1500);
+                }}
+                aria-label={copied ? "Contract address copied" : "Copy contract address"}
+                title={copied ? "Copied" : "Copy contract address"}
+              >
+                {copied ? <IconCheck /> : <IconCopy />}
+              </button>
+            </dd>
+          </div>
+        ) : null}
+      </dl>
+    </section>
+  );
+}
+
 export function WhatsNewModal({
   open,
   onClose,
@@ -293,6 +411,7 @@ export function WhatsNewModal({
   imageUrl = null,
   symbol = null,
   trade = null,
+  facts = null,
 }: Props) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
@@ -353,6 +472,12 @@ export function WhatsNewModal({
       ? ["Mini-report from top posts on X", updated].filter(Boolean).join(" · ")
       : "Mini-report from top posts on X";
 
+  const showFacts = hasFacts(facts);
+  const hasRail = !!trade || showFacts;
+  const factsInline = showFacts ? (
+    <WhatsNewFactsCard facts={facts} className="rx-wn__facts-inline" />
+  ) : null;
+
   const tradeInline = trade ? (
     <WhatsNewTradeCard trade={trade} onClose={onClose} className="rx-wn__trade-inline" />
   ) : null;
@@ -362,7 +487,7 @@ export function WhatsNewModal({
       <button type="button" className="rx-wn__scrim" aria-label="Close What's New" tabIndex={-1} onClick={onClose} />
       <div
         ref={dialogRef}
-        className={`rx-wn__modal${trade ? " rx-wn__modal--rail" : ""}`}
+        className={`rx-wn__modal${hasRail ? " rx-wn__modal--rail" : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -403,6 +528,7 @@ export function WhatsNewModal({
                   </p>
                 </div>
                 {tradeInline}
+                {factsInline}
               </>
             ) : error ? (
               <>
@@ -410,6 +536,7 @@ export function WhatsNewModal({
                   {error}
                 </div>
                 {tradeInline}
+                {factsInline}
               </>
             ) : result ? (
               <>
@@ -524,13 +651,16 @@ export function WhatsNewModal({
                     );
                   })}
                 </ul>
+
+                {factsInline}
               </>
             ) : null}
           </div>
 
-          {trade ? (
+          {hasRail ? (
             <div className="rx-wn__rail">
-              <WhatsNewTradeCard trade={trade} onClose={onClose} />
+              {trade ? <WhatsNewTradeCard trade={trade} onClose={onClose} /> : null}
+              {showFacts ? <WhatsNewFactsCard facts={facts} /> : null}
             </div>
           ) : null}
         </div>

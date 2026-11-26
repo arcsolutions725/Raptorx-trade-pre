@@ -277,6 +277,9 @@ export default function RexHeader({
   const isClawV5Page =
     pathname === "/claw-v5" || pathname.startsWith("/claw-v5/");
   const isRexScreenerPage = isRexScreenerPathname(pathname);
+  /** /<chain>/<token>: the token view brings its own head (design/token.html has no page title) */
+  const isScreenerTokenPage =
+    isRexScreenerPage && parseRexScreenerPath(pathname).routeTokenSlug != null;
   const { dataSource, setDataSource } = useDataSource();
   const { solanaAddress } = useSolanaWalletAddress();
   const { ethereumAddress } = useEthereumWalletAddress();
@@ -490,6 +493,9 @@ export default function RexHeader({
       handleSignIn();
     }
   };
+  // Latest handler for the "pilot" shell action (token bar's Claw AI 5.0 button)
+  const historyClickRef = useRef(handleHistoryClick);
+  historyClickRef.current = handleHistoryClick;
 
   /** "Enter the Exchange": this page's swap panel, or RexScreener's Exchange from other pages. */
   const handleExchangeClick = useCallback(() => {
@@ -508,6 +514,10 @@ export default function RexHeader({
       detail.handled = true;
       if (detail.action === "exchange") {
         handleExchangeClick();
+        return;
+      }
+      if (detail.action === "pilot") {
+        historyClickRef.current();
         return;
       }
       if (!authenticated) {
@@ -705,7 +715,8 @@ export default function RexHeader({
           </div>
         </header>
 
-        {!isClawV5Page && (
+        {/* Market detail and token pages have their own head (breadcrumbs, title, Claw AI 5.0 toggle) */}
+        {!isClawV5Page && !isMarketDetailPage && !isScreenerTokenPage && (
           <div className="rx-page-head">
             <div className="rx-page-head__title">
               {screenerEyebrow ? (

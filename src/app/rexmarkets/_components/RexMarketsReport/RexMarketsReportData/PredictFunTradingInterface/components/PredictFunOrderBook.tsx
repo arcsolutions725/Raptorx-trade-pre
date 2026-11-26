@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 import { formatPrice } from "@/utils/polymarketTrading";
 import { usePredictFunOrderBook } from "@/hooks/usePredictFunOrderBook";
+import "@/styles/pages/market-venues-b.css";
 
 type PredictFunOrderBookProps = {
   marketId: string | null;
@@ -59,68 +60,80 @@ export default function PredictFunOrderBook({
   };
 
   return (
-    <div
-      className={`w-full flex-shrink-0 flex flex-col min-h-0 ${
-        effectiveExpanded ? "h-full" : "h-auto"
-      }`}
-    >
-      <div className="flex-shrink-0 px-4 py-3 border-b border-white/10">
-        <div className="flex gap-2 text-xs">
-          <span className="flex-1 py-1.5 px-2 rounded bg-[#A855F7]/20 text-[#e9d5ff] font-medium text-center">
-            {firstOutcomeLabel} {formatPrice(yesPrice)}
+    <div className={`mk-ob${effectiveExpanded ? " mk-ob--full" : ""}`}>
+      <div className="mk-ob__top">
+        {/* Current outcome prices */}
+        <div className="mkb-ob-prices">
+          <span className="is-yes">
+            <span className="mkb-ob-name">{firstOutcomeLabel}</span>{" "}
+            <span className="rx-num">{formatPrice(yesPrice)}</span>
           </span>
-          <span className="flex-1 py-1.5 px-2 rounded bg-white/10 text-white/70 font-medium text-center">
-            {secondOutcomeLabel} {formatPrice(noPrice)}
+          <span className="is-no">
+            <span className="mkb-ob-name">{secondOutcomeLabel}</span>{" "}
+            <span className="rx-num">{formatPrice(noPrice)}</span>
           </span>
         </div>
+        {showDepthToggle && (
+          <button
+            type="button"
+            onClick={toggleDepth}
+            aria-expanded={effectiveExpanded}
+            className="rx-btn rx-btn--secondary rx-btn--s mk-ob__toggle"
+          >
+            {effectiveExpanded ? "Hide depth" : "Show depth"}
+          </button>
+        )}
       </div>
 
-      {showDepthToggle && (
-        <button
-          type="button"
-          onClick={toggleDepth}
-          className="px-4 py-2 text-xs text-white/60 hover:text-white border-b border-white/10 text-left"
-        >
-          {effectiveExpanded ? "Hide depth" : "Show depth"}
-        </button>
-      )}
-
       {effectiveExpanded && (
-        <div className="flex-1 min-h-0 overflow-y-auto rexmarkets-scroll-pane-y px-4 py-2 text-xs">
+        <div className="mk-ob__body">
           {isLoading ? (
-            <div className="text-white/50 py-4 text-center">Loading orderbook…</div>
+            <div className="mk-ob__msg" role="status">
+              Loading orderbook…
+            </div>
           ) : isError ? (
-            <div className="text-white/50 py-4 text-center">Could not load orderbook</div>
+            <div className="mk-ob__msg mk-ob__msg--error">Could not load orderbook</div>
           ) : (
             <>
-              <div className="text-white/50 mb-2 flex justify-between">
-                <span>Spread</span>
-                <span className="text-white">{formatCents(spread)}</span>
+              <div className="mk-ob__cols" aria-hidden="true">
+                <span>Price (¢)</span>
+                <span>Shares</span>
+                <span>Total (USD)</span>
               </div>
-              <div className="text-red-400/90 font-medium mb-1">Asks</div>
-              {asks.length === 0 ? (
-                <div className="text-white/40 py-2">No asks</div>
-              ) : (
-                asks.map((row, i) => (
-                  <div key={`a-${i}`} className="grid grid-cols-3 gap-2 py-0.5 text-red-300/90">
-                    <span>{formatCents(row.price)}</span>
-                    <span className="text-right">{row.size.toLocaleString()}</span>
-                    <span className="text-right text-white/40">{formatUsd(row.total)}</span>
-                  </div>
-                ))
-              )}
-              <div className="text-green-400/90 font-medium mt-3 mb-1">Bids</div>
-              {bids.length === 0 ? (
-                <div className="text-white/40 py-2">No bids</div>
-              ) : (
-                bids.map((row, i) => (
-                  <div key={`b-${i}`} className="grid grid-cols-3 gap-2 py-0.5 text-green-300/90">
-                    <span>{formatCents(row.price)}</span>
-                    <span className="text-right">{row.size.toLocaleString()}</span>
-                    <span className="text-right text-white/40">{formatUsd(row.total)}</span>
-                  </div>
-                ))
-              )}
+
+              <div className="mk-ob__group mk-ob__group--ask">
+                <div className="mk-ob__label">Asks</div>
+                {asks.length === 0 ? (
+                  <div className="mk-ob__msg">No asks</div>
+                ) : (
+                  asks.map((row, i) => (
+                    <div key={`a-${i}`} className="mk-ob__row">
+                      <span>{formatCents(row.price)}</span>
+                      <span>{row.size.toLocaleString()}</span>
+                      <span>{formatUsd(row.total)}</span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              <div className="mk-ob__spread">
+                Spread <b>{formatCents(spread)}</b>
+              </div>
+
+              <div className="mk-ob__group mk-ob__group--bid">
+                <div className="mk-ob__label">Bids</div>
+                {bids.length === 0 ? (
+                  <div className="mk-ob__msg">No bids</div>
+                ) : (
+                  bids.map((row, i) => (
+                    <div key={`b-${i}`} className="mk-ob__row">
+                      <span>{formatCents(row.price)}</span>
+                      <span>{row.size.toLocaleString()}</span>
+                      <span>{formatUsd(row.total)}</span>
+                    </div>
+                  ))
+                )}
+              </div>
             </>
           )}
         </div>

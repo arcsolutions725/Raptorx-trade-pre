@@ -1,0 +1,61 @@
+/* Prediction-market detail page: extra pieces used by the Polymarket and Limitless venues.
+   Everything else on those pages uses the shared classes in market.css (read its comment block first);
+   these rules only add what Kalshi does not have, in the same look. Plain unlayered CSS, scoped under .rx-mk.
+   Imported from PolymarketTradingInterface/index.tsx and LimitlessTradingInterface/index.tsx.
+
+     .mk-otype                  ticket: "Order type" label + Market / Limit segmented control (rx-seg)
+     .mk-amount__suf            ticket: unit after an input value (the "¢" of the limit price field)
+     .mk-note(--error)          ticket: small note under a field (min. order, sign-in error)
+     .mk-pnl                    ticket: "Profit / loss if you sell now" well (b.is-up / b.is-down)
+     .mk-chart__err             chart empty state: error line
+     .mk-legend__static         chart legend entry that is not a toggle (single-series charts)
+     .mk-feed__filters          activity filters (market + minimum trade size selects) under the feed tabs
+     .mk-tophold                top holders: Yes / No columns (.mk-tophold__col--yes / --no) with a head
+                                (.mk-tophold__head) and rows (.mk-tophold__row > avatar, __name, __val)
+*/
+
+/* ---------- trade ticket ---------- */
+.rx-mk .mk-otype{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.rx-mk .mk-otype .rx-label{flex:none}
+.rx-mk .mk-otype .rx-seg__item{height:30px;padding:0 14px}
+.rx-mk .mk-amount__suf{flex:none;padding-right:8px;color:var(--rx-text-3)}
+.rx-mk .mk-note{margin:-6px 0 0;font-size:12px;line-height:1.45;color:var(--rx-text-3)}
+.rx-mk .mk-note b{font-family:var(--rx-mono);font-weight:500;color:var(--rx-text-2)}
+.rx-mk .mk-note--error{margin:0;color:var(--rx-down)}
+.rx-mk .mk-pnl{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 14px;font-size:13px;color:var(--rx-text-2)}
+.rx-mk .mk-pnl b{font-family:var(--rx-mono);font-variant-numeric:tabular-nums;font-size:14px;font-weight:600;white-space:nowrap}
+.rx-mk .mk-pnl b.is-up{color:var(--rx-up)}
+.rx-mk .mk-pnl b.is-down{color:var(--rx-down)}
+
+/* ---------- chart ---------- */
+.rx-mk .mk-chart__empty small{font-size:12px;color:var(--rx-text-3)}
+.rx-mk .mk-chart__err{max-width:100%;font-size:12px;color:var(--rx-down);overflow-wrap:anywhere}
+.rx-mk .mk-legend .mk-legend__static{cursor:default}
+
+/* ---------- activity filters ---------- */
+.rx-mk .mk-feed__filters{display:flex;flex-wrap:wrap;gap:8px;padding:10px 16px;border-bottom:1px solid var(--rx-line)}
+.rx-mk .mk-feed__filters .mk-select{flex:1 1 160px;max-width:240px}
+.rx-mk .mk-feed__filters .mk-select > div{left:0;right:auto}
+@container mk (min-width:960px){
+  .rx-mk .mk-feed__filters{padding:10px 20px}
+}
+@container mk (max-width:600px){
+  .rx-mk .mk-feed__filters{padding:10px 14px}
+  .rx-mk .mk-feed__filters .mk-select{max-width:none}
+  .rx-mk .mk-feed__filters .mk-select > button{height:40px}
+}
+
+/* ---------- top holders ---------- */
+.rx-mk .mk-tophold{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,260px),1fr));gap:8px 24px;padding-top:8px}
+.rx-mk .mk-tophold__col{display:flex;flex-direction:column;min-width:0}
+.rx-mk .mk-tophold__head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:36px;border-bottom:1px solid var(--rx-line);
+  font-family:var(--rx-mono);font-size:10.5px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--rx-text-3)}
+.rx-mk .mk-tophold__head b{font-family:var(--rx-ui);font-size:13px;font-weight:600;letter-spacing:0;text-transform:none}
+.rx-mk .mk-tophold__col--yes .mk-tophold__head b,.rx-mk .mk-tophold__col--yes .mk-tophold__val{color:var(--rx-up)}
+.rx-mk .mk-tophold__col--no .mk-tophold__head b,.rx-mk .mk-tophold__col--no .mk-tophold__val{color:var(--rx-down)}
+.rx-mk .mk-tophold__row{display:flex;align-items:center;gap:10px;min-height:48px;padding:8px;margin:0 -8px;border-radius:10px;border-bottom:1px solid var(--rx-line)}
+.rx-mk .mk-tophold__row:last-child{border-bottom:0}
+.rx-mk .mk-tophold__row:hover{background:rgba(var(--rx-hair),.025)}
+.rx-mk .mk-tophold__name{flex:1 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:13px;font-weight:600;color:var(--rx-text)}
+.rx-mk .mk-tophold__val{flex:none;font-family:var(--rx-mono);font-variant-numeric:tabular-nums;font-size:13px;font-weight:600}
+.rx-mk .mk-tophold .mk-msg{padding:20px 8px;align-items:flex-start;text-align:left}

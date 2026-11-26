@@ -1,0 +1,429 @@
+/* RexScreener token view (DexscreenerView): breadcrumbs, token bar (identity, stat strip, report
+   actions) and the DexScreener chart, in the design's "terminal" layout for chart pages: no cards,
+   sections run edge to edge, split by 1px lines (design/token.html, css/token.css, pages.css).
+   Plain unlayered CSS, every rule scoped under .rx-tk. Imported from DexscreenerView.tsx.
+
+   The view is a size container: the token bar reflows by the width the view actually gets (the
+   Rex Pilot sidebar takes 700px of it on desktop), and on phones the chart is sized from the
+   view's height (cqh). */
+
+.rx-tk {
+  container: rx-tk / size;
+  flex: 1 1 0;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.rx-tk.is-expanded {
+  position: fixed;
+  inset: 0;
+  z-index: 70; /* clears the report sidebar (z-60) and its overlay (z-50) */
+  padding-top: env(safe-area-inset-top, 0px);
+  background: var(--rx-bg);
+}
+.rx-tk.is-expanded > .rx-tk__crumbs,
+.rx-tk.is-expanded > .rx-tk__bar {
+  display: none;
+}
+
+/* ---------- breadcrumbs ---------- */
+.rx-tk__crumbs {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  padding: 10px var(--rx-gutter) 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--rx-text-3);
+}
+.rx-tk__crumbs > * {
+  flex: none;
+}
+.rx-tk__crumbs svg {
+  opacity: 0.5;
+}
+.rx-tk__crumbs button {
+  position: relative;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 6px;
+  background: none;
+  color: var(--rx-text-2);
+  font: inherit;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+/* 40px tap area around a 13px label */
+.rx-tk__crumbs button::before {
+  content: "";
+  position: absolute;
+  inset: -12px -6px;
+}
+.rx-tk__crumbs button:hover {
+  color: var(--rx-gold-hi);
+}
+.rx-tk__crumbs button:focus-visible,
+.rx-tk__copy:focus-visible {
+  outline: 2px solid var(--rx-gold-hi);
+  outline-offset: 2px;
+}
+.rx-tk__crumbs [aria-current] {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--rx-text);
+}
+
+/* ---------- token bar: identity · stat strip · actions ---------- */
+.rx-tk__bar {
+  flex-shrink: 0;
+  display: grid;
+  grid-template-columns: minmax(0, max-content) max-content minmax(max-content, 1fr);
+  grid-template-areas: "id stats tools";
+  align-items: end;
+  gap: 12px 32px;
+  padding: 6px var(--rx-gutter) 12px;
+  border-bottom: 1px solid var(--rx-line);
+}
+.rx-tk__id {
+  grid-area: id;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+.rx-tk__avatar {
+  position: relative;
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+}
+.rx-tk__avatar > .rx-avatar {
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  font-size: 13px;
+  color: #fff;
+}
+.rx-tk__avatar > .rx-avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.rx-tk__avatar > .rx-avatar__chain {
+  width: 16px;
+  height: 16px;
+  overflow: hidden;
+  background: var(--rx-surface-3);
+}
+.rx-tk__avatar > .rx-avatar__chain img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.rx-tk__title {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.rx-tk__title h1 {
+  margin: 0;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--rx-display);
+  font-stretch: 112%;
+  font-weight: 700;
+  font-size: 22px;
+  line-height: 1.25;
+  letter-spacing: normal;
+  color: var(--rx-text);
+}
+.rx-tk__title h1 span {
+  color: var(--rx-text-3);
+  font-weight: 500;
+}
+.rx-tk__addr {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--rx-text-2);
+}
+.rx-tk__copy {
+  position: relative;
+  width: 24px;
+  height: 24px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--rx-text-3);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+.rx-tk__copy::before {
+  content: "";
+  position: absolute;
+  inset: -8px;
+}
+.rx-tk__copy:hover {
+  color: var(--rx-text);
+  background: rgba(255, 255, 255, 0.06);
+}
+.rx-tk__copy.is-done {
+  color: var(--rx-up);
+}
+
+.rx-tk__stats {
+  grid-area: stats;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 0;
+  min-width: 0;
+  margin: 0;
+}
+.rx-tk__stats > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  min-width: 0;
+  padding: 0 20px;
+  border-left: 1px solid var(--rx-line);
+}
+.rx-tk__stats > div:first-child {
+  padding-left: 0;
+  border-left: 0;
+}
+.rx-tk__stats dt {
+  font-family: var(--rx-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rx-text-3);
+}
+.rx-tk__stats dd {
+  margin: 0;
+  font-family: var(--rx-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--rx-text);
+  white-space: nowrap;
+}
+.rx-tk__stats dd.is-up {
+  color: var(--rx-up);
+}
+.rx-tk__stats dd.is-down {
+  color: var(--rx-down);
+}
+
+.rx-tk__tools {
+  grid-area: tools;
+  justify-self: end;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.rx-tk .rx-tk__ctl {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+}
+
+/* ---------- chart panel (DexScreener embed: chart + its own trades table) ---------- */
+.rx-tk__chart {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rx-tk__head {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  padding: 10px var(--rx-gutter);
+  border-bottom: 1px solid var(--rx-line);
+}
+.rx-tk__head b {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--rx-text);
+}
+/* the pair name wins; the caption gives way first */
+.rx-tk__head .rx-tk__sub {
+  flex: 0 100 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.rx-tk__head .rx-eyebrow {
+  margin-left: auto;
+  white-space: nowrap;
+}
+@container rx-tk (max-width: 560px) {
+  .rx-tk__head .rx-eyebrow {
+    display: none;
+  }
+  .rx-tk__head .group {
+    margin-left: auto;
+  }
+}
+.rx-tk__body {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+  background: #0a0908;
+}
+.rx-tk__body iframe {
+  display: block;
+}
+.rx-tk__loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  font-size: 14px;
+  color: var(--rx-text-2);
+}
+
+/* ---------- reflow by the width the view gets ---------- */
+/* Too narrow for one row (e.g. Rex Pilot open): name + actions, the stat strip underneath. */
+@container rx-tk (max-width: 1239px) {
+  .rx-tk__bar {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      "id tools"
+      "stats stats";
+    align-items: center;
+    gap: 14px 20px;
+  }
+}
+/* Narrow: everything stacks, the stats become a clean 3-column grid, the actions share the row. */
+@container rx-tk (max-width: 720px) {
+  .rx-tk__bar {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "id"
+      "stats"
+      "tools";
+    gap: 14px;
+  }
+  .rx-tk__title h1 {
+    font-size: 18px;
+  }
+  .rx-tk__stats {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 12px 0;
+  }
+  .rx-tk__stats > div {
+    padding: 0 10px;
+    border-left: 1px solid var(--rx-line);
+  }
+  .rx-tk__stats > div:nth-child(3n + 1) {
+    padding-left: 0;
+    border-left: 0;
+  }
+  .rx-tk__stats dt,
+  .rx-tk__stats dd {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .rx-tk__stats dd {
+    font-size: 13px;
+  }
+  .rx-tk__tools {
+    justify-self: stretch;
+  }
+  .rx-tk__tools .rx-btn {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+}
+@container rx-tk (max-width: 380px) {
+  .rx-tk__stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .rx-tk__stats > div:nth-child(3n + 1) {
+    padding-left: 10px;
+    border-left: 1px solid var(--rx-line);
+  }
+  .rx-tk__stats > div:nth-child(2n + 1) {
+    padding-left: 0;
+    border-left: 0;
+  }
+}
+
+/* ---------- phones ---------- */
+/* The view scrolls: token bar first, then the chart at the view's height minus the actions row,
+   so once scrolled down Full Report / What's New stay in sight above the chart (and give a
+   place to swipe back up, since touches on the embed belong to DexScreener). */
+@media (max-width: 767px) {
+  .rx-tk {
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior-y: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+  .rx-tk__crumbs {
+    padding: 14px 14px 0;
+  }
+  .rx-tk__bar {
+    padding: 10px 14px 14px;
+  }
+  .rx-tk__tools .rx-btn {
+    height: 40px;
+    font-size: 13px;
+  }
+  .rx-tk .rx-tk__ctl {
+    width: 40px;
+    height: 40px;
+    border-radius: 11px;
+  }
+  .rx-tk__chart {
+    flex: 0 0 auto;
+    height: max(360px, calc(100cqh - 62px));
+  }
+  .rx-tk__head {
+    padding: 6px 14px;
+  }
+  .rx-tk.is-expanded {
+    overflow: hidden;
+  }
+  .rx-tk.is-expanded > .rx-tk__chart {
+    flex: 1 1 0;
+    height: auto;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rx-tk__crumbs button,
+  .rx-tk__copy {
+    transition: none;
+  }
+}

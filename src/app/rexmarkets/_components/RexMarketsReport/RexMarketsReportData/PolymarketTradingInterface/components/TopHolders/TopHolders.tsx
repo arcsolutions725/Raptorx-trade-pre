@@ -10,6 +10,7 @@ type TopHoldersProps = {
   conditionId: string | null;
 };
 
+/** Top Yes / No holders (styles: market-venues-a.css .mk-tophold). */
 export default function TopHolders({ conditionId }: TopHoldersProps) {
   const { data: topHoldersData, isLoading: isLoadingTopHolders } =
     useTopHolders(conditionId);
@@ -24,97 +25,55 @@ export default function TopHolders({ conditionId }: TopHoldersProps) {
       [topHoldersData]
     );
 
-  return (
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-      {/* Yes Holders */}
-      <div className="min-w-0">
-        <div className="flex items-center justify-between text-[10px] text-white/60 mb-1 pb-1 border-b border-white/10 px-2">
-          <span className="text-sm text-green-400">Yes Holders</span>
-          <span>SHARES</span>
-        </div>
-        <div className="space-y-0">
-          {isLoadingTopHolders ? (
-            <div className="text-xs text-white/60 py-2">Loading...</div>
-          ) : topHolders.yesHolders.length > 0 ? (
-            topHolders.yesHolders.map((holder, idx) => (
-              <div
-                key={`yes-${holder.address}-${idx}`}
-                className="flex items-center justify-between text-xs py-2 hover:bg-white/5 rounded px-2 border-b border-white/5 last:border-b-0"
-              >
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <HolderAvatar
-                    profileImage={holder.profileImage}
-                    name={holder.name || holder.pseudonym || holder.address}
-                  />
-                  <span
-                    className="text-white/90 truncate flex-1 min-w-0 font-medium"
-                    title={holder.name || holder.pseudonym || holder.address}
-                  >
-                    {holder.name ||
-                      holder.pseudonym ||
-                      formatAddress(holder.address)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 ml-2 flex-shrink-0">
-                  <span className="text-green-400 font-semibold">
-                    {(holder.amount || holder.shares).toLocaleString(
-                      undefined,
-                      { maximumFractionDigits: 0 }
-                    )}
-                  </span>
-                </div>
-              </div>
-            ))
-          ) : (
-            <div className="text-xs text-white/60 py-2">No Yes holders</div>
-          )}
-        </div>
-      </div>
+  const columns = [
+    { key: "yes", label: "Yes holders", empty: "No Yes holders", holders: topHolders.yesHolders },
+    { key: "no", label: "No holders", empty: "No No holders", holders: topHolders.noHolders },
+  ] as const;
 
-      {/* No Holders */}
-      <div className="min-w-0">
-        <div className="flex items-center justify-between text-[10px] text-white/60 mb-1 pb-1 border-b border-white/10 px-2">
-          <span className="text-sm text-red-400">No Holders</span>
-          <span>SHARES</span>
-        </div>
-        <div className="space-y-0">
+  return (
+    <div className="mk-tophold">
+      {columns.map((col) => (
+        <div key={col.key} className={`mk-tophold__col mk-tophold__col--${col.key}`}>
+          <div className="mk-tophold__head">
+            <b>{col.label}</b>
+            <span>Shares</span>
+          </div>
           {isLoadingTopHolders ? (
-            <div className="text-xs text-white/60 py-2">Loading...</div>
-          ) : topHolders.noHolders.length > 0 ? (
-            topHolders.noHolders.map((holder, idx) => (
+            <div className="mk-msg" role="status">
+              Loading...
+            </div>
+          ) : col.holders.length > 0 ? (
+            col.holders.map((holder, idx) => (
               <div
-                key={`no-${holder.address}-${idx}`}
-                className="flex items-center justify-between text-xs py-2 hover:bg-white/5 rounded px-2 border-b border-white/5 last:border-b-0"
+                key={`${col.key}-${holder.address}-${idx}`}
+                className="mk-tophold__row"
               >
-                <div className="flex items-center gap-2 flex-1 min-w-0">
-                  <HolderAvatar
-                    profileImage={holder.profileImage}
-                    name={holder.name || holder.pseudonym || holder.address}
-                  />
-                  <span
-                    className="text-white/90 truncate flex-1 min-w-0 font-medium"
-                    title={holder.name || holder.pseudonym || holder.address}
-                  >
-                    {holder.name ||
-                      holder.pseudonym ||
-                      formatAddress(holder.address)}
-                  </span>
-                </div>
-                <div className="flex items-center gap-2 ml-2 flex-shrink-0">
-                  <span className="text-red-400 font-semibold">
-                    {(holder.amount || holder.shares).toLocaleString(
-                      undefined,
-                      { maximumFractionDigits: 0 }
-                    )}
-                  </span>
-                </div>
+                <HolderAvatar
+                  profileImage={holder.profileImage}
+                  name={holder.name || holder.pseudonym || holder.address}
+                  tone="gold"
+                />
+                <span
+                  className="mk-tophold__name"
+                  title={holder.name || holder.pseudonym || holder.address}
+                >
+                  {holder.name ||
+                    holder.pseudonym ||
+                    formatAddress(holder.address)}
+                </span>
+                <span className="mk-tophold__val">
+                  {(holder.amount || holder.shares).toLocaleString(
+                    undefined,
+                    { maximumFractionDigits: 0 }
+                  )}
+                </span>
               </div>
             ))
           ) : (
-            <div className="text-xs text-white/60 py-2">No No holders</div>
+            <div className="mk-msg">{col.empty}</div>
           )}
         </div>
-      </div>
+      ))}
     </div>
   );
 }

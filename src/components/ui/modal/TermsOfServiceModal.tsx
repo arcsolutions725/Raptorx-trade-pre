@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef } from "react";
-import { createPortal } from "react-dom";
+import { AcctModal, AcctModalHead } from "@/components/ui/modal/accountUi";
 
 interface TermsOfServiceModalProps {
   isOpen: boolean;
@@ -24,23 +24,9 @@ export function TermsOfServiceModal({
     return () => document.removeEventListener("keydown", handler);
   }, [isOpen, onClose]);
 
-  // Lock background scroll
-  useEffect(() => {
-    if (!isOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [isOpen]);
+  // Page scroll is locked by the modal shell (AcctModal); a click on the scrim closes, as before.
 
-  const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (modalRef.current && !modalRef.current.contains(e.target as Node)) {
-      onClose();
-    }
-  };
-
-  if (!isOpen || typeof document === "undefined") return null;
+  if (!isOpen) return null;
 
   const sections = [
     {
@@ -114,47 +100,33 @@ export function TermsOfServiceModal({
     },
   ];
 
-  const body = (
-    <div
-      className="fixed inset-0 z-[9999] flex items-center justify-center bg-black/70 px-4"
-      role="dialog"
-      aria-modal="true"
+  return (
+    <AcctModal
+      labelledBy="tos-title"
+      variant="plain"
+      wide
+      modalRef={modalRef}
+      zIndex={9999}
+      onScrimClick={onClose}
     >
-      <div
-        className="absolute inset-0"
-        aria-hidden="true"
-        onClick={handleBackdropClick}
+      <AcctModalHead
+        id="tos-title"
+        title="RaptorX terms of service"
+        onClose={onClose}
+        closeLabel="Close terms of service"
       />
-      <div
-        ref={modalRef}
-        className="relative bg-[#0D0D0D] border border-[#303030] max-w-3xl w-full max-h-[90vh] rounded-2xl shadow-2xl flex flex-col"
-      >
-        <div className="flex items-center justify-between px-5 py-4 border-b border-[#303030]">
-          <h2 className="text-[#ffc000] text-lg! sm:text-2xl! font-semibold">
-            RaptorX Terms of Service
-          </h2>
-          <button
-            type="button"
-            onClick={onClose}
-            className="text-gray-300 hover:text-[#ffc000] transition-colors text-2xl leading-none"
-            aria-label="Close terms of service"
-          >
-            ×
-          </button>
-        </div>
-        <div className="px-5 py-4 overflow-y-auto text-[13px] sm:text-sm leading-relaxed text-gray-100 space-y-6 custom-sidebar-scrollbar">
+      <div className="acct-modal__body">
+        <div className="tos">
           {sections.map((section) => (
-            <section key={section.id} className="space-y-2">
-              <h4 className="font-semibold text-[16px]! sm:text-base! text-white">
-                {section.title}
-              </h4>
+            <section key={section.id} aria-labelledby={`tos-${section.id}`}>
+              <h3 id={`tos-${section.id}`}>{section.title}</h3>
               {section.paragraphs.map((text, idx) => (
                 <p
                   key={idx}
                   className={
                     section.id === "no-advice" && idx === 0
-                      ? "uppercase text-[11px] font-semibold! sm:text-xs text-[#A0A0A0]"
-                      : "text-[#A0A0A0] font-normal!"
+                      ? "tos__caps"
+                      : undefined
                   }
                 >
                   {text}
@@ -164,9 +136,6 @@ export function TermsOfServiceModal({
           ))}
         </div>
       </div>
-    </div>
+    </AcctModal>
   );
-
-  return createPortal(body, document.body);
 }
-

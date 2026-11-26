@@ -2,7 +2,12 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
+import type {
+  CSSProperties,
+  KeyboardEvent as ReactKeyboardEvent,
+  PointerEvent as ReactPointerEvent,
+  ReactNode,
+} from "react";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
 import ChatSidebar from "../rexchat/ChatSidebar";
@@ -10,13 +15,6 @@ import { RexChat } from "../rexchat";
 import { PilotReportHistoryButton } from "../rexchat/PilotReportHistoryButton";
 import { useReports, useReportWithConversation } from "@/hooks/useReports";
 import type { TrendingToken } from "@/hooks/useTrendingTokens";
-import {
-  ChevronDown,
-  ChevronRight,
-  RotateCcw,
-  Minimize,
-  X,
-} from "lucide-react";
 import { StorageManager } from "@/lib/storage/storage-util";
 import { DexSwapper } from "@/components/swap/DexSwapper";
 import RexHeader from "@/components/ui/layout/Header";
@@ -30,6 +28,26 @@ import TechnicalIndicators from "@/app/(rexscreener)/_components/technicalindica
 import { useTechnicalAnalysis } from "@/hooks/useTechnicalAnalysis";
 import { RexScreenerStreamingReport } from "@/app/(rexscreener)/_components/rexchat/RexScreenerStreamingReport";
 import { useReportGenStatus } from "@/lib/storage/reportGenStore";
+import {
+  ClawIco,
+  ClawMark,
+  IconChev,
+  IconExpand,
+  IconMin,
+  IconX,
+} from "@/app/rexmarkets/_components/RexMarketsReport/RexMarketsReportData/pilotUi";
+import {
+  IconRefresh,
+  ReportPaneHead,
+  SwapMark,
+} from "@/app/(rexscreener)/_components/rexchat/screenerSideUi";
+import "@/styles/pages/pilot.css";
+import "@/styles/pages/screener-side.css";
+
+/** Exchange / report split height, saved per viewer (prototype RXResize key "tk-ex-h"). */
+const EX_H_KEY = "rx-size-tk-ex-h";
+const EX_MIN_H = 200;
+const REPORT_MIN_H = 200;
 
 type User = {
   id: string; // cuid
@@ -69,6 +87,7 @@ interface Props {
   shellUserId?: string | null;
 }
 
+/** One analysis result (MACD, RSI, …): a Rex Pilot disclosure with a Refresh action (pilot.css .disc-box). */
 function CollapsiblePanel({
   title,
   open,
@@ -84,53 +103,42 @@ function CollapsiblePanel({
   onRefresh?: () => void;
   refreshDisabled?: boolean;
   loading?: boolean;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
   return (
-    <div className="relative bg-black/20 rounded-lg border border-white/10">
-      {/* Header */}
-      <div className="flex items-center justify-between px-4 py-3">
+    <div className="disc-box">
+      <div className="ss-res__head">
         <button
           type="button"
           onClick={onToggle}
-          className="flex items-center gap-2 text-left font-semibold"
+          className="disc"
           aria-expanded={open}
         >
-          {open ? (
-            <ChevronDown className="w-5 h-5 text-white/80" />
-          ) : (
-            <ChevronRight className="w-5 h-5 text-white/80" />
-          )}
-          <span className="text-lg text-[#ffc000]">{title}</span>
+          <IconChev />
+          <span>{title}</span>
         </button>
-
-        <div className="flex items-center gap-3">
-          {loading && <span className="text-[#00B050]">Regenerating…</span>}
-          {onRefresh && (
-            <button
-              type="button"
-              onClick={() => {
-                onRefresh();
-              }}
-              disabled={!!refreshDisabled}
-              className={`inline-flex items-center gap-2 px-3 py-1 rounded-md text-sm transition ${
-                refreshDisabled
-                  ? "bg-[#ffc000]/10 text-white/40 cursor-not-allowed"
-                  : "bg-[#ffc000]/20 hover:bg-[#ffc000]/30 text-white"
-              }`}
-              title={refreshDisabled ? "Please wait…" : "Refresh analysis"}
-            >
-              <RotateCcw
-                className={`w-4 h-4 ${loading ? "animate-spin" : ""}`}
-              />
-              Refresh
-            </button>
-          )}
-        </div>
+        {loading && <span className="ss-res__busy">Regenerating…</span>}
+        {onRefresh && (
+          <button
+            type="button"
+            onClick={() => {
+              onRefresh();
+            }}
+            disabled={!!refreshDisabled}
+            className="rx-btn rx-btn--secondary rx-btn--s"
+            title={refreshDisabled ? "Please wait…" : "Refresh analysis"}
+          >
+            {loading ? (
+              <span className="rx-spin" aria-hidden="true" />
+            ) : (
+              <IconRefresh size={13} />
+            )}
+            Refresh
+          </button>
+        )}
       </div>
 
-      {/* Body */}
-      {open && <div className="px-4 pb-4 pt-4">{children}</div>}
+      {open && <div className="ss-res__body">{children}</div>}
     </div>
   );
 }
@@ -569,17 +577,149 @@ export function GenerateRexscreenerReport({
     currentTokenAddress.trim().toLowerCase() ===
       String(activeReport.contractAddress).trim().toLowerCase();
 
-  /** RexChat shows Back / history / close in one bar; hide duplicate floating close. */
-  const integratedPilotCloseBar =
-    !!onClose &&
-    (swapMinimized || contentMinimized) &&
-    !!pilotReportId &&
-    !reportGenActive;
+  /* ---- drag the line between the Exchange and the report (prototype RXResize on #gRep) ---- */
+  const panesRef = useRef<HTMLDivElement>(null);
+  const exPaneRef = useRef<HTMLElement>(null);
+  const [exH, setExH] = useState<number | null>(null);
+  const [splitActive, setSplitActive] = useState(false);
+
+  useEffect(() => {
+    try {
+      const v = parseFloat(localStorage.getItem(EX_H_KEY) ?? "");
+      if (!Number.isNaN(v)) setExH(v);
+    } catch {
+      /* storage blocked: keep the default split */
+    }
+  }, []);
+
+  const clampExH = useCallback((v: number) => {
+    const total = panesRef.current?.clientHeight ?? 0;
+    const max = Math.max(EX_MIN_H, total - REPORT_MIN_H);
+    return Math.round(Math.max(EX_MIN_H, Math.min(max, v)));
+  }, []);
+
+  const saveExH = useCallback((v: number | null) => {
+    try {
+      if (v == null) localStorage.removeItem(EX_H_KEY);
+      else localStorage.setItem(EX_H_KEY, String(v));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const currentExH = useCallback(
+    () => exPaneRef.current?.getBoundingClientRect().height ?? 0,
+    [],
+  );
+
+  const onSplitPointerDown = useCallback(
+    (e: ReactPointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const handle = e.currentTarget;
+      handle.setPointerCapture(e.pointerId);
+      const startY = e.clientY;
+      const base = currentExH();
+      let last = base;
+      setSplitActive(true);
+      document.body.classList.add("is-resizing", "is-resizing-y");
+      const move = (ev: globalThis.PointerEvent) => {
+        last = clampExH(base + ev.clientY - startY);
+        setExH(last);
+      };
+      const up = () => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        handle.removeEventListener("pointercancel", up);
+        document.body.classList.remove("is-resizing", "is-resizing-y");
+        setSplitActive(false);
+        saveExH(last);
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+      handle.addEventListener("pointercancel", up);
+    },
+    [clampExH, currentExH, saveExH],
+  );
+
+  const onSplitKeyDown = useCallback(
+    (e: ReactKeyboardEvent<HTMLDivElement>) => {
+      const step = e.shiftKey ? 64 : 16;
+      let next: number | null | undefined;
+      if (e.key === "ArrowDown") next = clampExH(currentExH() + step);
+      else if (e.key === "ArrowUp") next = clampExH(currentExH() - step);
+      else if (e.key === "Home") next = null;
+      if (next === undefined) return;
+      e.preventDefault();
+      setExH(next);
+      saveExH(next);
+    },
+    [clampExH, currentExH, saveExH],
+  );
+
+  const resetSplit = useCallback(() => {
+    setExH(null);
+    saveExH(null);
+  }, [saveExH]);
+
+  /** both · ex (report minimized) · rep (Exchange minimized) · none */
+  const paneState = swapMinimized
+    ? contentMinimized
+      ? "none"
+      : "rep"
+    : contentMinimized
+      ? "ex"
+      : "both";
+
+  const splitStyle =
+    exH != null && paneState === "both"
+      ? ({ "--ex-h": `${clampExH(exH)}px` } as CSSProperties)
+      : undefined;
+
+  const closeButton = onClose ? (
+    <button
+      type="button"
+      className="rx-icon-btn panel-ctl"
+      onClick={onClose}
+      aria-label="Close sidebar"
+      title="Close"
+    >
+      <IconX />
+    </button>
+  ) : null;
+
+  const historyCount = serverReports.length;
+  const openHistory = () => setShowHistory(true);
+  const minimizeReport = () => {
+    setContentMinimized(true);
+    setSwapMinimized(false);
+  };
+
+  /** Rex Pilot intro (no chart / no report): claw mark, the pitch and Report history. */
+  const pilotIntro = (
+    <div className="sb-body">
+      <div className="empty">
+        <span className="empty__mark" aria-hidden="true">
+          <ClawIco size={34} />
+        </span>
+        <b>Rex Pilot</b>
+        <p>
+          Your AI pilot for everything crypto. Click <b>Generate</b> to generate
+          Alpha reports for any coin on Solana, Ethereum, Binance, Base and Monad!
+        </p>
+        <PilotReportHistoryButton
+          count={historyCount}
+          onOpen={openHistory}
+          className="mt-1"
+        />
+      </div>
+    </div>
+  );
 
   return (
-    <div className={`relative flex flex-col w-full overflow-hidden h-full min-h-0`} style={{
-      maxHeight: '100dvh', // Use dynamic viewport height for mobile
-    }}>
+    // .rx-pilot (styles/pages/pilot.css) + .rx-ss (styles/pages/screener-side.css):
+    // the token page's side column — Exchange on top, Intelligence report below (design/token.html)
+    <div className="rx-pilot rx-ss">
       {!hideHeader && (
         <RexHeader
           onHistoryClick={() => setShowHistory((v) => !v)}
@@ -591,46 +731,6 @@ export function GenerateRexscreenerReport({
             clearAllStates();
           }}
         />
-      )}
-
-      {/* Close button — hidden when RexChat renders the same control in its top bar */}
-      {(swapMinimized || contentMinimized) && onClose && !integratedPilotCloseBar && (
-        <div
-          className={`absolute top-2 right-5 ${
-            showHistory ? "z-[70]" : "z-50"
-          }`}
-        >
-          <button
-            onClick={onClose}
-            className="flex items-center justify-center w-10 h-10 bg-[#3C3C3C] rounded-lg cursor-pointer hover:bg-[#4C4C4C] transition-colors"
-            aria-label="Close sidebar"
-          >
-            <X width={18} height={18} />
-          </button>
-        </div>
-      )}
-
-      {/* Expand banner when content is minimized */}
-      {contentMinimized && (
-        <div className="w-full flex items-center justify-center mt-1 z-30">
-          <button
-            onClick={() => setContentMinimized(false)}
-            className="flex items-center gap-3 px-4 py-2 rounded-md cursor-pointer"
-            aria-label="Expand Intelligence Report."
-            title="Expand Intelligence Report."
-          >
-            <Image
-              src={"/images/banner.png"}
-              alt="RaptorX"
-              width={34}
-              height={34}
-              className="rounded-full"
-            />
-            <span className="text-[#ffc000] text-base sm:text-lg">
-              Expand Intelligence Report.
-            </span>
-          </button>
-        </div>
       )}
 
       {/* Report history: covers the whole panel (cards on phones, table rows in the 700px desktop panel) */}
@@ -665,7 +765,7 @@ export function GenerateRexscreenerReport({
                   className="rx-btn rx-btn--secondary rx-btn--s absolute bottom-3 left-3 z-50 shadow-[0_8px_20px_rgba(0,0,0,0.5)] max-md:h-10"
                   aria-label="Show only Swap"
                 >
-                  <Minimize width={14} height={14} aria-hidden />
+                  <IconMin size={13} />
                   minimize
                 </button>
               )}
@@ -679,531 +779,366 @@ export function GenerateRexscreenerReport({
           onClick={() => setShowHistory(false)}
         />
       )}
+      {/* the sidebar's close stays reachable over the history drawer */}
+      {showHistory && closeButton ? (
+        <button
+          type="button"
+          className="rx-icon-btn panel-ctl ss-float-close"
+          onClick={onClose}
+          aria-label="Close sidebar"
+          title="Close"
+        >
+          <IconX />
+        </button>
+      ) : null}
 
-      {/* Main */}
-      <div className="flex-1 overflow-hidden flex flex-col bg-black">
-        {authenticated && userId ? (
-          <>
-            {/* Collapsible content wrapper keeps panel size stable */}
-            <div
-              className={`flex-1 flex flex-col overflow-hidden transition-all duration-300 ease-in-out ${
-                contentMinimized && !showLandingFallback
-                  ? "max-h-0 opacity-0"
-                  : !swapMinimized
-                  ? "max-h-[60vh] sm:max-h-[60vh] md:max-h-[60vh] opacity-100"
-                  : "max-h-dvh opacity-100"
-              }`}
-            >
-              <div className="relative w-full bg-black">
-                {!swapMinimized && (
-                  <div className="w-full flex justify-between items-center bg-[#141414] pl-5 pr-6 py-3">
-                    <div className="flex items-center gap-4">
-                      {onClose && (
-                        <button
-                          onClick={onClose}
-                          className="flex items-center justify-center gap-1 z-51 w-10 h-10 bg-[#3C3C3C] rounded-lg cursor-pointer text-[14px]"
-                          aria-label="Close sidebar"
-                        >
-                          <X width={18} height={18} />
-                        </button>
-                      )}
-                      <div className="flex flex-col items-start ">
-                        <div className="flex items-center gap-2">
-                          <h6 className="text-[12px]! font-normal! text-[#F2F2F2]">
-                            Rex Pilot
-                          </h6>
-                        </div>
-                        <p className="text-[12px] font-normal text-[#7A7A7A]">
-                          Your AI Pilot for everything crypto
-                        </p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => {
-                          setContentMinimized(true);
-                          setSwapMinimized(false);
-                        }}
-                        className="flex items-center justify-center gap-1 z-51 px-2 py-1 cursor-pointer text-[14px]"
-                        aria-label="Show only Swap"
-                      >
-                        <Minimize width={18} height={18} />
-                        <span className="text-white">minimize</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-              {showLandingFallback ? (
-                <div className="flex flex-col items-center justify-center h-full gap-6 px-10">
-                  <header className="flex flex-col items-center justify-center">
-                    <div className="flex items-end">
-                      <Image
-                        src="/images/home-logo.png"
-                        alt="RaptorX Logo"
-                        width={!swapMinimized ? 72 : 200}
-                        height={!swapMinimized ? 72 : 200}
-                        className={!swapMinimized ? "w-14 h-14 sm:w-16 sm:h-16" : ""}
-                        priority
-                      />
-                      <Image
-                        src={"/images/beta.png"}
-                        alt="Beta version"
-                        width={!swapMinimized ? 16 : 28}
-                        height={!swapMinimized ? 16 : 28}
-                        className={!swapMinimized ? "w-4 h-4 pb-2 -ml-3 sm:pb-2.5 sm:-ml-3.5" : "pb-5 -ml-8"}
-                      />
-                    </div>
-                    <div className="mt-4 flex flex-col items-center gap-2">
-                      <div className="flex flex-col gap-8 items-center justify-center">
-                        <h1 className="max-w-150 w-full text-[18px]! font-normal! text-[#F2F2F2] text-center mb-0">
-                          Rex Pilot. Your AI Pilot for everything crypto.
-                        </h1>
-                        <h4 className="max-w-150 w-full font-light text-[16px]! text-center text_white mb-0">
-                          Click <span className="text-[#00b050]">Generate</span>{" "}
-                          to generate Alpha reports for any coin on Solana, Ethereum, Binance, Base and Monad!
-                        </h4>
-                      </div>
-                      <PilotReportHistoryButton
-                        count={serverReports.length}
-                        onOpen={() => setShowHistory(true)}
-                        className="mt-2"
-                      />
-                    </div>
-                  </header>
-                </div>
-              ) : pilotReportId && !reportGenActive ? (
-                <div
-                  className={`relative overflow-hidden flex flex-col ${
-                    swapMinimized 
-                      ? "h-full min-h-0" 
-                      : "h-[calc(100%-64px)] sm:h-[calc(100%-64px)] md:h-[calc(100%-64px)] min-h-0"
-                  }`}
-                  style={{
-                    maxHeight: swapMinimized ? '100dvh' : 'calc(100dvh - 64px)', // Use dynamic viewport height for mobile
-                  }}
-                >
-                  <div className="flex-1 overflow-hidden min-h-0 flex flex-col">
-                    <RexChat
-                      userId={userId}
-                      selectedReportId={pilotReportId}
-                      onReportChange={(rid) => {
-                        if (rid) setAllowAutoPickPilotReport(true);
-                        setSelectedReportId(rid);
-                      }}
-                      onBack={() => {
-                        setAllowAutoPickPilotReport(false);
-                        setSelectedReportId(null);
-                        onDismissGeneratedReport?.();
-                        setShowHistory(false);
-                      }}
-                      reportType="crypto"
-                      onViewHistory={() => setShowHistory(true)}
-                      onCloseSidebar={
-                        integratedPilotCloseBar ? onClose : undefined
-                      }
-                      onOpenExchange={
-                        // What's New "Trade" card: bring the swap up under this report; its
-                        // "Full Exchange" link shows the Exchange on its own. Only when the
-                        // swap targets this report's token (the chart can be another token).
-                        swapMatchesPilotReport
-                          ? (opts) => {
-                              setShowHistory(false);
-                              setSwapMinimized(false);
-                              if (opts?.full) setContentMinimized(true);
-                            }
-                          : undefined
-                      }
-                    />
-                  </div>
-                </div>
-              ) : !currentIsViewingChart ? (
-                <div className="flex flex-col items-center justify-center h-[calc(100%-64px)] sm:h-[calc(100%-64px)] md:h-[calc(100%-64px)] gap-6 px-10" style={{
-                  maxHeight: 'calc(100dvh - 64px)', // Use dynamic viewport height for mobile
-                }}>
-                  <header className="flex flex-col items-center justify-center">
-                    <div className="flex items-end">
-                      <Image
-                        src="/images/home-logo.png"
-                        alt="RaptorX Logo"
-                        width={!swapMinimized ? 72 : 200}
-                        height={!swapMinimized ? 72 : 200}
-                        className={!swapMinimized ? "w-32 h-30 sm:w-48 sm:h-48" : ""}
-                        priority
-                      />
-                      <Image
-                        src={"/images/beta.png"}
-                        alt="Beta version"
-                        width={!swapMinimized ? 16 : 28}
-                        height={!swapMinimized ? 16 : 28}
-                        className={!swapMinimized ? "w-8 h-6 pb-2 -ml-3 sm:pb-2.5 sm:-ml-3.5" : "pb-5 -ml-8"}
-                      />
-                    </div>
-                    <div className="mt-3 flex flex-col items-center gap-2">
-                      <div
-                        className={
-                          !swapMinimized
-                            ? "flex flex-col gap-2 items-center justify-center"
-                            : "flex flex-col gap-6 items-center justify-center"
-                        }
-                      >
-                        <h1
-                          className={
-                            !swapMinimized
-                              ? "max-w-80 sm:max-w-150 w-full text-[16px]! sm:text-[18px]! font-normal! text-[#F2F2F2] text-center mb-0"
-                              : "max-w-150 w-full text-[18px]! font-normal! text-[#F2F2F2] text-center mb-0"
-                          }
-                        >
-                          Rex Pilot. Your AI Pilot for everything crypto.
-                        </h1>
-                        <h4
-                          className={
-                            !swapMinimized
-                              ? "max-w-70 sm:max-w-150 w-full text-[14px]! sm:text-[18px]! font-normal! text-[#F2F2F2]/80 text-center mb-0"
-                              : "max-w-150 w-full text-[16px]! sm:text-[18px]! font-normal! text-[#F2F2F2]/80 text-center mb-0"
-                          }
-                        >
-                          Click <span className="text-[#00b050]">Generate</span>{" "}
-                          to generate Alpha reports for any coin on Solana, Ethereum, Binance, Base and Monad!
-                        </h4>
-                      </div>
-                      <PilotReportHistoryButton
-                        count={serverReports.length}
-                        onOpen={() => setShowHistory(true)}
-                        className="mt-2"
-                      />
-                    </div>
-                  </header>
-                </div>
-              ) : (
-                /* CASE 3: viewing chart (no report selected) -> indicators + analysis */
-                <div className="h-full flex flex-col relative min-h-0 overflow-hidden" style={{
-                  maxHeight: '100dvh', // Use dynamic viewport height for mobile
-                }}>
-                  {/* Scrollable container wrapping entire technical analysis section */}
-                  <div 
-                    className="flex-1 overflow-y-auto overflow-x-hidden custom-sidebar-scrollbar min-h-0"
-                    style={{
-                      WebkitOverflowScrolling: 'touch',
-                      touchAction: 'pan-y',
-                      overscrollBehavior: 'contain',
-                    }}
-                  >
-                    <div className="px-2 pt-3 sm:px-3">
-                      <RexScreenerStreamingReport
-                        tokenAddress={currentTokenAddress}
-                        token={currentSelectedToken}
-                        completedReport={generatedReport}
-                      />
-                    </div>
-                    {/* Report history (hidden while AI report is streaming — same as Technical Analysis) */}
-                    <div className="px-3 pt-2">
-                      {!reportGenActive && (
-                        <PilotReportHistoryButton
-                          count={serverReports.length}
-                          onOpen={() => setShowHistory(true)}
-                        />
-                      )}
-                    </div>
-                    {!reportGenActive ? (
-                      <>
-                        <div className="p-3 pt-10 bg-black/30 w-full flex items-center justify-between gap-3">
-                          <div className="flex-1 text-center">
-                            <h1 className="text-xl font-semibold text-[#ffc000]">
-                              Technical Analysis
-                            </h1>
-                            <p className="text-white/70 mb-0">
-                              {currentTokenAddress
-                                ? `Generate technical analysis for ${
-                                    currentSelectedToken?.name ||
-                                    currentTokenAddress.substring(0, 8)
-                                  }`
-                                : "Select a coin from the chart view to enable analysis tools"}
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="p-6">
-                          <div className="mb-6">
-                            <div className="mb-8">
-                              <TechnicalIndicators
-                                userId={userId}
-                                token={currentSelectedToken || undefined}
-                                tokenAddress={currentTokenAddress || ""}
-                                authenticated={true}
-                                isGeneratingReport={false}
-                                disabled={!currentTokenAddress}
-                                isGeneratingMACD={isGeneratingMACD}
-                                isGeneratingRSI={isGeneratingRSI}
-                                isGeneratingCupHandle={isGeneratingCupHandle}
-                                isGeneratingAll={isGeneratingAll}
-                                hasMACD={!!macdAnalysis}
-                                hasRSI={!!rsiAnalysis}
-                                hasCupHandle={!!cupHandleAnalysis}
-                                hasAll={!!allAnalysis}
-                                onGenerateMACD={() =>
-                                  currentTokenAddress &&
-                                  generateMACD(currentTokenAddress)
-                                }
-                                onGenerateRSI={() =>
-                                  currentTokenAddress &&
-                                  generateRSI(currentTokenAddress)
-                                }
-                                onGenerateCupHandle={() =>
-                                  currentTokenAddress &&
-                                  generateCupHandle(currentTokenAddress)
-                                }
-                                onGenerateAll={() =>
-                                  currentTokenAddress &&
-                                  generateAllIndicators(currentTokenAddress)
-                                }
-                              />
-                            </div>
-
-                            {hasAnyAnalysis && (
-                              <div className="mt-8 space-y-6">
-                                <h2 className="text-xl font-semibold text-[#ffc000] mb-4">
-                                  Analysis Results
-                                </h2>
-
-                                {/* MACD */}
-                                {macdAnalysis && (
-                                  <CollapsiblePanel
-                                    title="MACD"
-                                    open={macdOpen}
-                                    onToggle={() => setMacdOpen((v) => !v)}
-                                    onRefresh={
-                                      currentTokenAddress
-                                        ? () => generateMACD(currentTokenAddress)
-                                        : undefined
-                                    }
-                                    refreshDisabled={isGeneratingMACD}
-                                    loading={isGeneratingMACD}
-                                  >
-                                    <div className="whitespace-pre-wrap text-white/90">
-                                      {sanitizeAnalysis(macdAnalysis.analysis)}
-                                    </div>
-                                  </CollapsiblePanel>
-                                )}
-
-                                {/* RSI */}
-                                {rsiAnalysis && (
-                                  <CollapsiblePanel
-                                    title="RSI"
-                                    open={rsiOpen}
-                                    onToggle={() => setRsiOpen((v) => !v)}
-                                    onRefresh={
-                                      currentTokenAddress
-                                        ? () => generateRSI(currentTokenAddress)
-                                        : undefined
-                                    }
-                                    refreshDisabled={isGeneratingRSI}
-                                    loading={isGeneratingRSI}
-                                  >
-                                    <div className="whitespace-pre-wrap text-white/90">
-                                      {sanitizeAnalysis(rsiAnalysis.analysis)}
-                                    </div>
-                                  </CollapsiblePanel>
-                                )}
-
-                                {/* Cup & Handle */}
-                                {cupHandleAnalysis && (
-                                  <CollapsiblePanel
-                                    title="Cup & Handle"
-                                    open={cupOpen}
-                                    onToggle={() => setCupOpen((v) => !v)}
-                                    onRefresh={
-                                      currentTokenAddress
-                                        ? () =>
-                                            generateCupHandle(currentTokenAddress)
-                                        : undefined
-                                    }
-                                    refreshDisabled={isGeneratingCupHandle}
-                                    loading={isGeneratingCupHandle}
-                                  >
-                                    <div className="whitespace-pre-wrap text-white/90">
-                                      {sanitizeAnalysis(cupHandleAnalysis.analysis)}
-                                    </div>
-                                  </CollapsiblePanel>
-                                )}
-
-                                {/* All Indicators */}
-                                {allAnalysis && (
-                                  <CollapsiblePanel
-                                    title="All Indicators"
-                                    open={allOpen}
-                                    onToggle={() => setAllOpen((v) => !v)}
-                                    onRefresh={
-                                      currentTokenAddress
-                                        ? () =>
-                                            generateAllIndicators(currentTokenAddress)
-                                        : undefined
-                                    }
-                                    refreshDisabled={isGeneratingAll}
-                                    loading={isGeneratingAll}
-                                  >
-                                    <div className="whitespace-pre-wrap text-white/90">
-                                      {sanitizeAnalysis(allAnalysis.analysis)}
-                                    </div>
-                                  </CollapsiblePanel>
-                                )}
-                              </div>
-                            )}
-
-                            {/* Loading state */}
-                            {!hasAnyAnalysis && isGeneratingAny && (
-                              <div className="flex flex-col items-center justify-center py-10 mt-8">
-                                <div className="w-12 h-12 border-2 border-[#ffc000] border-t-transparent rounded-full animate-spin mb-4"></div>
-                                <p className="text-white/70">
-                                  Generating technical analysis...
-                                </p>
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                      </>
-                    ) : null}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            <div className="w-full border-t-[0.5px] border-[#ffc000] bg-black relative z-40 shrink-0">
-              <div className="flex items-center justify-between">
-                <div className="w-full flex items-center justify-center">
-                  {!swapMinimized && (
-                    <div className="w-full flex justify-between items-center bg-[#141414] px-5 py-3 shrink-0">
-                      <div className="flex items-center gap-4">
-                        {onClose && (
-                          <button
-                            onClick={onClose}
-                            className="flex items-center justify-center gap-1 z-51 w-10 h-10 bg-[#3C3C3C] rounded-lg cursor-pointer text-[14px] shrink-0"
-                            aria-label="Close exchange"
-                          >
-                            <X width={18} height={18} />
-                          </button>
-                        )}
-                        <div className="flex flex-col items-start ">
-                          <h6 className="text-[12px]! font-normal! text-[#F2F2F2]">
-                            Exchange Tokens Instantly
-                          </h6>
-                          <p className="text-[12px] font-normal text-[#7A7A7A]">
-                            Fast, secure swaps powered by RaptorX.
-                          </p>
-                        </div>
-                      </div>
-                      <button
-                        onClick={() => setSwapMinimized(true)}
-                        className="flex items-center justify-center gap-1 px-2 py-1 z-60 rounded cursor-pointer text-[14px] text-white"
-                        aria-label="Minimize Swap"
-                      >
-                        <Minimize width={18} height={18} />
-                        <span className="text-white">minimize</span>
-                      </button>
-                    </div>
-                  )}
-                  {swapMinimized && (
-                    <div className="px-3 py-[13.665px] shrink-0">
-                      <button
-                        onClick={() => {
-                          setSwapMinimized(false);
-                          setContentMinimized(true);
-                        }}
-                        className="w-full flex items-center justify-center gap-2 cursor-pointer"
-                        aria-label="Enter the Exchange"
-                      >
-                        <Image
-                          src="/images/raptorxchange.png"
-                          alt="exchange logo"
-                          width={28}
-                          height={28}
-                        />
-                        <span className="text-[#ffc000]">
-                          Enter The Exchange.
-                        </span>
-                      </button>
-                    </div>
-                  )}
-                </div>
-                <div className="flex items-center"></div>
-              </div>
-              <div
-                className={`overflow-y-auto overflow-x-hidden mt-4 custom-sidebar-scrollbar transition-[max-height] duration-300 ease-in-out ${
-                  swapMinimized
-                    ? "max-h-0 h-0 mt-0! pointer-events-none"
-                    : contentMinimized
-                    ? "mt-0 max-h-[calc(100vh-120px)] sm:max-h-[calc(100vh-120px)]"
-                    : pilotReportId
-                    ? "mt-0 max-h-[50vh] min-h-75 sm:max-h-[40vh] sm:min-h-62.5 md:max-h-[40vh]"
-                    : "mt-0 max-h-[40vh] min-h-75 sm:min-h-62.5"
-                }`}
-                aria-hidden={swapMinimized}
-                style={{ 
-                  WebkitOverflowScrolling: 'touch', 
-                  touchAction: 'pan-y',
-                  overscrollBehavior: 'contain',
-                  maxHeight: swapMinimized 
-                    ? '0' 
-                    : contentMinimized
-                    ? 'calc(100dvh - 120px)' // Use dynamic viewport height for mobile
-                    : pilotReportId
-                    ? '50vh'
-                    : '40vh',
-                }}
-              >
-                <DexSwapper
-                  currentUserId={currentUser?.id ? currentUser.id : ""}
-                  toTokenAddress={currentTokenAddress || undefined}
-                  forceChain={dexForceChain}
-                  walletAddress={dexWalletAddress}
-                />
-              </div>
-            </div>
-          </>
-        ) : (
-          /* Unauthenticated landing */
-          <div className="relative flex flex-col items-center justify-center h-full gap-10 px-10">
-            {onClose && (
-              <div className="absolute top-2 right-5 z-50">
+      {authenticated && userId ? (
+        <div
+          className="ss-panes"
+          data-state={paneState}
+          data-sized={splitStyle ? "" : undefined}
+          ref={panesRef}
+          style={splitStyle}
+        >
+          {/* ---------- Exchange ---------- */}
+          <section className="ss-pane ss-pane--ex" aria-label="Exchange" ref={exPaneRef}>
+            {swapMinimized ? (
+              <div className="sb-min">
+                {closeButton}
                 <button
-                  onClick={onClose}
-                  className="flex items-center justify-center w-10 h-10 bg-[#3C3C3C] rounded-lg cursor-pointer hover:bg-[#4C4C4C] transition-colors"
-                  aria-label="Close sidebar"
+                  type="button"
+                  className="sb-bar"
+                  onClick={() => {
+                    setSwapMinimized(false);
+                    setContentMinimized(true);
+                  }}
+                  aria-label="Enter the Exchange"
                 >
-                  <X width={18} height={18} />
+                  <SwapMark size={12} />
+                  <span>
+                    Enter the <b>Exchange</b>
+                  </span>
+                  <IconExpand />
+                </button>
+              </div>
+            ) : (
+              <div className="sb-head">
+                {closeButton}
+                <SwapMark />
+                <div className="panel__title">
+                  <b>
+                    <span className="t">Exchange</span>
+                  </b>
+                  <span className="panel__sub">
+                    Swap tokens instantly · powered by RaptorX
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  className="rx-icon-btn panel-ctl"
+                  onClick={() => setSwapMinimized(true)}
+                  aria-expanded="true"
+                  aria-label="Minimize Swap"
+                  title="Minimize"
+                >
+                  <IconMin />
                 </button>
               </div>
             )}
-            <header className="flex flex-col items-center justify-center">
-              <div className="flex items-end">
-                <Image
-                  src="/images/home-logo.png"
-                  alt="RaptorX Logo"
-                  width={200}
-                  height={200}
-                  priority
-                />
-                <Image
-                  src={"/images/beta.png"}
-                  alt="Beta version"
-                  width={28}
-                  height={28}
-                  className="pb-5 -ml-8"
-                />
+            {/* The swap stays mounted while minimized (its widget events + in-flight routes) */}
+            <div
+              className={`ss-ex__body${swapMinimized ? " is-hidden" : ""}`}
+              aria-hidden={swapMinimized}
+              style={{
+                WebkitOverflowScrolling: "touch",
+                touchAction: "pan-y",
+                overscrollBehavior: "contain",
+              }}
+            >
+              <DexSwapper
+                currentUserId={currentUser?.id ? currentUser.id : ""}
+                toTokenAddress={currentTokenAddress || undefined}
+                forceChain={dexForceChain}
+                walletAddress={dexWalletAddress}
+              />
+            </div>
+          </section>
+
+          {/* line between the panes; drag it (or use the arrow keys) to resize, double-click to reset */}
+          {paneState === "both" ? (
+            <div
+              className={`sb-split${splitActive ? " is-active" : ""}`}
+              role="separator"
+              tabIndex={0}
+              aria-orientation="horizontal"
+              aria-label="Resize exchange and intelligence report"
+              aria-valuenow={exH != null ? clampExH(exH) : undefined}
+              title="Drag to resize · double-click to reset"
+              onPointerDown={onSplitPointerDown}
+              onKeyDown={onSplitKeyDown}
+              onDoubleClick={resetSplit}
+            />
+          ) : (
+            <div className="sb-split" aria-hidden="true" />
+          )}
+
+          {/* ---------- Intelligence report (Rex Pilot) ---------- */}
+          <section className="ss-pane ss-pane--rep" aria-label="Intelligence report">
+            {contentMinimized ? (
+              <div className="sb-min">
+                <button
+                  type="button"
+                  className="sb-bar"
+                  onClick={() => setContentMinimized(false)}
+                  aria-label="Expand intelligence report"
+                  title="Expand intelligence report"
+                >
+                  <ClawMark size={15} />
+                  <span>
+                    Expand <b>Intelligence report</b>
+                  </span>
+                  <IconExpand />
+                </button>
               </div>
-              <div className="flex flex-col gap-20 items-center justify-center">
-                <h1 className="max-w-150 w-full text-[18px]! font-normal! text-[#F2F2F2] text-center">
-                  Rex Pilot. Your AI Pilot for everything crypto.
-                </h1>
-                <h4 className="max-w-150 w-full text-[18px]! font-normal! text-[#F2F2F2] text-center">
-                  Click <span className="text-[#00b050]">Generate</span> to
-                  generate Alpha reports for any coin on Solana, BNB & Base!
-                </h4>
-              </div>
-            </header>
+            ) : null}
+
+            {/* Minimized, the report stays mounted (an answer that is streaming keeps going) */}
+            <div
+              className={`ss-pane__main${
+                contentMinimized && !showLandingFallback ? " is-hidden" : ""
+              }`}
+              aria-hidden={contentMinimized && !showLandingFallback ? true : undefined}
+            >
+              {showLandingFallback ? (
+                pilotIntro
+              ) : pilotReportId && !reportGenActive ? (
+                <RexChat
+                  userId={userId}
+                  selectedReportId={pilotReportId}
+                  onReportChange={(rid) => {
+                    if (rid) setAllowAutoPickPilotReport(true);
+                    setSelectedReportId(rid);
+                  }}
+                  onBack={() => {
+                    setAllowAutoPickPilotReport(false);
+                    setSelectedReportId(null);
+                    onDismissGeneratedReport?.();
+                    setShowHistory(false);
+                  }}
+                  reportType="crypto"
+                  onViewHistory={openHistory}
+                  onMinimize={minimizeReport}
+                  onOpenExchange={
+                    // What's New "Trade" card: bring the swap up next to this report; its
+                    // "Full Exchange" link shows the Exchange on its own. Only when the
+                    // swap targets this report's token (the chart can be another token).
+                    swapMatchesPilotReport
+                      ? (opts) => {
+                          setShowHistory(false);
+                          setSwapMinimized(false);
+                          if (opts?.full) setContentMinimized(true);
+                        }
+                      : undefined
+                  }
+                />
+              ) : !currentIsViewingChart ? (
+                <>
+                  {/* Report history sits in the intro itself (like the market sidebar's empty state) */}
+                  <ReportPaneHead onMinimize={minimizeReport} />
+                  {pilotIntro}
+                </>
+              ) : (
+                /* viewing chart (no report selected) -> streaming report + technical analysis */
+                <>
+                  <ReportPaneHead
+                    onHistory={!reportGenActive ? openHistory : undefined}
+                    historyCount={historyCount}
+                    onMinimize={minimizeReport}
+                  />
+                  <div
+                    className="sb-body"
+                    style={{
+                      WebkitOverflowScrolling: "touch",
+                      touchAction: "pan-y",
+                      overscrollBehavior: "contain",
+                    }}
+                  >
+                    <RexScreenerStreamingReport
+                      tokenAddress={currentTokenAddress}
+                      token={currentSelectedToken}
+                      completedReport={generatedReport}
+                    />
+                    {!reportGenActive ? (
+                      <div className="ss-ta">
+                        <div className="ss-ta__intro">
+                          <h3>Technical analysis</h3>
+                          <p>
+                            {currentTokenAddress
+                              ? `Generate technical analysis for ${
+                                  currentSelectedToken?.name ||
+                                  currentTokenAddress.substring(0, 8)
+                                }`
+                              : "Select a coin from the chart view to enable analysis tools"}
+                          </p>
+                        </div>
+
+                        <TechnicalIndicators
+                          userId={userId}
+                          token={currentSelectedToken || undefined}
+                          tokenAddress={currentTokenAddress || ""}
+                          authenticated={true}
+                          isGeneratingReport={false}
+                          disabled={!currentTokenAddress}
+                          isGeneratingMACD={isGeneratingMACD}
+                          isGeneratingRSI={isGeneratingRSI}
+                          isGeneratingCupHandle={isGeneratingCupHandle}
+                          isGeneratingAll={isGeneratingAll}
+                          hasMACD={!!macdAnalysis}
+                          hasRSI={!!rsiAnalysis}
+                          hasCupHandle={!!cupHandleAnalysis}
+                          hasAll={!!allAnalysis}
+                          onGenerateMACD={() =>
+                            currentTokenAddress &&
+                            generateMACD(currentTokenAddress)
+                          }
+                          onGenerateRSI={() =>
+                            currentTokenAddress &&
+                            generateRSI(currentTokenAddress)
+                          }
+                          onGenerateCupHandle={() =>
+                            currentTokenAddress &&
+                            generateCupHandle(currentTokenAddress)
+                          }
+                          onGenerateAll={() =>
+                            currentTokenAddress &&
+                            generateAllIndicators(currentTokenAddress)
+                          }
+                        />
+
+                        {hasAnyAnalysis && (
+                          <div className="ss-results">
+                            <span className="rx-eyebrow">Analysis results</span>
+
+                            {/* MACD */}
+                            {macdAnalysis && (
+                              <CollapsiblePanel
+                                title="MACD"
+                                open={macdOpen}
+                                onToggle={() => setMacdOpen((v) => !v)}
+                                onRefresh={
+                                  currentTokenAddress
+                                    ? () => generateMACD(currentTokenAddress)
+                                    : undefined
+                                }
+                                refreshDisabled={isGeneratingMACD}
+                                loading={isGeneratingMACD}
+                              >
+                                {sanitizeAnalysis(macdAnalysis.analysis)}
+                              </CollapsiblePanel>
+                            )}
+
+                            {/* RSI */}
+                            {rsiAnalysis && (
+                              <CollapsiblePanel
+                                title="RSI"
+                                open={rsiOpen}
+                                onToggle={() => setRsiOpen((v) => !v)}
+                                onRefresh={
+                                  currentTokenAddress
+                                    ? () => generateRSI(currentTokenAddress)
+                                    : undefined
+                                }
+                                refreshDisabled={isGeneratingRSI}
+                                loading={isGeneratingRSI}
+                              >
+                                {sanitizeAnalysis(rsiAnalysis.analysis)}
+                              </CollapsiblePanel>
+                            )}
+
+                            {/* Cup & Handle */}
+                            {cupHandleAnalysis && (
+                              <CollapsiblePanel
+                                title="Cup & Handle"
+                                open={cupOpen}
+                                onToggle={() => setCupOpen((v) => !v)}
+                                onRefresh={
+                                  currentTokenAddress
+                                    ? () =>
+                                        generateCupHandle(currentTokenAddress)
+                                    : undefined
+                                }
+                                refreshDisabled={isGeneratingCupHandle}
+                                loading={isGeneratingCupHandle}
+                              >
+                                {sanitizeAnalysis(cupHandleAnalysis.analysis)}
+                              </CollapsiblePanel>
+                            )}
+
+                            {/* All Indicators */}
+                            {allAnalysis && (
+                              <CollapsiblePanel
+                                title="All Indicators"
+                                open={allOpen}
+                                onToggle={() => setAllOpen((v) => !v)}
+                                onRefresh={
+                                  currentTokenAddress
+                                    ? () =>
+                                        generateAllIndicators(currentTokenAddress)
+                                    : undefined
+                                }
+                                refreshDisabled={isGeneratingAll}
+                                loading={isGeneratingAll}
+                              >
+                                {sanitizeAnalysis(allAnalysis.analysis)}
+                              </CollapsiblePanel>
+                            )}
+                          </div>
+                        )}
+
+                        {/* Loading state */}
+                        {!hasAnyAnalysis && isGeneratingAny && (
+                          <div className="ss-loading" role="status">
+                            <span className="rx-spin" aria-hidden="true" />
+                            <p className="m-0">Generating technical analysis...</p>
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                </>
+              )}
+            </div>
+          </section>
+        </div>
+      ) : (
+        /* Unauthenticated landing */
+        <>
+          <div className="sb-head">
+            {closeButton}
+            <ClawMark size={17} />
+            <div className="panel__title">
+              <b>
+                <span className="t">Intelligence report</span>
+              </b>
+              <span className="panel__sub">
+                Rex Pilot · your AI pilot for everything crypto
+              </span>
+            </div>
           </div>
-        )}
-      </div>
+          <div className="sb-body">
+            <div className="empty">
+              <span className="empty__mark" aria-hidden="true">
+                <ClawIco size={34} />
+              </span>
+              <b>Rex Pilot</b>
+              <p>
+                Your AI pilot for everything crypto. Click <b>Generate</b> to
+                generate Alpha reports for any coin on Solana, BNB &amp; Base!
+              </p>
+            </div>
+          </div>
+        </>
+      )}
     </div>
   );
 }

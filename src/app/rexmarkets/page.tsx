@@ -166,7 +166,8 @@ export default function RexMarketsPage() {
 
         {/* Rex Pilot - Right side on desktop, overlay on mobile */}
         <div
-          className={`fixed top-0 right-0 h-screen lg:h-full w-full sm:w-[500px] lg:w-[700px] bg-[#0C0C0C] sm:border-l sm:border-rx-gold-line z-[60] lg:z-auto transform transition-transform duration-500 ease-in-out ${
+          data-rx-sidebar
+          className={`fixed top-0 right-0 h-screen lg:h-full w-full sm:w-[500px] lg:w-[700px] bg-[#0C0C0C] z-[60] lg:z-auto transform transition-transform duration-500 ease-in-out ${
             showReportSidebar 
               ? "translate-x-0 lg:relative lg:flex-shrink-0" 
               : "translate-x-full lg:absolute"

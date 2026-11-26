@@ -8,8 +8,8 @@ import {
   type RexReportSection,
 } from "@/lib/reportToc";
 import {
-  getRexPilotReportSectionIcon,
-  renderRexPilotMarkdownSection,
+  renderScreenerReportMarkdown,
+  screenerReportSectionBadge,
 } from "./rexPilotReportMarkdown";
 
 type RexPilotReportSectionsStreamProps = {
@@ -24,6 +24,7 @@ type RexPilotReportSectionsStreamProps = {
 /**
  * RexScreener in-flight report: same section chrome + body styles as ChatInterface,
  * without DB-backed tweets / BNB analytics widgets (markdown only until report is saved).
+ * Styles: styles/pages/screener-side.css (.ss-report, .ss-sec, .ss-md).
  */
 export function RexPilotReportSectionsStream({
   sections,
@@ -46,31 +47,29 @@ export function RexPilotReportSectionsStream({
       return null;
     }
 
-    return renderRexPilotMarkdownSection(body);
+    return renderScreenerReportMarkdown(body);
   }
 
   return (
-    <div className="space-y-8">
+    <div className="ss-report">
       {sections.map(({ title, body, id }, i) => {
         const isLast = i === sections.length - 1;
         const inner = renderBody(title, body);
+        const gold = title.toLowerCase().includes("team updates");
 
         return (
-          <div key={id} id={id} className="scroll-mt-24">
-            <h2 className="rex-pilot-section-heading mb-4 flex items-center gap-3">
+          <section key={id} id={id} className={`ss-sec${gold ? " ss-sec--gold" : ""}`}>
+            <h2 className="ss-sec__title">
               {displayReportSectionTitle(title)}
-              {getRexPilotReportSectionIcon(title)}
+              {screenerReportSectionBadge(title)}
             </h2>
-            <div className="space-y-3">
+            <div className="ss-sec__body">
               {inner}
               {isLast && showTrailingCaret ? (
-                <span
-                  className="inline-block w-2 h-4 bg-[#ffc000]/85 animate-pulse ml-0.5 align-middle"
-                  aria-hidden
-                />
+                <span className="ss-caret" aria-hidden="true" />
               ) : null}
             </div>
-          </div>
+          </section>
         );
       })}
     </div>

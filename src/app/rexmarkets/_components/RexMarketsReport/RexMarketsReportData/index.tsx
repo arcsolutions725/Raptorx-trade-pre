@@ -1,21 +1,33 @@
 "use client";
 
-import { useState, useEffect, useMemo, useCallback } from "react";
+import { useState, useEffect, useMemo, useCallback, useRef } from "react";
+import type { CSSProperties, KeyboardEvent, PointerEvent } from "react";
 import { usePathname } from "next/navigation";
-import clsx from "clsx";
-import Image from "next/image";
 import type { MarketReport } from "@/hooks/useGenerateMarketReport";
 import { useMarketDetails } from "@/hooks/useMarketDetails";
 import { useReports } from "@/hooks/useReports";
 import ChatSidebar from "@/app/(rexscreener)/_components/rexchat/ChatSidebar";
 import { PilotReportHistoryButton } from "@/app/(rexscreener)/_components/rexchat/PilotReportHistoryButton";
+import { VenueBadge } from "@/app/rexmarkets/_components/RexMarketsTable/MarketDataTable/listUi";
 
 import AIGeneratedMarketsReport from "./AIGeneratedMarketsReport";
 import MarketsData from "./MarketsData";
-import { Minimize, ArrowLeft, X } from "lucide-react";
+import {
+  ClawIco,
+  ClawMark,
+  IconBack,
+  IconExpand,
+  IconMin,
+  IconX,
+  ReportMark,
+} from "./pilotUi";
 import { useReportGenStatus } from "@/lib/storage/reportGenStore";
 import { useDataSource } from "@/contexts/DataSourceContext";
-import { PREDICT_FUN_LOGO_SRC } from "@/lib/predictfun/assets";
+
+/** Rex Pilot / News split height, saved per viewer (same key as the prototype's drag gutter). */
+const PILOT_H_KEY = "rx-size-pilot-h";
+const PILOT_MIN_H = 140;
+const NEWS_MIN_H = 160;
 
 type PilotPlatform = "kalshi" | "polymarket" | "limitless" | "myriad" | "predictfun";
 
@@ -34,86 +46,6 @@ function pilotPlatformFromPathAndListing(
     return listingSource;
   }
   return null;
-}
-
-/** Matches Rex Predictions header source tabs: compact pill with icon + label. Hidden when listing "All" tab (no platform). */
-function RexPilotSourceMiniTab({ platform }: { platform: PilotPlatform }) {
-  const shell =
-    "inline-flex h-6 shrink-0 items-center justify-center gap-1 rounded-[8px] px-1.5 text-[11px] font-semibold leading-none";
-  if (platform === "kalshi") {
-    return (
-      <span
-        className={clsx(shell, "bg-[#17cb91] text-black")}
-        aria-label="Kalshi"
-      >
-        <span className="text-xs font-bold leading-none">K</span>
-        <span className="whitespace-nowrap">Kalshi</span>
-      </span>
-    );
-  }
-  if (platform === "polymarket") {
-    return (
-      <span
-        className={clsx(shell, "bg-[#2C59F7] text-white")}
-        aria-label="Polymarket"
-      >
-        <Image
-          src="/images/polymarket.png"
-          alt=""
-          width={14}
-          height={14}
-          className="h-3.5 w-3.5 shrink-0 object-contain"
-        />
-        <span className="whitespace-nowrap">Polymarket</span>
-      </span>
-    );
-  }
-  if (platform === "myriad") {
-    return (
-      <span className={clsx(shell, "bg-black text-white")} aria-label="Myriad">
-        <Image
-          src="/images/myriad.webp"
-          alt=""
-          width={14}
-          height={14}
-          className="h-3.5 w-3.5 shrink-0 object-contain"
-        />
-        <span className="whitespace-nowrap">Myriad</span>
-      </span>
-    );
-  }
-  if (platform === "predictfun") {
-    return (
-      <span
-        className={clsx(shell, "bg-[#A855F7] text-white")}
-        aria-label="Predict.fun"
-      >
-        <Image
-          src={PREDICT_FUN_LOGO_SRC}
-          alt=""
-          width={14}
-          height={14}
-          className="h-3.5 w-3.5 shrink-0 object-contain"
-        />
-        <span className="whitespace-nowrap">Predict.fun</span>
-      </span>
-    );
-  }
-  return (
-    <span
-      className={clsx(shell, "bg-[#c3ff01] text-black")}
-      aria-label="Limitless"
-    >
-      <Image
-        src="/images/limitless-logo-new.webp"
-        alt=""
-        width={14}
-        height={14}
-        className="h-3.5 w-3.5 max-w-[85%] shrink-0 object-contain"
-      />
-      <span className="whitespace-nowrap">Limitless</span>
-    </span>
-  );
 }
 
 type RexMarketsReportDataProps = {
@@ -190,8 +122,10 @@ export default function RexMarketsReportData({
     setMarketsDataMinimized(false);
   }, []);
 
+  // Minimizing one pane gives the whole sidebar to the other (prototype pane states: both · pilot-min · news-min)
   const handleMinimizeMarketsData = useCallback(() => {
     setMarketsDataMinimized(true);
+    setAiReportMinimized(false);
   }, []);
 
   const handleExpandAiReport = useCallback(() => {
@@ -200,6 +134,7 @@ export default function RexMarketsReportData({
 
   const handleMinimizeAiReport = useCallback(() => {
     setAiReportMinimized(true);
+    setMarketsDataMinimized(false);
   }, []);
 
   const handleBackToEmptyState = useCallback(() => {
@@ -211,8 +146,96 @@ export default function RexMarketsReportData({
     onClearSessionReport?.();
   }, [onReportSelect, onClearSessionReport]);
 
-  /** Top bar (Rex Pilot + source tab) stays visible when News Intelligence is minimized; only hide with Markets Data minimized. */
-  const showMarketsDataHeader = !marketsDataMinimized;
+  const paneState = marketsDataMinimized
+    ? "pilot-min"
+    : aiReportMinimized
+      ? "news-min"
+      : "both";
+
+  // ---- drag the line between Rex Pilot and the news report (prototype RXResize on #gSplit) ----
+  const panesRef = useRef<HTMLDivElement>(null);
+  const pilotPaneRef = useRef<HTMLElement>(null);
+  const [pilotH, setPilotH] = useState<number | null>(null);
+  const [splitActive, setSplitActive] = useState(false);
+
+  useEffect(() => {
+    try {
+      const v = parseFloat(localStorage.getItem(PILOT_H_KEY) ?? "");
+      if (!Number.isNaN(v)) setPilotH(v);
+    } catch {
+      /* storage blocked: keep the 50/50 split */
+    }
+  }, []);
+
+  const clampPilotH = useCallback((v: number) => {
+    const total = panesRef.current?.clientHeight ?? 0;
+    const max = Math.max(PILOT_MIN_H, total - NEWS_MIN_H);
+    return Math.round(Math.max(PILOT_MIN_H, Math.min(max, v)));
+  }, []);
+
+  const savePilotH = useCallback((v: number | null) => {
+    try {
+      if (v == null) localStorage.removeItem(PILOT_H_KEY);
+      else localStorage.setItem(PILOT_H_KEY, String(v));
+    } catch {
+      /* ignore */
+    }
+  }, []);
+
+  const currentPilotH = useCallback(
+    () => pilotPaneRef.current?.getBoundingClientRect().height ?? 0,
+    [],
+  );
+
+  const onSplitPointerDown = useCallback(
+    (e: PointerEvent<HTMLDivElement>) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const handle = e.currentTarget;
+      handle.setPointerCapture(e.pointerId);
+      const startY = e.clientY;
+      const base = currentPilotH();
+      let last = base;
+      setSplitActive(true);
+      document.body.classList.add("is-resizing");
+      const move = (ev: globalThis.PointerEvent) => {
+        last = clampPilotH(base + ev.clientY - startY);
+        setPilotH(last);
+      };
+      const up = () => {
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", up);
+        handle.removeEventListener("pointercancel", up);
+        document.body.classList.remove("is-resizing");
+        setSplitActive(false);
+        savePilotH(last);
+      };
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", up);
+      handle.addEventListener("pointercancel", up);
+    },
+    [clampPilotH, currentPilotH, savePilotH],
+  );
+
+  const onSplitKeyDown = useCallback(
+    (e: KeyboardEvent<HTMLDivElement>) => {
+      const step = e.shiftKey ? 64 : 16;
+      let next: number | null | undefined;
+      if (e.key === "ArrowDown") next = clampPilotH(currentPilotH() + step);
+      else if (e.key === "ArrowUp") next = clampPilotH(currentPilotH() - step);
+      else if (e.key === "Home") next = null;
+      if (next === undefined) return;
+      e.preventDefault();
+      setPilotH(next);
+      savePilotH(next);
+    },
+    [clampPilotH, currentPilotH, savePilotH],
+  );
+
+  const resetSplit = useCallback(() => {
+    setPilotH(null);
+    savePilotH(null);
+  }, [savePilotH]);
 
   const { data: serverReports = [] } = useReports(
     userId || undefined,
@@ -252,25 +275,20 @@ export default function RexMarketsReportData({
     setAiReportMinimized(false);
   }, [marketReportGenActive, selectedMarketTicker]);
 
-  return (
-    <div className="flex flex-col h-full overflow-hidden relative" style={{
-      maxHeight: '100dvh', // Use dynamic viewport height for mobile
-    }}>
-      {/* Close when Markets Data is collapsed (no header row with close). */}
-      {marketsDataMinimized && onClose && (
-        <div className="absolute top-2 right-2 z-50">
-          <button
-            onClick={onClose}
-            className="flex items-center justify-center w-[40px] h-[40px] bg-[#3C3C3C] rounded-[8px] cursor-pointer hover:bg-[#4C4C4C] transition-colors"
-            aria-label="Close sidebar"
-          >
-            <X width={18} height={18} />
-          </button>
-        </div>
-      )}
+  const showPilotEmpty =
+    aiReportMinimized &&
+    !marketsDataMinimized &&
+    !selectedReportId &&
+    !selectedMarketTicker;
 
-      {/* Report history — z above header controls (z-51/z-60) so history covers close/back/minimize.
-          Covers the whole panel: cards on phones, table rows in the 700px desktop panel. */}
+  const splitStyle =
+    pilotH != null && paneState === "both"
+      ? ({ "--pilot-h": `${clampPilotH(pilotH)}px` } as CSSProperties)
+      : undefined;
+
+  return (
+    <>
+      {/* Report history: slides over the whole sidebar (cards on phones, table rows in the 700px panel) */}
       <div
         className={`absolute top-0 left-0 h-full w-full z-[70] transform transition-transform duration-300 ${
           showHistory ? "translate-x-0" : "-translate-x-full"
@@ -304,223 +322,196 @@ export default function RexMarketsReportData({
           aria-hidden="true"
         />
       )}
-      {/* MarketsData Section - Top */}
-      {marketsDataMinimized && (
-        <div className="w-full flex items-center justify-center py-3 z-30 border-b border-[#ffc000]">
-          <button
-            onClick={handleExpandMarketsData}
-            className="flex items-center gap-3 px-4 py-1 cursor-pointer"
-            aria-label="Expand Markets Data"
-            title="Expand Markets Data"
-          >
-            <p className="text-white text-base sm:text-lg">
-              Expand <span className="text-[#ffc000]">Rex Markets.</span>
-            </p>
-          </button>
-        </div>
-      )}
-      <div
-        className={clsx(
-          "flex-1 overflow-hidden transition-all duration-300 ease-in-out flex flex-col",
-          marketsDataMinimized ? "max-h-0 opacity-0" : "flex-1 opacity-100"
-        )}
-      >
-        <div
-          className={clsx(
-            "relative flex-1 flex flex-col min-h-0",
-            aiReportMinimized
-              ? "justify-center items-center"
-              : "overflow-hidden"
-          )}
-        >
-          {showMarketsDataHeader && (
-            <div className="w-full flex justify-between items-center bg-[#141414] px-5 py-3">
-              <div className="flex items-center gap-2">
-                {onClose && (
-                  <button
-                    onClick={onClose}
-                    className="flex items-center justify-center gap-1 z-51 w-[40px] h-[40px] bg-[#3C3C3C] rounded-[8px] cursor-pointer text-[14px]"
-                    aria-label="Close sidebar"
-                  >
-                    <X width={18} height={18} />
-                  </button>
-                )}
-                <div className="flex min-w-0 flex-col items-start">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <h6 className="!text-[12px] !font-normal text-[#F2F2F2]">
-                      Rex Pilot
-                    </h6>
-                    {pilotPlatform ? (
-                      <RexPilotSourceMiniTab platform={pilotPlatform} />
-                    ) : null}
-                  </div>
-                  <p className="text-[12px] font-normal text-[#7A7A7A]">
-                    Your AI Pilot for everything crypto
-                  </p>
-                </div>
-              </div>
 
-              {!aiReportMinimized && (
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleMinimizeMarketsData}
-                    className="flex items-center justify-center gap-1 px-2 py-1 z-60 rounded cursor-pointer text-[14px] text-white"
-                    aria-label="Minimize Markets Data"
-                  >
-                    <Minimize width={18} height={18} />
-                    <span className="text-white">minimize</span>
-                  </button>
-                </div>
-              )}
+      <div className="sb-panes" data-state={paneState} ref={panesRef} style={splitStyle}>
+        {/* ---------- Rex Pilot ---------- */}
+        <section className="sb-pane sb-pane--pilot" aria-label="Rex Pilot" ref={pilotPaneRef}>
+          {marketsDataMinimized ? (
+            <div className="sb-min">
+              {onClose ? (
+                <button
+                  type="button"
+                  className="rx-icon-btn panel-ctl"
+                  onClick={onClose}
+                  aria-label="Close Rex Pilot panel"
+                  title="Close"
+                >
+                  <IconX />
+                </button>
+              ) : null}
+              <button
+                type="button"
+                className="sb-bar"
+                onClick={handleExpandMarketsData}
+                aria-label="Expand Rex Pilot"
+              >
+                <ClawMark size={16} />
+                <span>
+                  Expand <b>Rex Pilot</b>
+                </span>
+                <IconExpand />
+              </button>
             </div>
-          )}
-          <div
-            className={clsx(
-              "px-4 pb-4 pt-4 w-full h-[calc(100%-64px)] sm:h-[calc(100%-64px)] md:h-[calc(100%-64px)] overflow-hidden",
-              aiReportMinimized &&
-                !selectedMarketTicker &&
-                "flex items-center justify-center"
-            )}
-            style={{
-              maxHeight: 'calc(100dvh - 64px)', // Use dynamic viewport height for mobile
-            }}
-          >
-            {aiReportMinimized &&
-            !marketsDataMinimized &&
-            !selectedReportId &&
-            !selectedMarketTicker ? (
-              <div className="relative h-full min-h-0 w-full">
-                <div className="flex h-full min-h-0 w-full flex-col items-center justify-center px-6 py-3 sm:px-10">
-                  <header className="flex w-full max-w-[420px] flex-col items-center justify-center text-center">
-                    <div className="flex items-end">
-                      <Image
-                        src="/images/rexmarket.png"
-                        alt="Rex Markets Logo"
-                        width={200}
-                        height={200}
-                        priority
-                        className="max-h-[160px] w-auto sm:max-h-[200px]"
-                      />
-                    </div>
-                    <div className="mt-6 flex flex-col gap-2 sm:mt-8">
-                      <h1 className="w-full !font-normal !text-[14px] text-white sm:!text-[18px]">
-                        Conversational Intelligence for Event-Traders.
-                      </h1>
-                      <h4 className="w-full !text-[12px] !font-normal text-[#F2F2F2] sm:!text-[14px]">
-                        Click <span className="text-[#00B050]">Generate</span>{" "}
-                        to get Intelligence Reports for any prediction event!
-                      </h4>
-                    </div>
-                    {userId ? (
-                      <div className="mt-6 flex w-full justify-center sm:mt-8">
+          ) : (
+            <>
+              <div className="sb-head">
+                {onClose ? (
+                  <button
+                    type="button"
+                    className="rx-icon-btn panel-ctl"
+                    onClick={onClose}
+                    aria-label="Close Rex Pilot panel"
+                    title="Close"
+                  >
+                    <IconX />
+                  </button>
+                ) : null}
+                <ClawMark size={17} />
+                <div className="panel__title">
+                  <b>
+                    <span className="t">Rex Pilot</span>
+                    {pilotPlatform ? <VenueBadge venue={pilotPlatform} /> : null}
+                  </b>
+                  <span className="panel__sub">Your AI pilot for everything crypto</span>
+                </div>
+                <button
+                  type="button"
+                  className="rx-icon-btn panel-ctl"
+                  onClick={handleMinimizeMarketsData}
+                  aria-expanded="true"
+                  aria-label="Minimize Rex Pilot"
+                  title="Minimize"
+                >
+                  <IconMin />
+                </button>
+              </div>
+              <div className="sb-pane__main">
+                {showPilotEmpty ? (
+                  <div className="sb-body">
+                    <div className="empty">
+                      <span className="empty__mark" aria-hidden="true">
+                        <ClawIco size={34} />
+                      </span>
+                      <b>Rex Markets</b>
+                      <p>
+                        Conversational intelligence for event traders. Generate an intelligence
+                        report for any prediction event.
+                      </p>
+                      {userId ? (
                         <PilotReportHistoryButton
                           count={serverReports.length}
                           onOpen={() => setShowHistory(true)}
-                          className="pointer-events-auto"
+                          className="mt-1"
                         />
-                      </div>
-                    ) : null}
-                  </header>
-                </div>
-              </div>
-            ) : (
-              <>
-                <MarketsData
-                  eventTicker={selectedMarketTicker}
-                  marketTitle={selectedMarketTitle}
-                  totalVolume={selectedMarketVolume}
-                  eventId={selectedMarketEventId}
-                  marketSource={selectedMarketSource}
-                />
-              </>
-            )}
-          </div>
-        </div>
-      </div>
-
-      {/* Intelligence Report Section - Bottom */}
-      {aiReportMinimized && (
-        <div className="w-full border-t border-[#ffc000] flex items-center justify-center py-[9.5px] z-30">
-          <button
-            onClick={handleExpandAiReport}
-            className="flex items-center gap-3 px-4 py-1 cursor-pointer"
-            aria-label="Expand AI Generated Markets Report"
-            title="Expand AI Generated Markets Report"
-          >
-            <p className="text-white text-base sm:text-lg">
-              <span className="text-[#ffc000]">News Intelligence </span>
-              Report.
-            </p>
-          </button>
-        </div>
-      )}
-      <div
-        className={clsx(
-          "flex-1 border-t border-[#ffc000] overflow-hidden transition-all duration-300 ease-in-out flex flex-col",
-          aiReportMinimized ? "max-h-0 opacity-0" : "flex-1 opacity-100"
-        )}
-      >
-        <div className="relative flex-1 flex flex-col min-h-0">
-          {!aiReportMinimized && (
-            <div className="w-full flex justify-between items-center bg-[#141414] px-5 py-3">
-              <div className="flex items-center gap-2 justify-center">
-                {!!selectedReportId && (
-                  <button
-                    onClick={handleBackToEmptyState}
-                    className="flex items-center justify-center gap-1 z-51 w-[40px] h-[40px] bg-[#3C3C3C] rounded-[8px] cursor-pointer text-[14px]"
-                    aria-label="Back to Generate and empty state"
-                  >
-                    <ArrowLeft width={18} height={18} />
-                  </button>
-                )}
-                <div className="flex flex-col items-start ">
-                  <h6 className="!text-[12px] !font-normal text-[#F2F2F2]">
-                    News Intelligence Report
-                  </h6>
-                  <p className="text-[12px] font-normal text-[#7A7A7A]">
-                    Real-time conversational news context, by your side
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2 sm:gap-3 shrink-0">
-                {userId ? (
-                  <PilotReportHistoryButton
-                    count={serverReports.length}
-                    onOpen={() => setShowHistory(true)}
-                    className="pointer-events-auto"
+                      ) : null}
+                    </div>
+                  </div>
+                ) : (
+                  <MarketsData
+                    eventTicker={selectedMarketTicker}
+                    marketTitle={selectedMarketTitle}
+                    totalVolume={selectedMarketVolume}
+                    eventId={selectedMarketEventId}
+                    marketSource={selectedMarketSource}
                   />
-                ) : null}
-                <button
-                  onClick={handleMinimizeAiReport}
-                  className="flex items-center justify-center gap-1 px-2 py-1 z-60 rounded cursor-pointer text-[14px] text-white"
-                  aria-label="Minimize AI Generated Markets Report"
-                >
-                  <Minimize width={18} height={18} />
-                  <span className="text-white">minimize</span>
-                </button>
+                )}
               </div>
-            </div>
+            </>
           )}
+        </section>
+
+        {/* line between the panes; drag it (or use the arrow keys) to resize, double-click to reset */}
+        {paneState === "both" ? (
           <div
-            className="relative h-[calc(100%-60px)] min-h-0 flex-1 overflow-x-hidden overflow-y-auto px-4 pb-2 pt-2 sm:pb-3 sm:pt-3"
-            style={{
-              maxHeight: "calc(100dvh - 60px)",
-              WebkitOverflowScrolling: "touch",
-              touchAction: "pan-y",
-              overscrollBehavior: "contain",
-            }}
-          >
-            <AIGeneratedMarketsReport
-              generatedReport={generatedReport}
-              userId={userId}
-              selectedReportId={selectedReportId}
-              reportGenLookupKey={selectedMarketTicker ?? null}
-              selectedMarketTitle={selectedMarketTitle ?? null}
-              selectedMarketImageUrl={selectedMarketImageUrl}
-            />
-          </div>
-        </div>
+            className={`sb-split${splitActive ? " is-active" : ""}`}
+            role="separator"
+            tabIndex={0}
+            aria-orientation="horizontal"
+            aria-label="Resize Rex Pilot and news report"
+            aria-valuenow={pilotH != null ? clampPilotH(pilotH) : undefined}
+            title="Drag to resize · double-click to reset"
+            onPointerDown={onSplitPointerDown}
+            onKeyDown={onSplitKeyDown}
+            onDoubleClick={resetSplit}
+          />
+        ) : (
+          <div className="sb-split" aria-hidden="true" />
+        )}
+
+        {/* ---------- News intelligence report ---------- */}
+        <section className="sb-pane sb-pane--news" aria-label="News intelligence report">
+          {aiReportMinimized ? (
+            <div className="sb-min">
+              <button
+                type="button"
+                className="sb-bar"
+                onClick={handleExpandAiReport}
+                aria-label="Expand news intelligence report"
+              >
+                <ReportMark size={12} />
+                <span>
+                  <b>News intelligence</b>&nbsp;report
+                </span>
+                <IconExpand />
+              </button>
+            </div>
+          ) : (
+            <>
+              <div className="sb-head">
+                {selectedReportId ? (
+                  <button
+                    type="button"
+                    className="rx-icon-btn panel-ctl"
+                    onClick={handleBackToEmptyState}
+                    aria-label="Back to Generate"
+                    title="Back"
+                  >
+                    <IconBack />
+                  </button>
+                ) : null}
+                <ReportMark />
+                <div className="panel__title">
+                  <b>
+                    <span className="t">News intelligence report</span>
+                  </b>
+                  <span className="panel__sub">
+                    Real-time conversational news context, by your side
+                  </span>
+                </div>
+                <div className="sb-head__tools">
+                  {userId ? (
+                    <PilotReportHistoryButton
+                      variant="icon"
+                      count={serverReports.length}
+                      onOpen={() => setShowHistory(true)}
+                    />
+                  ) : null}
+                  <button
+                    type="button"
+                    className="rx-icon-btn panel-ctl"
+                    onClick={handleMinimizeAiReport}
+                    aria-expanded="true"
+                    aria-label="Minimize news intelligence report"
+                    title="Minimize"
+                  >
+                    <IconMin />
+                  </button>
+                </div>
+              </div>
+              <div className="sb-pane__main">
+                <AIGeneratedMarketsReport
+                  generatedReport={generatedReport}
+                  userId={userId}
+                  selectedReportId={selectedReportId}
+                  reportGenLookupKey={selectedMarketTicker ?? null}
+                  selectedMarketTitle={selectedMarketTitle ?? null}
+                  selectedMarketImageUrl={selectedMarketImageUrl}
+                />
+              </div>
+            </>
+          )}
+        </section>
       </div>
-    </div>
+    </>
   );
 }

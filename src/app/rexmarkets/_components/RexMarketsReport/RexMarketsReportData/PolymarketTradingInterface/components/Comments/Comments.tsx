@@ -4,6 +4,7 @@ import { useState, useMemo } from "react";
 import { usePolymarketComments, type PolymarketComment } from "@/hooks/usePolymarketComments";
 import { formatAddress } from "@/utils/polymarketTrading";
 import HolderAvatar from "../shared/HolderAvatar";
+import { IconHeart } from "../../../shared/marketUi";
 
 type CommentsProps = {
   marketId?: string | null;
@@ -47,12 +48,12 @@ function CommentItem({
   const displayName = useMemo(() => {
     const name = comment.profile?.name;
     const pseudonym = comment.profile?.pseudonym;
-    
+
     // If name exists and starts with "0x", prefer pseudonym
     if (name && name.startsWith("0x")) {
       return pseudonym || formatAddress(comment.profile?.proxyWallet || comment.userAddress);
     }
-    
+
     // Otherwise use the normal priority: name -> pseudonym -> formatted address
     return name || pseudonym || formatAddress(comment.profile?.proxyWallet || comment.userAddress);
   }, [comment.profile?.name, comment.profile?.pseudonym, comment.profile?.proxyWallet, comment.userAddress]);
@@ -63,53 +64,39 @@ function CommentItem({
 
   const hasReplies = nestedReplies.length > 0;
   const reactionCount = comment.reactionCount || comment.reactions?.length || 0;
+  const likes = reactionCount + (isLiked ? 1 : 0);
 
   return (
-    <div className={`${level > 0 ? "ml-8 mt-3" : ""}`}>
-      <div className="flex gap-3">
-        <div className="flex-shrink-0">
-          <HolderAvatar
-            name={displayName}
-            profileImage={comment.profile?.profileImage}
-            size={32}
-          />
-        </div>
-        <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-sm font-medium text-white">
-              {displayName}
-            </span>
-            <span className="text-xs text-white/60">{timeAgo}</span>
+    <div className="mk-cmt">
+      <div className="mk-cmt-row">
+        <HolderAvatar
+          name={displayName}
+          profileImage={comment.profile?.profileImage}
+          size={level === 0 ? 40 : 32}
+          tone="gold"
+        />
+        <div className="mk-cmt-main">
+          <div className="mk-meta">
+            <span className="mk-who">{displayName}</span>
+            <span className="mk-time">{timeAgo}</span>
           </div>
-          <p className="text-sm text-white/90 mb-2 whitespace-pre-wrap break-words">
-            {comment.body}
-          </p>
-          <div className="flex items-center gap-4">
+          <p className="mk-text">{comment.body}</p>
+          <div className="mk-acts">
             <button
+              type="button"
               onClick={() => setIsLiked(!isLiked)}
-              className="flex items-center gap-1 text-xs text-white/60 hover:text-white transition-colors"
+              aria-pressed={isLiked}
+              aria-label={`Like, ${likes} likes`}
             >
-              <svg
-                width="14"
-                height="14"
-                viewBox="0 0 24 24"
-                fill={isLiked ? "currentColor" : "none"}
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" />
-              </svg>
-              <span>{reactionCount + (isLiked ? 1 : 0)}</span>
+              <IconHeart size={14} filled={isLiked} />
+              <span className="rx-num">{likes}</span>
             </button>
-            <button className="text-xs text-white/60 hover:text-white transition-colors">
-              Reply
-            </button>
+            <button type="button">Reply</button>
             {hasReplies && level === 0 && (
               <button
+                type="button"
                 onClick={() => setShowReplies(!showReplies)}
-                className="text-xs text-white/60 hover:text-white transition-colors"
+                aria-expanded={showReplies}
               >
                 {showReplies ? "Hide" : "Show"} {nestedReplies.length}{" "}
                 {nestedReplies.length === 1 ? "Reply" : "Replies"}
@@ -117,7 +104,7 @@ function CommentItem({
             )}
           </div>
           {showReplies && hasReplies && (
-            <div className="mt-3 space-y-0">
+            <div className="mk-replies">
               {nestedReplies.map((reply) => (
                 <CommentItem
                   key={reply.id}
@@ -158,32 +145,31 @@ export default function Comments({ marketId, eventId, seriesId }: CommentsProps)
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <div className="text-sm text-white/60">Loading comments...</div>
+      <div className="mk-msg" role="status">
+        Loading comments...
       </div>
     );
   }
 
   if (!comments || comments.length === 0) {
     return (
-      <div className="flex flex-col items-center justify-center py-8">
-        <div className="text-sm text-white/60 mb-2">No comments yet</div>
-        <div className="text-xs text-white/40">Be the first to comment!</div>
+      <div className="mk-msg">
+        <b>No comments yet</b>
+        Be the first to comment!
       </div>
     );
   }
 
   return (
-    <div className="space-y-4 px-1">
+    <div className="mk-posts">
       {topLevelComments.map((comment) => (
-        <div key={comment.id} className="pb-4 border-b border-white/10 last:border-b-0">
+        <article key={comment.id} className="mk-post">
           <CommentItem
             comment={comment}
             replies={allComments}
           />
-        </div>
+        </article>
       ))}
     </div>
   );
 }
-

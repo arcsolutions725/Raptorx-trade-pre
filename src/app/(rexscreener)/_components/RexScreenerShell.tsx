@@ -90,6 +90,13 @@ export function useRexScreenerTableContext() {
   return ctx;
 }
 
+/** A URL in this route group whose first segment is neither /rexscreener nor a chain (e.g. /foo or /foo/bar):
+ *  its [chainSlug] page calls notFound(), so the shell renders only the 404 page (which has its own header and footer). */
+function isUnknownScreenerPath(pathname: string | null): boolean {
+  const first = (pathname ?? "").split("/").filter(Boolean)[0];
+  return !!first && first.toLowerCase() !== "rexscreener" && !isScreenerChainSlug(first);
+}
+
 export function RexScreenerShellProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
@@ -606,6 +613,15 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
     </>
   );
 
+  // Unknown URL (e.g. /foo): only the 404 page, without the screener's header, table and footer
+  if (isUnknownScreenerPath(pathname)) {
+    return (
+      <RexScreenerTableContext.Provider value={tableContext}>
+        {children}
+      </RexScreenerTableContext.Provider>
+    );
+  }
+
   return (
     <RexScreenerTableContext.Provider value={tableContext}>
       <div
@@ -634,7 +650,8 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
           </div>
 
           <div
-            className={`fixed top-0 right-0 h-screen lg:h-full border-l-0 sm:border-l border-[#ffc000] w-full sm:w-[500px] lg:w-[700px] bg-black z-[60] lg:z-auto transform transition-transform duration-500 ease-in-out ${
+            data-rx-sidebar
+            className={`fixed top-0 right-0 h-screen lg:h-full w-full sm:w-[500px] lg:w-[700px] bg-rx-bg z-[60] lg:z-auto transform transition-transform duration-500 ease-in-out motion-reduce:transition-none ${
               showReportSidebar
                 ? "translate-x-0 lg:relative lg:flex-shrink-0"
                 : "translate-x-full lg:absolute"
@@ -649,7 +666,8 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
             }}
           >
             <div
-              className="h-full overflow-y-auto overflow-x-hidden bg-[#141414] custom-sidebar-scrollbar"
+              // .rx-pilot .rx-ss inside paints the panel (flat + 1px line docked, gradient + gold glint as an overlay)
+              className="h-full overflow-y-auto overflow-x-hidden custom-sidebar-scrollbar"
               style={{
                 WebkitOverflowScrolling: "touch",
                 touchAction: "pan-y",
@@ -733,6 +751,8 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
 /** Renders only the trending table; shell (layout) stays mounted when routes change. */
 export function RexScreenerTableOutlet() {
   const ctx = useRexScreenerTableContext();
+  const pathname = usePathname();
+  if (isUnknownScreenerPath(pathname)) return null;
 
   return (
     <TrendingTable

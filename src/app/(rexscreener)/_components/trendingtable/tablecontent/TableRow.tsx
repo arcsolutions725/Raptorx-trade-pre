@@ -27,60 +27,14 @@ import {
   SCREENER_PIN_TOKEN,
   SCREENER_ROW_MIN_W,
 } from "./gridColumns";
-
-function fromEpochSeconds(sec?: number): Date | null {
-  if (typeof sec !== "number" || !Number.isFinite(sec) || sec <= 0) return null;
-  // Safety net: detect millisecond timestamps (> ~2001 in ms ≈ 1e12)
-  const normalized = sec > 1e12 ? Math.floor(sec / 1000) : sec;
-  return new Date(normalized * 1000);
-}
-function timeSince(date: Date | null): string {
-  if (!date) return "—";
-  const s = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
-  // Mean Gregorian year (~365.25d) + round so ~2y elapsed matches "2 years ago" UIs (floor was ~1y for ~710d).
-  const secPerYear = 365.25 * 24 * 3600;
-  const approxYears = s / secPerYear;
-  if (approxYears >= 1) {
-    const y = Math.max(1, Math.round(approxYears));
-    return `${y}y`;
-  }
-  const mo = Math.floor(s / (30 * 24 * 3600));
-  if (mo >= 1) return `${mo}mo`;
-  const w = Math.floor(s / (7 * 24 * 3600));
-  if (w >= 1) return `${w}w`;
-  const d = Math.floor(s / (24 * 3600));
-  if (d >= 1) return `${d}d`;
-  const h = Math.floor(s / 3600);
-  if (h >= 1) return `${h}h`;
-  const m = Math.floor(s / 60);
-  if (m >= 1) return `${m}m`;
-  return `${s}s`;
-}
-function pickVolume24h(v?: TrendingToken["totalVolume"]): number | undefined {
-  return v?.["24h"] ?? v?.["12h"] ?? v?.["4h"] ?? v?.["1h"];
-}
-
-function pct24h(
-  block?: TrendingToken["pricePercentChange"] | TrendingToken["volumePercentChange"]
-): number | undefined {
-  const v = block?.["24h"];
-  return typeof v === "number" && Number.isFinite(v) ? v : undefined;
-}
-
-/** Magnitude string for multiplier X where multiplier = percentChange / 100 (e.g. 800% → 8, −120% → 1.2). */
-function formatMultiplierMagnitudeFromPercent(pct: number): string {
-  const a = Math.abs(pct / 100);
-  if (a === 0) return "0";
-  const decimals = a >= 10 ? 1 : 2;
-  return a.toFixed(decimals).replace(/\.?0+$/, "");
-}
-
-/** Monogram fallback colour: a stable muted hue per token (no brand colour in the API). */
-function monogramBackground(seed: string): string {
-  let h = 0;
-  for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0;
-  return `hsl(${h % 360} 38% 34%)`;
-}
+import {
+  formatMultiplierMagnitudeFromPercent,
+  fromEpochSeconds,
+  monogramBackground,
+  pct24h,
+  pickVolume24h,
+  timeSince,
+} from "./tokenMeta";
 
 /* AI report buttons (client feedback 24 Nov): antique-gold Full Report with a black report icon,
    graphite What's New with a soft gold edge and a 3D bolt. Colours live in raptorx-ds.css. */
@@ -146,7 +100,32 @@ type Props = {
   ageLoading?: boolean;
   /** Dex mcap/price overlay still in flight — don't flash Birdeye numbers */
   marketLoading?: boolean;
+  /** `card`: Golden / Pump Reports card (design/reports.html) instead of a table row. Same data and handlers. */
+  layout?: "row" | "card";
+  /** Which report program the card belongs to (badge + layout). */
+  cardKind?: "golden" | "pump";
 };
+
+/** Small inline icons for the report cards (design sprite: i-star, i-trend, i-clock). */
+function CardIco({ d, size = 12 }: { d: string; size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d={d}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+const ICO_STAR =
+  "M12 3l2.7 5.6 6.1.9-4.4 4.3 1 6.1L12 17l-5.4 2.9 1-6.1-4.4-4.3 6.1-.9z";
+const ICO_TREND = "M3 17l6-6 4 4 8-8M15 7h6v6";
+const ICO_CLOCK = "M12 4a8 8 0 1 0 0 16a8 8 0 1 0 0-16M12 8v4l3 2";
+const ICO_DROP = "M12 3.5c3 3.6 6 7 6 10.2a6 6 0 0 1-12 0c0-3.2 3-6.6 6-10.2z";
 
 export function TableRow({
   token,
@@ -163,6 +142,8 @@ export function TableRow({
   usePumpGenerateArt: _usePumpGenerateArt = false,
   ageLoading = false,
   marketLoading = false,
+  layout = "row",
+  cardKind = "golden",
 }: Props) {
   const { isGenerating, startedAt } = useReportGenStatus(token?.tokenAddress);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -432,6 +413,333 @@ export function TableRow({
         ? "up"
         : "down";
 
+  const modals = (
+    <>
+      <PaywallModal
+        open={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        context="rexscreener"
+        paymentMetadata={currentUserId ? { userId: currentUserId } : undefined}
+      />
+      <WhatsNewModal
+        open={whatsNewOpen}
+        onClose={() => {
+          setWhatsNewOpen(false);
+          setWhatsNewError(null);
+        }}
+        loading={whatsNewLoading}
+        error={whatsNewError}
+        result={whatsNewResult}
+        imageUrl={token?.logo}
+        symbol={token?.symbol}
+        facts={{
+          priceUsd: price ?? null,
+          change24h: priceChange24h ?? null,
+          marketCap: mcap ?? null,
+          volume24h: vol ?? null,
+          liquidityUsd: liq ?? null,
+          createdAt: fromEpochSeconds(token?.createdAt)?.getTime() ?? null,
+          contract: token?.tokenAddress ?? null,
+        }}
+        trade={
+          token?.tokenAddress && token.symbol
+            ? {
+                symbol: token.symbol,
+                name: token.name,
+                logo: logoSrc ?? token.logo,
+                chain: resolveSwapChain({
+                  swapTokenAddress: token.tokenAddress,
+                  token,
+                }),
+                // Same page: chart this token, then open the panel's Exchange on it.
+                onTrade: () => {
+                  openChart();
+                  requestShellAction("exchange");
+                },
+              }
+            : null
+        }
+      />
+    </>
+  );
+
+  /** Full Report (or the generation countdown) + What's New: same controls in rows and cards. */
+  const reportButtons = (
+    <>
+      {isGenerating && countdown !== null ? (
+        <span
+          role="status"
+          aria-live="polite"
+          aria-label={`Generating report, ${countdown} seconds left`}
+          className={clsx(
+            FULL_REPORT_BTN,
+            "pointer-events-none min-w-[100px] tabular-nums",
+          )}
+        >
+          <span className="rx-spin size-3 border-[1.5px]" aria-hidden />
+          {countdown}s
+        </span>
+      ) : (
+        <button
+          type="button"
+          className={FULL_REPORT_BTN}
+          onClick={!authenticated ? handleSignIn : onGenerateClick}
+          disabled={isGenerating || !ready || whatsNewLoading}
+          aria-label={`Full Report for ${displayName}`}
+          title="Full Report"
+        >
+          <ReportIcon />
+          Full Report
+        </button>
+      )}
+      <button
+        type="button"
+        className={WHATS_NEW_BTN}
+        onClick={!authenticated ? handleSignIn : onWhatsNewClick}
+        disabled={!ready || whatsNewLoading}
+        aria-label={`What's New for ${displayName}`}
+        title="What's New"
+      >
+        {whatsNewLoading ? (
+          <span className="rx-spin size-3 border-[1.5px]" aria-hidden />
+        ) : (
+          <NewsIcon />
+        )}
+        What&apos;s New
+      </button>
+    </>
+  );
+
+  /* ---------- Golden / Pump Reports card (design/reports.html .rp-card) ---------- */
+  if (layout === "card") {
+    const pump = cardKind === "pump";
+    const chgTone =
+      priceChange24h == null || priceChange24h === 0
+        ? null
+        : priceChange24h > 0
+          ? "up"
+          : "down";
+    return (
+      <li className="rx-rp-item">
+        <article
+          className={clsx("rx-raised rx-rp-card", pump && "rx-rp-card--pump")}
+          aria-label={`${displaySymbol || displayName}, ${pump ? "Pump" : "Golden"} Report`}
+        >
+          <div className="rx-rp-card__top">
+            <span className="relative shrink-0">
+              <button
+                type="button"
+                onClick={openChart}
+                onKeyDown={keyOpenChart}
+                className="rx-avatar rx-avatar--token size-11 cursor-pointer overflow-hidden transition-transform hover:scale-[1.05] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rx-gold-hi disabled:cursor-default"
+                style={{
+                  background: showTokenImage
+                    ? "var(--rx-surface-3)"
+                    : monogramBackground(token.tokenAddress || displaySymbol || displayName),
+                }}
+                disabled={!token?.tokenAddress}
+                aria-label={`Open chart for ${displayName}`}
+                title="Open chart"
+              >
+                {showTokenImage ? (
+                  <Image
+                    src={logoSrc as string}
+                    alt=""
+                    width={44}
+                    height={44}
+                    className="size-11 object-cover"
+                    onError={() => {
+                      if (logoSrc && constructedLogo && logoSrc !== constructedLogo) {
+                        setLogoSrc(constructedLogo);
+                        return;
+                      }
+                      setLogoLoadFailed(true);
+                    }}
+                  />
+                ) : (
+                  <small
+                    className="font-mono text-[13px] font-semibold leading-none text-white select-none"
+                    aria-hidden
+                  >
+                    {monogram}
+                  </small>
+                )}
+              </button>
+              <span
+                className="rx-avatar__chain overflow-hidden bg-rx-surface-3"
+                title={chainBadge.label}
+              >
+                <Image
+                  src={chainBadge.src}
+                  alt={chainBadge.label}
+                  width={14}
+                  height={14}
+                  className="block size-full object-cover"
+                />
+              </span>
+            </span>
+            <div className="rx-rp-card__id">
+              <div className="flex min-w-0 items-center gap-1">
+                <button
+                  type="button"
+                  onClick={openChart}
+                  disabled={!token?.tokenAddress}
+                  className="rx-rp-card__sym"
+                  aria-label={`Open chart for ${displayName}`}
+                  title="Open chart"
+                >
+                  {displaySymbol || displayName}
+                </button>
+                <button
+                  type="button"
+                  onClick={handleCopyAddress}
+                  disabled={!token?.tokenAddress}
+                  className={ICON_BTN}
+                  title={token?.tokenAddress ? "Copy contract address" : "No address"}
+                  aria-label={
+                    copied
+                      ? "Contract address copied"
+                      : `Copy ${displaySymbol || displayName} contract address`
+                  }
+                >
+                  {copied ? (
+                    <Check className="size-3.5 text-rx-up" aria-hidden />
+                  ) : (
+                    <Copy className="size-[13px]" aria-hidden />
+                  )}
+                </button>
+                {token?.tokenAddress ? (
+                  <a
+                    href={explorerUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className={ICON_BTN}
+                    aria-label={`View on ${explorerName}`}
+                    title={`View token on ${explorerName}`}
+                  >
+                    <ExternalLink className="size-[13px]" aria-hidden />
+                  </a>
+                ) : null}
+              </div>
+              <span className="rx-rp-card__name" title={displayName}>
+                {displayName}
+              </span>
+            </div>
+            {pump ? (
+              <span className="rx-badge rx-rp-badge--pump">
+                <CardIco d={ICO_TREND} size={11} />
+                Pump
+              </span>
+            ) : (
+              <span className="rx-badge rx-badge--gold">
+                <CardIco d={ICO_STAR} size={11} />
+                Golden
+              </span>
+            )}
+          </div>
+
+          <dl className="rx-rp-big">
+            <div>
+              <dt>Market cap</dt>
+              <dd className="rx-num">
+                {marketLoading ? (
+                  <span className="rx-skel block h-5 w-24" role="status" aria-label="Loading market cap" />
+                ) : (
+                  formatUsd(mcap)
+                )}
+              </dd>
+            </div>
+            <div>
+              <dt>Volume 24h</dt>
+              <dd className="rx-num">{formatUsd(vol)}</dd>
+            </div>
+          </dl>
+
+          {pump ? (
+            <>
+              <div className="rx-rp-move">
+                <span
+                  className={clsx(
+                    "rx-rp-move__val",
+                    chgTone === "down" && "is-down",
+                    !chgTone && "is-flat",
+                  )}
+                >
+                  {priceChange24h == null
+                    ? "—"
+                    : `${chgTone === "up" ? "▲ " : chgTone === "down" ? "▼ " : ""}${Math.abs(priceChange24h).toFixed(2)}%`}
+                </span>
+                <span className="rx-rp-move__in">in 24h</span>
+              </div>
+              <dl className="rx-rp-stats">
+                <div>
+                  <dt title="24h volume change">Vol chg</dt>
+                  <dd
+                    className={clsx(
+                      "rx-num",
+                      volumeTone === "up" && "text-rx-up",
+                      volumeTone === "down" && "text-rx-down",
+                    )}
+                    title={
+                      volumeChange24h != null
+                        ? `24h volume change ${volumeChange24h > 0 ? "+" : ""}${volumeChange24h.toFixed(2)}%`
+                        : undefined
+                    }
+                  >
+                    {volumeTone && volumeChange24h != null
+                      ? `${volumeTone === "up" ? "+" : "-"}${formatMultiplierMagnitudeFromPercent(volumeChange24h)}X`
+                      : "—"}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Price</dt>
+                  <dd className="rx-num" title={formatUsd(price)}>
+                    {formatUsd(price)}
+                  </dd>
+                </div>
+                <div>
+                  <dt>Liquidity</dt>
+                  <dd className="rx-num">{formatUsd(liq)}</dd>
+                </div>
+              </dl>
+            </>
+          ) : (
+            <div className="rx-rp-card__meta">
+              <span title="Price">
+                <span className="rx-num text-rx-text-2">{formatUsd(price)}</span>
+              </span>
+              <span title="Liquidity">
+                <CardIco d={ICO_DROP} />
+                <span className="rx-num">{formatUsd(liq)}</span>
+              </span>
+              <span title="Token age">
+                <CardIco d={ICO_CLOCK} />
+                {ageLoading ? (
+                  <span className="rx-skel inline-block h-3 w-8" role="status" aria-label="Loading age" />
+                ) : (
+                  `${age} old`
+                )}
+              </span>
+              <Token24hChangeBadge changePct24h={priceChange24h} />
+            </div>
+          )}
+
+          <div className="rx-rp-card__foot">{reportButtons}</div>
+
+          <div className="rx-rp-card__chart">
+            <Token24hSparkline
+              changePct24h={priceChange24h}
+              seriesY={sparklineY}
+              isFetching={sparklinesFetching}
+              variant="area"
+            />
+          </div>
+        </article>
+        {modals}
+      </li>
+    );
+  }
+
   return (
     <>
       <div
@@ -571,47 +879,7 @@ export function TableRow({
 
         {/* AI reports */}
         <div className={clsx(SCREENER_ORDER.ai, "flex items-center gap-1.5 px-2 py-3")}>
-          {isGenerating && countdown !== null ? (
-            <span
-              role="status"
-              aria-live="polite"
-              aria-label={`Generating report, ${countdown} seconds left`}
-              className={clsx(
-                FULL_REPORT_BTN,
-                "pointer-events-none min-w-[100px] tabular-nums",
-              )}
-            >
-              <span className="rx-spin size-3 border-[1.5px]" aria-hidden />
-              {countdown}s
-            </span>
-          ) : (
-            <button
-              type="button"
-              className={FULL_REPORT_BTN}
-              onClick={!authenticated ? handleSignIn : onGenerateClick}
-              disabled={isGenerating || !ready || whatsNewLoading}
-              aria-label={`Full Report for ${displayName}`}
-              title="Full Report"
-            >
-              <ReportIcon />
-              Full Report
-            </button>
-          )}
-          <button
-            type="button"
-            className={WHATS_NEW_BTN}
-            onClick={!authenticated ? handleSignIn : onWhatsNewClick}
-            disabled={!ready || whatsNewLoading}
-            aria-label={`What's New for ${displayName}`}
-            title="What's New"
-          >
-            {whatsNewLoading ? (
-              <span className="rx-spin size-3 border-[1.5px]" aria-hidden />
-            ) : (
-              <NewsIcon />
-            )}
-            What&apos;s New
-          </button>
+          {reportButtons}
         </div>
 
         {/* Mcap */}
@@ -691,42 +959,7 @@ export function TableRow({
           )}
         </div>
       </div>
-      <PaywallModal
-        open={showPaywall}
-        onClose={() => setShowPaywall(false)}
-        context="rexscreener"
-        paymentMetadata={currentUserId ? { userId: currentUserId } : undefined}
-      />
-      <WhatsNewModal
-        open={whatsNewOpen}
-        onClose={() => {
-          setWhatsNewOpen(false);
-          setWhatsNewError(null);
-        }}
-        loading={whatsNewLoading}
-        error={whatsNewError}
-        result={whatsNewResult}
-        imageUrl={token?.logo}
-        symbol={token?.symbol}
-        trade={
-          token?.tokenAddress && token.symbol
-            ? {
-                symbol: token.symbol,
-                name: token.name,
-                logo: logoSrc ?? token.logo,
-                chain: resolveSwapChain({
-                  swapTokenAddress: token.tokenAddress,
-                  token,
-                }),
-                // Same page: chart this token, then open the panel's Exchange on it.
-                onTrade: () => {
-                  openChart();
-                  requestShellAction("exchange");
-                },
-              }
-            : null
-        }
-      />
+      {modals}
     </>
   );
 }

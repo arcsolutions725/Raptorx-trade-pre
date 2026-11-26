@@ -1,0 +1,402 @@
+/* Prediction-market detail page (all venues): market head, chart, trade ticket, order book, comments / activity.
+   Source: design/market.html + design/js/market.js, design/css/predictions.css ("market detail"),
+   design/css/components.css (.crumbs, .stat-strip, .ticket, .price-box, .legend, .panel-ctl),
+   design/css/pages.css ("Terminal layout for chart pages": flat, edge-to-edge sections split by 1px lines)
+   and design/css/pages.css .err (region notice). The Rex Pilot sidebar is styled separately (pilot.css).
+
+   Plain unlayered CSS, every rule scoped under one of three roots:
+     .rx-mk-top    shared market head (TradingHeader). Self-contained (its own container query), so it works
+                   inside any venue interface, with or without .rx-mk.
+     .rx-mk        venue trading-interface root (flex column, full height; container "mk" for the layout).
+     .rx-mk-state  page-level loading / error message (page.tsx shells), outside both roots.
+   React helpers for most pieces: RexMarketsReportData/shared/marketUi.tsx.
+
+   Structure (inside .rx-mk):
+     .rx-mk-top                         TradingHeader: crumbs + head
+       .mk-crumbs                       breadcrumbs (Rex Predictions › category › market); current page ellipsizes
+       .mk-head                         icon (.mk-head__icon) · .mk-head__main (h1.mk-head__title + venue badge,
+                                        dl.mk-stats) · .mk-head__tools (report button, share, Claw AI 5.0)
+         .mk-stats                      stat strip; dd.is-up / dd.is-down colour a value
+         .mk-gen                        report button states (.mk-gen--busy countdown, .mk-gen--done)
+         .mk-share / .mk-copied         share icon button + "Link copied" bubble
+     .mk-frame                          flex column (head + body). Below 760px of container width the whole frame
+                                        scrolls (head included); above it only .mk-scroll does.
+     .mk-scroll                         the scrolling body (everything under the head)
+       .mk-main                         chart + ticket. Side by side (ticket 340px) from 760px of container width,
+                                        filling the visible height; stacked below that.
+         .mk-chart                      chart section: .mk-chart__head (rx-eyebrow + rx-seg rx-seg--mono),
+                                        .mk-chart__plot (recharts; flat grid, mono axis labels), .mk-chart__empty
+           .mk-legend                   series toggles: button.rx-check(.is-on) with style="--c:<series colour>"
+                                        > .rx-check__box + .mk-legend__name + .mk-legend__val
+         .mk-side                       ticket column (scrolls on its own when side by side)
+           .mk-ticket                   trade ticket: .mk-ticket__head (36px thumb, title, sub),
+                                        .mk-ticket__row (.mk-side-seg Buy/Sell seg + .mk-select outcome picker),
+                                        .mk-yn (rx-yes / rx-no --l, .is-selected), .mk-price (rx-well price row),
+                                        .mk-amount (rx-field + rx-input + rx-pct chips), .mk-kyc (verify banner),
+                                        .mk-balance, .mk-win (to win / you'll receive), .mk-blocked (region notice),
+                                        .mk-ticket__cta (primary button)
+       .mk-book                         order book section. --stack: phones/tablets (under the ticket, <1024px);
+                                        --side: desktop (beside comments, >=1024px)
+         .mk-sec-head                   small section head (rx-eyebrow)
+         .mk-outcomes                   outcome tabs above the book (multi-outcome events)
+         .mk-ob                         book: .mk-ob__buy (Buy Yes / Buy No), .mk-ob__toggle, .mk-ob__cols,
+                                        .mk-ob__group(--ask/--bid) > .mk-ob__label + .mk-ob__row, .mk-ob__spread, .mk-ob__msg
+       .mk-lower                        comments / activity (.mk-feed) + desktop order book; side by side from 960px
+         .mk-feed                       .rx-tabs.mk-tabs (rx-tab + rx-count) and .mk-feed__body (scrolls, max 680px)
+           .mk-post / .mk-cmt           comment thread (.mk-who, .mk-time, .mk-text, .mk-acts)
+           .mk-act                      activity row (.mk-act__line, .is-buy / .is-sell, .is-yes / .is-no)
+         .mk-msg                        empty / loading text in a section
+     .mk-modal                          phone Buy / Sell sheet (scrim + panel) and the KYC dialog (.mk-dialog)
+*/
+
+/* ===================== shared market head (.rx-mk-top) ===================== */
+.rx-mk-top{container:mkhead/inline-size;flex-shrink:0;width:100%;color:var(--rx-text);font-family:var(--rx-ui);border-bottom:1px solid var(--rx-line)}
+
+/* breadcrumbs: one line, the market name gives way */
+.rx-mk-top .mk-crumbs{display:flex;align-items:center;gap:8px;min-width:0;padding:10px 20px 0;font-size:13px;line-height:1.4;color:var(--rx-text-3)}
+.rx-mk-top .mk-crumbs > *{flex:none}
+.rx-mk-top .mk-crumbs a{color:var(--rx-text-2);text-decoration:none;border-radius:6px;padding:7px 4px;margin:-7px -4px}
+.rx-mk-top .mk-crumbs a:hover{color:var(--rx-gold-hi)}
+.rx-mk-top .mk-crumbs a:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:0}
+.rx-mk-top .mk-crumbs svg{opacity:.5}
+.rx-mk-top .mk-crumbs [aria-current]{flex:0 1 auto;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--rx-text)}
+.rx-mk-top .mk-crumbs__cat{max-width:40%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:0 1 auto !important}
+
+/* head: icon · title + stats · tools */
+.rx-mk-top .mk-head{display:flex;flex-wrap:wrap;align-items:flex-start;gap:12px 16px;padding:6px 20px 12px}
+.rx-mk-top .mk-head__icon{flex:none}
+.rx-mk-top .mk-head__main{display:flex;flex-direction:column;gap:10px;min-width:0;flex:1 1 0}
+.rx-mk-top .mk-head__title{margin:0;display:flex;align-items:center;flex-wrap:wrap;gap:6px 10px;min-width:0;
+  font-family:var(--rx-display);font-stretch:112%;font-weight:700;font-size:24px;line-height:1.15;letter-spacing:0;color:var(--rx-text)}
+.rx-mk-top .mk-head__title > .t{min-width:0;overflow-wrap:anywhere}
+.rx-mk-top .mk-head__tools{margin-left:auto;align-self:center;display:flex;align-items:center;gap:8px}
+
+/* stat strip */
+.rx-mk-top .mk-stats{display:flex;flex-wrap:wrap;gap:6px 0;margin:0}
+.rx-mk-top .mk-stats > div{display:flex;flex-direction:column;gap:3px;min-width:0;padding:0 20px;border-left:1px solid var(--rx-line)}
+.rx-mk-top .mk-stats > div:first-child{padding-left:0;border-left:0}
+.rx-mk-top .mk-stats dt{font-family:var(--rx-mono);font-size:11px;font-weight:500;letter-spacing:.06em;text-transform:uppercase;color:var(--rx-text-3);white-space:nowrap}
+.rx-mk-top .mk-stats dd{margin:0;font-family:var(--rx-mono);font-variant-numeric:tabular-nums;font-size:15px;font-weight:600;line-height:1.3;color:var(--rx-text);white-space:nowrap}
+.rx-mk-top .mk-stats dd.is-up{color:var(--rx-up)}
+.rx-mk-top .mk-stats dd.is-down{color:var(--rx-down)}
+
+/* tools: report button + its busy / done states, share, Claw AI 5.0 */
+.rx-mk-top .mk-gen svg{color:var(--rx-gold)}
+.rx-mk-top .mk-gen--busy,.rx-mk-top .mk-gen--done{cursor:default}
+.rx-mk-top .mk-gen--busy .rx-spin{width:12px;height:12px;color:var(--rx-gold)}
+.rx-mk-top .mk-gen--busy .rx-num{color:var(--rx-gold-hi)}
+.rx-mk-top .mk-gen--done{border-color:var(--rx-up-line);background:linear-gradient(180deg,#0F241B,#0A1711);color:var(--rx-up)}
+.rx-mk-top .mk-gen--done svg{color:var(--rx-up)}
+.rx-mk-top .mk-gen--done:hover{border-color:var(--rx-up-line)}
+.rx-mk-top .mk-share-wrap{position:relative;display:inline-flex}
+.rx-mk-top .mk-share{width:32px;height:32px;border-radius:9px;flex-shrink:0}
+.rx-mk-top .mk-share:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:2px}
+.rx-mk-top .mk-copied{position:absolute;right:0;bottom:calc(100% + 8px);z-index:30;white-space:nowrap;padding:6px 10px;border-radius:9px;
+  background:#1D1C1B;border:1px solid var(--rx-line-strong);color:var(--rx-text);font-size:12px;font-weight:500;box-shadow:var(--rx-depth-3);pointer-events:none}
+.rx-mk-top .mk-copied svg{display:inline-block;vertical-align:-2px;margin-right:6px;color:var(--rx-up)}
+
+/* not enough room beside the title: the tools take their own row */
+@container mkhead (max-width:1080px){
+  .rx-mk-top .mk-head__tools{width:100%;margin-left:0;flex-wrap:wrap}
+}
+/* phones: smaller title, stats in a clean 3-column grid, report button on a full row, share + Claw below */
+@container mkhead (max-width:600px){
+  .rx-mk-top .mk-crumbs{padding:12px 14px 0}
+  .rx-mk-top .mk-head{padding:10px 14px 14px}
+  .rx-mk-top .mk-head__main{flex-basis:100%}
+  .rx-mk-top .mk-head__title{font-size:19px}
+  .rx-mk-top .mk-stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px 0}
+  .rx-mk-top .mk-stats > div{padding:0 10px;border-left:1px solid var(--rx-line)}
+  .rx-mk-top .mk-stats > div:nth-child(3n+1){padding-left:0;border-left:0}
+  .rx-mk-top .mk-stats dd,.rx-mk-top .mk-stats dt{overflow:hidden;text-overflow:ellipsis}
+  .rx-mk-top .mk-stats dd{font-size:13px}
+  .rx-mk-top .mk-head__tools{display:grid;grid-template-columns:auto minmax(0,1fr);gap:8px;width:100%}
+  .rx-mk-top .mk-head__tools > .mk-gen{grid-column:1 / -1;justify-content:center;width:100%;height:40px}
+  .rx-mk-top .mk-head__tools .rx-btn--claw{justify-content:center;height:40px}
+  .rx-mk-top .mk-share{width:40px;height:40px;border-radius:11px}
+}
+@container mkhead (max-width:360px){
+  .rx-mk-top .mk-stats{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .rx-mk-top .mk-stats > div:nth-child(3n+1){padding-left:10px;border-left:1px solid var(--rx-line)}
+  .rx-mk-top .mk-stats > div:nth-child(2n+1){padding-left:0;border-left:0}
+}
+
+/* ===================== interface root (.rx-mk) ===================== */
+.rx-mk{container:mk/inline-size;position:relative;display:flex;flex-direction:column;width:100%;height:100%;min-height:0;overflow:hidden;
+  color:var(--rx-text);font-family:var(--rx-ui);background:transparent}
+.rx-mk .mk-frame{display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden}
+.rx-mk .mk-scroll,.rx-mk .mk-frame{overflow-x:hidden;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--rx-line-strong) transparent}
+.rx-mk .mk-scroll{flex:1 1 0;min-height:0;overflow-y:auto}
+/* narrow (phones, or desktop with the Rex Pilot sidebar taking most of the width): the market head scrolls away with the page */
+@container mk (max-width:759px){
+  .rx-mk .mk-frame{overflow-y:auto}
+  .rx-mk .mk-scroll{flex:none;min-height:auto;overflow:visible}
+}
+.rx-mk .mk-frame::-webkit-scrollbar,.rx-mk .mk-scroll::-webkit-scrollbar,.rx-mk .mk-side::-webkit-scrollbar,.rx-mk .mk-feed__body::-webkit-scrollbar,.rx-mk .mk-ob__body::-webkit-scrollbar{width:8px;height:8px}
+.rx-mk .mk-frame::-webkit-scrollbar-thumb,.rx-mk .mk-scroll::-webkit-scrollbar-thumb,.rx-mk .mk-side::-webkit-scrollbar-thumb,.rx-mk .mk-feed__body::-webkit-scrollbar-thumb,.rx-mk .mk-ob__body::-webkit-scrollbar-thumb{background:var(--rx-line-strong);border-radius:8px}
+.rx-mk .mk-frame::-webkit-scrollbar-track,.rx-mk .mk-scroll::-webkit-scrollbar-track,.rx-mk .mk-side::-webkit-scrollbar-track,.rx-mk .mk-feed__body::-webkit-scrollbar-track,.rx-mk .mk-ob__body::-webkit-scrollbar-track{background:transparent}
+.rx-mk .mk-msg{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;padding:28px 12px;text-align:center;font-size:13px;color:var(--rx-text-3)}
+.rx-mk .mk-msg b{font-weight:600;font-size:14px;color:var(--rx-text-2)}
+.rx-mk .mk-msg--error{color:var(--rx-down)}
+
+/* ---------- chart + ticket ---------- */
+.rx-mk .mk-main{display:flex;flex-direction:column;min-width:0}
+.rx-mk .mk-chart{display:flex;flex-direction:column;gap:12px;min-width:0;padding:14px 14px 12px}
+.rx-mk .mk-chart__head{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+.rx-mk .mk-chart__plot{position:relative;width:100%;height:clamp(260px,44vh,420px);min-height:0}
+.rx-mk .mk-chart__empty{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;font-size:13px;color:var(--rx-text-3)}
+.rx-mk .mk-side{min-width:0;border-top:1px solid var(--rx-line);scrollbar-width:thin;scrollbar-color:var(--rx-line-strong) transparent}
+
+@container mk (min-width:760px){
+  .rx-mk .mk-main{flex-direction:row;align-items:stretch;height:100%;min-height:460px}
+  .rx-mk .mk-chart{flex:1 1 auto;min-height:0;padding:14px 20px 12px;overflow:hidden}
+  .rx-mk .mk-chart__plot{flex:1 1 0;height:auto;min-height:200px}
+  .rx-mk .mk-side{flex:0 0 340px;min-height:0;overflow-y:auto;border-top:0;border-left:1px solid var(--rx-line)}
+}
+@container mk (min-width:1600px){
+  .rx-mk .mk-side{flex-basis:360px}
+}
+
+/* chart chrome (recharts): flat horizontal grid, mono axis labels, no axis lines */
+.rx-mk .mk-chart svg text{font-family:var(--rx-mono);font-variant-numeric:tabular-nums}
+.rx-mk .mk-chart .recharts-cartesian-grid-horizontal line{stroke:var(--rx-chart-grid);stroke-dasharray:0}
+.rx-mk .mk-chart .recharts-cartesian-grid-vertical{display:none}
+.rx-mk .mk-chart .recharts-cartesian-axis-line,.rx-mk .mk-chart .recharts-cartesian-axis-tick-line{display:none}
+.rx-mk .mk-chart .recharts-cartesian-axis-tick-value{font-size:var(--rx-chart-fs);fill:var(--rx-chart-ink)}
+.rx-mk .mk-chart .recharts-surface{overflow:visible}
+.rx-mk .mk-chart .recharts-wrapper:focus,.rx-mk .mk-chart .recharts-surface:focus{outline:none}
+.rx-mk .mk-tip{min-width:200px;max-width:280px;padding:10px 12px;border-radius:12px;background:#1D1C1B;border:1px solid var(--rx-line-strong);box-shadow:var(--rx-depth-3);color:var(--rx-text)}
+.rx-mk .mk-tip__time{margin-bottom:6px;padding-bottom:6px;border-bottom:1px solid var(--rx-line);font-family:var(--rx-mono);font-size:11px;color:var(--rx-text-3)}
+.rx-mk .mk-tip__row{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:3px 0;font-size:12px}
+.rx-mk .mk-tip__name{display:flex;align-items:center;gap:7px;min-width:0;color:var(--rx-text-2)}
+.rx-mk .mk-tip__name i{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.rx-mk .mk-tip__name span{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rx-mk .mk-tip__val{font-family:var(--rx-mono);font-weight:600;font-variant-numeric:tabular-nums}
+.rx-mk .mk-tip__none{font-size:11px;font-style:italic;color:var(--rx-text-3)}
+@media (prefers-reduced-motion:reduce){
+  .rx-mk .mk-chart circle:has(> animate){display:none}
+}
+
+/* legend: coloured checks */
+.rx-mk .mk-legend{display:flex;flex-wrap:wrap;gap:4px 16px;min-width:0}
+.rx-mk .mk-legend .rx-check{max-width:100%;min-height:32px;padding:4px 0;border:0;background:none;font-family:var(--rx-ui);font-size:13px;color:var(--rx-text);cursor:pointer;text-align:left}
+.rx-mk .mk-legend .rx-check:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:2px;border-radius:6px}
+.rx-mk .mk-legend .rx-check__box{border-color:var(--c);color:transparent}
+.rx-mk .mk-legend .rx-check.is-on .rx-check__box{background:var(--c);border-color:var(--c);color:#120E0A}
+.rx-mk .mk-legend__name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rx-mk .mk-legend__val{flex:none;font-size:12px;color:var(--rx-text-2)}
+.rx-mk .mk-legend .rx-check:not(.is-on) .mk-legend__name{color:var(--rx-text-3)}
+
+/* ---------- trade ticket ---------- */
+.rx-mk .mk-ticket{display:flex;flex-direction:column;gap:14px;padding:18px 20px 20px;min-width:0;color:var(--rx-text)}
+.rx-mk .mk-ticket__head{display:flex;align-items:center;gap:12px;min-width:0}
+.rx-mk .mk-ticket__head > span:first-child{border-radius:10px}
+.rx-mk .mk-ticket__title{display:flex;flex-direction:column;gap:1px;min-width:0}
+.rx-mk .mk-ticket__title b{font-size:14px;font-weight:600;line-height:1.35;color:var(--rx-text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rx-mk .mk-ticket__row{display:flex;align-items:center;gap:8px;min-width:0}
+.rx-mk .mk-side-seg{flex:none}
+.rx-mk .mk-side-seg .rx-seg__item{height:30px;padding:0 13px}
+.rx-mk .mk-side-seg .rx-seg__item.is-buy{color:var(--rx-up)}
+.rx-mk .mk-side-seg .rx-seg__item.is-sell{color:var(--rx-down)}
+
+/* outcome picker (components/ui/Select): looks like the prototype's select */
+.rx-mk .mk-select{flex:1 1 auto;min-width:0}
+.rx-mk .mk-select > button{height:38px;padding:0 10px 0 12px;border-radius:10px;border:1px solid var(--rx-line-strong);background:rgba(0,0,0,.4);
+  color:var(--rx-text);font-family:var(--rx-ui);transition:border-color .12s}
+.rx-mk .mk-select > button:hover{border-color:#4A4846}
+.rx-mk .mk-select > button[aria-expanded="true"],.rx-mk .mk-select > button:focus-visible{border-color:var(--rx-gold);outline:none;box-shadow:0 0 0 3px rgba(255,184,0,.14)}
+.rx-mk .mk-select > button > span{font-size:13px}
+.rx-mk .mk-select > button > svg{color:var(--rx-text-3);opacity:1}
+.rx-mk .mk-select > div{right:0;left:auto;min-width:220px;border-radius:14px;border:1px solid var(--rx-line-strong);
+  background:linear-gradient(180deg,rgba(var(--rx-pop-rgb-a),.98),rgba(var(--rx-pop-rgb-b),.98));box-shadow:var(--rx-depth-3)}
+.rx-mk .mk-select > div > div:first-child{background:transparent;border-bottom-color:var(--rx-line)}
+.rx-mk .mk-select > div > div:first-child > div{height:36px;border-radius:10px;background:rgba(0,0,0,.4);border-color:var(--rx-line-strong)}
+.rx-mk .mk-select [role="listbox"]{padding:6px}
+.rx-mk .mk-select [role="option"]{border-radius:9px;font-size:13px;color:var(--rx-text-2)}
+.rx-mk .mk-select [role="option"]:hover{background:var(--rx-surface-3);color:var(--rx-text)}
+.rx-mk .mk-select [role="option"][aria-selected="true"]{color:var(--rx-gold-hi)}
+
+.rx-mk .mk-yn{display:flex;gap:8px}
+.rx-mk .mk-yn .rx-yes,.rx-mk .mk-yn .rx-no{min-width:0;transition:filter .12s,background .12s}
+.rx-mk .mk-yn .rx-yes:hover:not(.is-selected){background:#103525}
+.rx-mk .mk-yn .rx-no:hover:not(.is-selected){background:#3A1518}
+.rx-mk .mk-yn .rx-num{font-weight:600}
+.rx-mk .mk-yn button:focus-visible,.rx-mk .mk-ob__buy button:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:2px}
+.rx-mk .mk-price{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:12px 14px}
+.rx-mk .mk-price .rx-num{font-weight:600;font-size:15px;color:var(--rx-text)}
+
+.rx-mk .mk-amount{min-width:0}
+.rx-mk .mk-amount__top{display:flex;align-items:baseline;justify-content:space-between;gap:10px;min-width:0}
+.rx-mk .mk-amount__top .rx-help{min-width:0;text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rx-mk .mk-amount__top .rx-help b{font-family:var(--rx-mono);font-weight:500;color:var(--rx-text-2)}
+.rx-mk .mk-amount .rx-input{gap:8px;padding:0 6px 0 14px}
+.rx-mk .mk-amount__pre{flex:none;color:var(--rx-text-3)}
+.rx-mk .mk-amount input{font-family:var(--rx-mono);font-size:14px}
+.rx-mk .mk-amount input:disabled{opacity:.6}
+.rx-mk .mk-amount .rx-pct{flex:none}
+.rx-mk .mk-amount .rx-pct button{height:28px;padding:0 7px}
+.rx-mk .mk-amount .rx-pct button:disabled{opacity:.4;cursor:not-allowed}
+.rx-mk .mk-amount .rx-pct button:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:1px}
+
+.rx-mk .mk-kyc{display:flex;align-items:center;gap:12px;padding:12px 14px;border-radius:12px;background:var(--rx-gold-tint);border:1px solid var(--rx-gold-line);color:#FFE2A0;font-size:13px;line-height:1.45}
+.rx-mk .mk-kyc p{margin:0;flex:1 1 auto;min-width:0}
+.rx-mk .mk-kyc .rx-btn{flex-shrink:0}
+.rx-mk .mk-balance{margin:-4px 0 0;font-size:12px;color:var(--rx-text-3)}
+.rx-mk .mk-balance b{font-family:var(--rx-mono);font-weight:500;color:var(--rx-text-2)}
+.rx-mk .mk-win{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:12px 14px}
+.rx-mk .mk-win__label{display:flex;flex-direction:column;gap:2px;min-width:0;font-size:13px;color:var(--rx-text-2)}
+.rx-mk .mk-win__label span{font-size:12px;color:var(--rx-text-3)}
+.rx-mk .mk-win__value{font-family:var(--rx-mono);font-variant-numeric:tabular-nums;font-size:22px;font-weight:600;color:var(--rx-up);white-space:nowrap}
+.rx-mk .mk-ticket__cta{margin-top:2px}
+
+/* region-blocked notice: design/blocked.html (icon, eyebrow, heading, short text) in a compact inline form */
+.rx-mk .mk-blocked{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;border-radius:14px;background:linear-gradient(180deg,rgba(34,26,8,.7),rgba(15,13,10,.7));border:1px solid var(--rx-gold-line)}
+.rx-mk .mk-blocked__ico{width:36px;height:36px;border-radius:11px;flex:none;display:flex;align-items:center;justify-content:center;background:var(--rx-gold-tint);border:1px solid var(--rx-gold-line);color:var(--rx-gold-hi)}
+.rx-mk .mk-blocked__txt{display:flex;flex-direction:column;gap:3px;min-width:0}
+.rx-mk .mk-blocked__txt b{font-family:var(--rx-display);font-stretch:112%;font-weight:700;font-size:15px;line-height:1.3;color:var(--rx-text)}
+.rx-mk .mk-blocked__txt p{margin:0;font-size:13px;line-height:1.5;color:var(--rx-text-2)}
+
+/* ---------- order book ---------- */
+.rx-mk .mk-book{flex-direction:column;min-width:0;min-height:0;border-top:1px solid var(--rx-line)}
+.rx-mk .mk-book--stack{display:flex}
+.rx-mk .mk-book--side{display:none}
+@media (min-width:1024px){
+  .rx-mk .mk-book--stack{display:none}
+  .rx-mk .mk-book--side{display:flex}
+}
+.rx-mk .mk-sec-head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:44px;padding:0 16px;border-bottom:1px solid var(--rx-line)}
+.rx-mk .mk-outcomes{display:flex;gap:2px;padding:0 10px;overflow-x:auto;scrollbar-width:none;border-bottom:1px solid var(--rx-line)}
+.rx-mk .mk-outcomes::-webkit-scrollbar{display:none}
+.rx-mk .mk-outcomes .rx-tab{flex:none;height:38px;padding:0 10px;font-size:13px;white-space:nowrap}
+.rx-mk .mk-outcomes .rx-tab:focus-visible,.rx-mk .mk-tabs .rx-tab:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:-4px;border-radius:8px}
+
+.rx-mk .mk-ob{display:flex;flex-direction:column;width:100%;min-height:0}
+.rx-mk .mk-ob--full{flex:1 1 auto}
+.rx-mk .mk-ob__top{flex-shrink:0;display:flex;flex-direction:column;gap:10px;padding:12px 16px;border-bottom:1px solid var(--rx-line)}
+.rx-mk .mk-ob__top:empty{display:none}
+.rx-mk .mk-book--stack .mk-ob__top{border-bottom:0;padding-bottom:0}
+.rx-mk .mk-book__fill{overflow:hidden}
+.rx-mk .mk-book__fill.is-open{min-height:350px}
+.rx-mk .mk-ob__buy{display:none;gap:8px}
+@media (min-width:1024px){.rx-mk .mk-ob__buy{display:flex}}
+.rx-mk .mk-ob__buy .rx-yes,.rx-mk .mk-ob__buy .rx-no{flex:1 1 0;min-width:0;height:36px;font-size:13px;border-radius:10px}
+.rx-mk .mk-ob__buy .rx-num{font-weight:600}
+.rx-mk .mk-ob__toggle{align-self:center}
+.rx-mk .mk-ob__body{flex:1 1 auto;min-height:0;overflow-y:auto;padding:8px 0 12px;scrollbar-width:thin;scrollbar-color:var(--rx-line-strong) transparent}
+.rx-mk .mk-ob__cols,.rx-mk .mk-ob__row{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr) minmax(0,1.2fr);gap:8px;padding:0 16px}
+.rx-mk .mk-ob__cols > :not(:first-child),.rx-mk .mk-ob__row > :not(:first-child){text-align:right}
+.rx-mk .mk-ob__cols{padding-top:4px;padding-bottom:8px;font-family:var(--rx-mono);font-size:10.5px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--rx-text-3)}
+.rx-mk .mk-ob__group{display:flex;flex-direction:column;gap:1px}
+.rx-mk .mk-ob__label{padding:6px 16px 4px;font-size:12px;font-weight:600}
+.rx-mk .mk-ob__group--ask .mk-ob__label{color:var(--rx-down)}
+.rx-mk .mk-ob__group--bid .mk-ob__label{color:var(--rx-up)}
+.rx-mk .mk-ob__row{align-items:center;min-height:24px;font-family:var(--rx-mono);font-variant-numeric:tabular-nums;font-size:12px;color:var(--rx-text-2)}
+.rx-mk .mk-ob__row > :first-child{font-weight:600}
+.rx-mk .mk-ob__group--ask .mk-ob__row{background:rgba(255,122,122,.06)}
+.rx-mk .mk-ob__group--ask .mk-ob__row:hover{background:rgba(255,122,122,.12)}
+.rx-mk .mk-ob__group--ask .mk-ob__row > :first-child{color:var(--rx-down)}
+.rx-mk .mk-ob__group--bid .mk-ob__row{background:rgba(69,227,163,.05)}
+.rx-mk .mk-ob__group--bid .mk-ob__row:hover{background:rgba(69,227,163,.11)}
+.rx-mk .mk-ob__group--bid .mk-ob__row > :first-child{color:var(--rx-up)}
+.rx-mk .mk-ob__row > :last-child{color:var(--rx-text-3)}
+.rx-mk .mk-ob__spread{display:flex;align-items:center;justify-content:center;gap:8px;margin:10px 0;padding:7px 16px;border-top:1px solid var(--rx-line);border-bottom:1px solid var(--rx-line);font-size:12px;color:var(--rx-text-3)}
+.rx-mk .mk-ob__spread b{font-family:var(--rx-mono);font-weight:600;color:var(--rx-gold-hi)}
+.rx-mk .mk-ob__spread:empty{margin:10px 0;padding:0;border-bottom:0}
+.rx-mk .mk-ob__msg{padding:4px 16px;font-size:12px;color:var(--rx-text-3)}
+.rx-mk .mk-ob__msg--error{color:var(--rx-down)}
+
+/* ---------- comments / activity + desktop order book ---------- */
+.rx-mk .mk-lower{display:flex;flex-direction:column;min-width:0;border-top:1px solid var(--rx-line)}
+.rx-mk .mk-feed{display:flex;flex-direction:column;flex:1 1 auto;min-width:0;min-height:0}
+.rx-mk .mk-tabs{flex-shrink:0;padding:0 16px;overflow-x:auto;scrollbar-width:none}
+.rx-mk .mk-tabs::-webkit-scrollbar{display:none}
+.rx-mk .mk-tabs .rx-tab{flex:none;height:46px}
+.rx-mk .mk-feed__body{max-height:680px;overflow-y:auto;padding:4px 16px 16px;scrollbar-width:thin;scrollbar-color:var(--rx-line-strong) transparent}
+.rx-mk .mk-lower .mk-book--side{border-top:1px solid var(--rx-line)}
+@container mk (min-width:960px){
+  .rx-mk .mk-lower{flex-direction:row;align-items:stretch;max-height:750px}
+  .rx-mk .mk-tabs{padding:0 20px}
+  .rx-mk .mk-feed__body{max-height:none;flex:1 1 auto;min-height:0;padding:4px 20px 20px}
+  .rx-mk .mk-lower .mk-book--side{flex:0 0 400px;border-top:0;border-left:1px solid var(--rx-line)}
+}
+@container mk (max-width:959px){
+  .rx-mk .mk-lower .mk-book--side .mk-ob__body{max-height:520px}
+}
+
+/* comment thread */
+.rx-mk .mk-posts{display:flex;flex-direction:column}
+.rx-mk .mk-post{padding:16px 0;border-bottom:1px solid var(--rx-line)}
+.rx-mk .mk-post:last-child{border-bottom:0}
+.rx-mk .mk-cmt-row{display:flex;gap:12px;min-width:0}
+.rx-mk .mk-cmt-main{flex:1 1 auto;min-width:0}
+.rx-mk .mk-meta{display:flex;align-items:baseline;flex-wrap:wrap;gap:4px 8px;margin-bottom:4px;min-width:0}
+.rx-mk .mk-who{font-size:14px;font-weight:600;color:var(--rx-text)}
+.rx-mk .mk-time{font-family:var(--rx-mono);font-size:11px;color:var(--rx-text-3)}
+.rx-mk .mk-topic{min-width:0;font-size:12px;color:var(--rx-text-3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.rx-mk .mk-text{margin:0 0 8px;font-size:14px;line-height:1.55;color:var(--rx-text-2);white-space:pre-wrap;overflow-wrap:anywhere}
+.rx-mk .mk-media{margin:0 0 8px}
+.rx-mk .mk-media img{max-width:100%;border-radius:10px;border:1px solid var(--rx-line)}
+.rx-mk .mk-acts{display:flex;align-items:center;gap:4px;margin-left:-8px}
+.rx-mk .mk-acts button{display:inline-flex;align-items:center;gap:5px;height:30px;padding:0 8px;border:0;border-radius:8px;background:transparent;color:var(--rx-text-3);font-family:var(--rx-ui);font-size:12px;font-weight:500;cursor:pointer}
+.rx-mk .mk-acts button:hover{color:var(--rx-text);background:var(--rx-surface-2)}
+.rx-mk .mk-acts button:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:0}
+.rx-mk .mk-acts button[aria-pressed="true"]{color:var(--rx-down)}
+.rx-mk .mk-acts .rx-num{font-size:12px}
+.rx-mk .mk-replies{display:flex;flex-direction:column;gap:14px;margin-top:12px;padding-left:14px;border-left:1px solid var(--rx-line)}
+.rx-mk .mk-post > .mk-replies{margin-left:52px}
+
+/* activity rows */
+.rx-mk .mk-acts-list{display:flex;flex-direction:column}
+.rx-mk .mk-act{display:flex;align-items:center;gap:12px;padding:12px 8px;margin:0 -8px;border-radius:10px;border-bottom:1px solid var(--rx-line)}
+.rx-mk .mk-act:last-child{border-bottom:0}
+.rx-mk .mk-act:hover{background:rgba(var(--rx-hair),.025)}
+.rx-mk .mk-act__line{flex:1 1 auto;min-width:0;font-size:13px;line-height:1.55;color:var(--rx-text-2)}
+.rx-mk .mk-act__line b{font-weight:600;color:var(--rx-text)}
+.rx-mk .mk-act__line .rx-num{color:var(--rx-text)}
+.rx-mk .mk-act__line .is-buy,.rx-mk .mk-act__line .is-yes{color:var(--rx-up)}
+.rx-mk .mk-act__line .is-sell,.rx-mk .mk-act__line .is-no{color:var(--rx-down)}
+.rx-mk .mk-act__line .is-yes,.rx-mk .mk-act__line .is-no{font-weight:600}
+.rx-mk .mk-act__tk{color:var(--rx-text-3);overflow-wrap:anywhere}
+.rx-mk .mk-act__time{font-family:var(--rx-mono);font-size:11px;color:var(--rx-text-3);white-space:nowrap}
+
+/* ---------- phone Buy / Sell sheet + KYC dialog ---------- */
+.rx-mk .mk-modal{position:fixed;inset:0;z-index:100;display:flex;align-items:flex-end;justify-content:center}
+.rx-mk .mk-modal__scrim{position:absolute;inset:0;background:rgba(3,3,3,.66);backdrop-filter:blur(6px);-webkit-backdrop-filter:blur(6px)}
+.rx-mk .mk-modal__panel{position:relative;width:100%;max-height:88vh;overflow-y:auto;border-radius:24px 24px 0 0;
+  background:linear-gradient(180deg,#1F1E1D,#130F0C);border:1px solid var(--rx-line-strong);border-bottom:0;box-shadow:var(--rx-depth-3);
+  padding-top:14px;padding-bottom:env(safe-area-inset-bottom);animation:mk-sheet .24s var(--rx-ease)}
+.rx-mk .mk-modal__panel::before{content:"";position:absolute;top:8px;left:50%;width:40px;height:4px;margin-left:-20px;border-radius:2px;background:var(--rx-line-strong)}
+.rx-mk .mk-modal__close{position:absolute;top:14px;right:14px;z-index:2;width:40px;height:40px}
+.rx-mk .mk-modal .mk-ticket__head{padding-right:48px}
+@media (min-width:560px){
+  .rx-mk .mk-modal{align-items:center;padding:24px}
+  .rx-mk .mk-modal__panel{width:min(400px,100%);border-radius:var(--rx-r-xl);border-bottom:1px solid var(--rx-line-strong);padding-top:4px}
+  .rx-mk .mk-modal__panel::before{display:none}
+}
+@media (min-width:1024px){.rx-mk .mk-modal--sheet{display:none}}
+@keyframes mk-sheet{from{transform:translateY(40px);opacity:.4}}
+.rx-mk .mk-dialog{position:relative;width:min(440px,100%);margin:auto;padding:24px 22px 20px;display:flex;flex-direction:column;gap:12px;border-radius:var(--rx-r-xl);
+  background:linear-gradient(180deg,#1F1E1D,#130F0C);border:1px solid var(--rx-line-strong);box-shadow:var(--rx-depth-3)}
+.rx-mk .mk-dialog h2{margin:0;font-family:var(--rx-display);font-stretch:112%;font-weight:700;font-size:20px;line-height:1.25;color:var(--rx-text)}
+.rx-mk .mk-dialog p{margin:0;font-size:14px;line-height:1.55;color:var(--rx-text-2)}
+.rx-mk .mk-dialog__acts{display:flex;gap:10px;margin-top:6px}
+.rx-mk .mk-dialog__acts .rx-btn{flex:1 1 0}
+.rx-mk .mk-modal--center{align-items:center;padding:16px}
+@media (prefers-reduced-motion:reduce){.rx-mk .mk-modal__panel{animation:none}}
+
+/* ---------- phones: tighter gutters ---------- */
+@container mk (max-width:600px){
+  .rx-mk .mk-ticket{padding:16px 14px 18px}
+  .rx-mk .mk-chart{padding:14px 14px 12px}
+  .rx-mk .mk-tabs{padding:0 10px}
+  .rx-mk .mk-feed__body{padding:4px 14px 16px}
+  .rx-mk .mk-post > .mk-replies{margin-left:0}
+  .rx-mk .mk-yn .rx-yes,.rx-mk .mk-yn .rx-no{height:48px}
+}
+
+/* ===================== page-level loading / error (.rx-mk-state) ===================== */
+.rx-mk-state{flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:10px;padding:48px 16px;text-align:center;
+  font-family:var(--rx-ui);font-size:14px;color:var(--rx-text-2)}
+.rx-mk-state .rx-spin{color:var(--rx-gold)}
+.rx-mk-state--error{flex-direction:column;gap:12px}
+.rx-mk-state--error b{font-family:var(--rx-display);font-stretch:112%;font-weight:700;font-size:18px;color:var(--rx-text)}

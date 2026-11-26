@@ -348,7 +348,6 @@
 .rx-claw .panel__title b { font-size: 14px; font-weight: 600; color: var(--rx-text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .rx-claw .panel__title span { font-size: 11px; color: var(--rx-text-3); }
 .rx-claw .panel__body { position: relative; flex: 1 1 auto; min-height: 0; overflow: hidden; }
-.rx-claw .panel__body > .bg-black, .rx-claw .panel__body > div > .bg-black { background-color: transparent; }
 .rx-claw .panel-ctl { width: 32px; height: 32px; border-radius: 9px; flex-shrink: 0; }
 
 /* ---------- modals (rename / delete chat) ---------- */

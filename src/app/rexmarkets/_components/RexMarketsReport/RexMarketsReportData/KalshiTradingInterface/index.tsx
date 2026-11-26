@@ -2,8 +2,14 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useMarketDetails } from "@/hooks/useMarketDetails";
-import { Select, SelectOption } from "@/components/ui/Select";
 import TradingHeader from "../PolymarketTradingInterface/components/Header/TradingHeader";
+import {
+  FeedTabs,
+  MarketPageLoading,
+  MarketPageMessage,
+  OutcomeTabs,
+  RangeSeg,
+} from "../shared/marketUi";
 import PriceChart from "./components/Chart/PriceChart";
 import KalshiOrderBook from "./components/OrderBook/OrderBook";
 import KalshiComments from "./components/Comments/Comments";
@@ -28,6 +34,11 @@ type KalshiTradingInterfaceProps = {
   onReportGenerated?: (report: any) => void;
   userId?: string | null;
   sessionSavedReportId?: string | null;
+  /** Claw AI 5.0 button in the market head: opens / closes the Rex Pilot sidebar */
+  onPilotToggle?: () => void;
+  pilotOpen?: boolean;
+  /** id of the Rex Pilot sidebar element (aria-controls) */
+  pilotControlsId?: string;
 };
 
 export default function KalshiTradingInterface({
@@ -39,6 +50,9 @@ export default function KalshiTradingInterface({
   onReportGenerated,
   userId,
   sessionSavedReportId,
+  onPilotToggle,
+  pilotOpen,
+  pilotControlsId,
 }: KalshiTradingInterfaceProps) {
   const { marketDetails, isLoading: isLoadingDetails } = useMarketDetails(
     eventTicker || null,
@@ -293,277 +307,190 @@ export default function KalshiTradingInterface({
     return commentsData.posts.length;
   }, [commentsData]);
 
+  const ticketMarkets = marketsForOrderBook.map((m) => ({
+    clobTokenId: null,
+    clobNoTokenId: null,
+    marketTitle: m.marketTitle,
+    ticker: m.ticker,
+    conditionId: m.ticker,
+    yesPrice: m.yesPrice,
+    noPrice: m.noPrice,
+    volume: m.volume,
+  }));
+  const symbolImageUrl =
+    typeof marketDetails?.symbol_image_url === "string"
+      ? marketDetails.symbol_image_url
+      : undefined;
+  const outcomeTabs =
+    marketsForOrderBook.length > 2 ? (
+      <OutcomeTabs
+        items={marketsForOrderBook.map((m) => ({
+          key: m.marketTicker,
+          label: m.marketTitle,
+        }))}
+        selectedIndex={selectedMarketIndex}
+        onSelect={setSelectedMarketIndex}
+      />
+    ) : null;
+
   // Loading and error states
   if (isLoadingDetails) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-white text-lg">Loading market data...</div>
+      <div className="rx-mk">
+        <MarketPageLoading />
       </div>
     );
   }
 
   if (!marketDetails || !eventTicker) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-white text-lg">No market data available</div>
+      <div className="rx-mk">
+        <MarketPageMessage title="No market data available" />
       </div>
     );
   }
 
   return (
-    <div className="flex flex-col h-full w-full bg-black text-white overflow-hidden">
-      <TradingHeader
-        marketTitle={typeof marketTitle === "string" ? marketTitle : null}
-        symbolImageUrl={
-          typeof marketDetails.symbol_image_url === "string"
-            ? marketDetails.symbol_image_url
-            : undefined
-        }
-        currentYesPrice={currentYesPrice}
-        totalVolume={typeof totalVolume === "number" ? totalVolume : undefined}
-        onBack={onBack}
-        onGenerateClick={handleGenerateClick}
-        isGenerating={isGenerating}
-        countdown={countdown}
-        hasGenerated={hasGenerated}
-        ready={ready}
-        canGenerate={!!marketForGeneration}
-      />
+    <div className="rx-mk">
+      <div className="mk-frame">
+        <TradingHeader
+          marketTitle={typeof marketTitle === "string" ? marketTitle : null}
+          symbolImageUrl={symbolImageUrl}
+          currentYesPrice={currentYesPrice}
+          totalVolume={typeof totalVolume === "number" ? totalVolume : undefined}
+          volumePrefix="$"
+          seriesVolume={
+            typeof marketDetails.total_series_volume === "number"
+              ? marketDetails.total_series_volume
+              : undefined
+          }
+          category={
+            typeof marketDetails.category === "string" ? marketDetails.category : null
+          }
+          venue="kalshi"
+          onBack={onBack}
+          onGenerateClick={handleGenerateClick}
+          isGenerating={isGenerating}
+          countdown={countdown}
+          hasGenerated={hasGenerated}
+          ready={ready}
+          canGenerate={!!marketForGeneration}
+          onPilotToggle={onPilotToggle}
+          pilotOpen={pilotOpen}
+          pilotControlsId={pilotControlsId}
+        />
 
-      {/* Main Content Area - Scrollable */}
-      <div
-        className="flex-1 overflow-y-auto rexmarkets-scroll-pane-y min-h-0 pb-2"
-        style={{ WebkitOverflowScrolling: "touch" }}
-      >
-        <div className="flex flex-col">
-          {/* Top Section - Chart placeholder and Order Book */}
-          <div className="flex flex-col lg:flex-row border-b border-white/10 flex-shrink-0">
-            {/* Chart - Full width on mobile with explicit min-height so it doesn't collapse, flex-1 on desktop */}
-            <div className="flex-1 flex flex-col min-w-0 w-full min-h-[400px] lg:w-auto lg:min-h-[520px]">
-              {/* Chart Controls */}
-              <div className="flex-shrink-0 flex items-center justify-start px-4 py-2 border-b border-white/10">
-                <div className="flex items-center gap-2 overflow-x-auto">
-                  {INTERVALS.map((interval) => (
-                    <button
-                      key={interval}
-                      onClick={() => setSelectedInterval(interval)}
-                      className={`px-2 py-0.5 rounded text-xs transition-colors whitespace-nowrap ${
-                        selectedInterval === interval
-                          ? "bg-[#ffc000] text-black font-semibold"
-                          : "bg-white/10 text-white/60 hover:bg-white/20"
-                      }`}
-                    >
-                      {interval}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              {/* Chart - explicit height on mobile so Recharts ResponsiveContainer can measure; flex on desktop */}
-              <div className="h-[350px] lg:h-auto lg:flex-1 lg:min-h-[450px] relative bg-[#0a0a0a]">
-                {activeMarkets.length > 0 ? (
-                  <PriceChart
-                    markets={activeMarkets}
-                    interval={selectedInterval}
-                    selectedMarketTicker={selectedMarketTicker}
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <div className="text-white/60">
-                      No price history available
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            {/* Mobile: Buy/Sell directly under chart; order book follows */}
-            <div className="lg:hidden w-full flex-shrink-0 border-t border-white/10">
-              <BuySellWidget
-                currentYesPrice={currentYesPrice}
-                currentNoPrice={currentNoPrice}
-                onBuyClick={handleBuyClick}
-                onSellClick={handleSellClick}
-                symbolImageUrl={
-                  typeof marketDetails.symbol_image_url === "string"
-                    ? marketDetails.symbol_image_url
-                    : undefined
-                }
-                marketTitle={
-                  typeof marketTitle === "string" ? marketTitle : undefined
-                }
-                availableMarkets={availableMarkets}
-                marketsForOrderBook={marketsForOrderBook.map((m) => ({
-                  clobTokenId: null,
-                  clobNoTokenId: null,
-                  marketTitle: m.marketTitle,
-                  ticker: m.ticker,
-                  conditionId: m.ticker,
-                  yesPrice: m.yesPrice,
-                  noPrice: m.noPrice,
-                  volume: m.volume,
-                }))}
-                selectedMarketIndex={selectedMarketIndex}
-                onMarketIndexChange={setSelectedMarketIndex}
-              />
-            </div>
-
-            {/* Mobile: Order book below buy/sell */}
-            <div className="lg:hidden w-full flex-shrink-0 border-t border-white/10 flex flex-col">
-              {marketsForOrderBook.length > 2 && (
-                <div className="flex-shrink-0 border-b border-white/10 px-4 py-2">
-                  <div className="flex items-center gap-1 overflow-x-auto custom-select-scrollbar">
-                    {marketsForOrderBook.map((market, index) => (
-                      <button
-                        key={market.marketTicker}
-                        onClick={() => setSelectedMarketIndex(index)}
-                        className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-                          selectedMarketIndex === index
-                            ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                            : "text-white/60 hover:text-white/80"
-                        }`}
-                      >
-                        {market.marketTitle}
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              )}
-              <div
-                className={`overflow-hidden ${
-                  mobileOrderBookDepthExpanded ? "min-h-[350px]" : ""
-                }`}
-              >
-                <KalshiOrderBook
-                  marketTicker={selectedMarketTicker}
-                  yesPrice={currentYesPrice}
-                  noPrice={currentNoPrice}
-                  onBuyClick={handleOrderBookBuyClick}
-                  selectedOutcome={selectedOrderBookOutcome}
-                  onDepthExpandedChange={setMobileOrderBookDepthExpanded}
+        {/* Everything under the market head scrolls */}
+        <div className="mk-scroll">
+          {/* Chart + trade ticket: side by side on wide screens (filling the view), stacked on narrow ones */}
+          <div className="mk-main">
+            <section className="mk-chart" aria-label="Odds over time">
+              <div className="mk-chart__head">
+                <span className="rx-eyebrow">Odds over time</span>
+                <RangeSeg
+                  ranges={INTERVALS}
+                  value={selectedInterval}
+                  onChange={setSelectedInterval}
                 />
               </div>
-            </div>
+              {activeMarkets.length > 0 ? (
+                <PriceChart
+                  markets={activeMarkets}
+                  interval={selectedInterval}
+                  selectedMarketTicker={selectedMarketTicker}
+                />
+              ) : (
+                <div className="mk-chart__plot mk-chart__empty">
+                  No price history available
+                </div>
+              )}
+            </section>
 
-            {/* Desktop: Buy/Sell next to chart - Kalshi BuySellWidget (DFlow order logic) */}
-            <div className="hidden lg:flex lg:flex-col lg:min-h-[520px] w-[350px] flex-shrink-0 border-l border-white/10">
+            {/* Kalshi BuySellWidget (DFlow order logic) */}
+            <section className="mk-side" aria-label="Trade">
               <BuySellWidget
                 currentYesPrice={currentYesPrice}
                 currentNoPrice={currentNoPrice}
                 onBuyClick={handleBuyClick}
                 onSellClick={handleSellClick}
-                symbolImageUrl={
-                  typeof marketDetails.symbol_image_url === "string"
-                    ? marketDetails.symbol_image_url
-                    : undefined
-                }
+                symbolImageUrl={symbolImageUrl}
                 marketTitle={
                   typeof marketTitle === "string" ? marketTitle : undefined
                 }
                 availableMarkets={availableMarkets}
-                marketsForOrderBook={marketsForOrderBook.map((m) => ({
-                  clobTokenId: null,
-                  clobNoTokenId: null,
-                  marketTitle: m.marketTitle,
-                  ticker: m.ticker,
-                  conditionId: m.ticker,
-                  yesPrice: m.yesPrice,
-                  noPrice: m.noPrice,
-                  volume: m.volume,
-                }))}
+                marketsForOrderBook={ticketMarkets}
                 selectedMarketIndex={selectedMarketIndex}
                 onMarketIndexChange={setSelectedMarketIndex}
               />
-            </div>
+            </section>
           </div>
 
-          {/* Bottom Section - Comments/Activity */}
-          <div className="flex min-h-0 flex-col flex-shrink-0 border-t border-white/10">
-            <div
-              className="flex flex-col lg:flex-row items-stretch gap-4 p-4 flex-shrink-0"
-              style={{ maxHeight: "750px" }}
-            >
-              {/* Comments/Activity - Full width on mobile */}
-              <div className="flex-1 flex flex-col min-w-0 w-full lg:w-auto">
-                {/* Tabs */}
-                <div className="flex-shrink-0 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 border-b border-white/10 pb-2 mb-4">
-                  <div className="flex items-center gap-1">
-                    <button
-                      onClick={() => setActiveTab("comments")}
-                      className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        activeTab === "comments"
-                          ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                          : "text-white/60 hover:text-white/80"
-                      }`}
-                    >
-                      Comments{" "}
-                      {typeof commentsCount === "number" &&
-                        commentsCount > 0 &&
-                        `(${commentsCount})`}
-                    </button>
-                    <button
-                      onClick={() => setActiveTab("activity")}
-                      className={`px-4 py-2 text-sm font-medium transition-colors ${
-                        activeTab === "activity"
-                          ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                          : "text-white/60 hover:text-white/80"
-                      }`}
-                    >
-                      Latest Activity
-                    </button>
-                  </div>
-                </div>
-
-                {/* Content Area with Scroll */}
-                <div className="flex-1 min-h-0 overflow-y-auto rexmarkets-scroll-pane-y">
-                  {activeTab === "activity" ? (
-                    <KalshiActivityFeed
-                      seriesTicker={marketDetails.series_ticker}
-                    />
-                  ) : (
-                    <KalshiComments eventTicker={eventTicker || undefined} />
-                  )}
-                </div>
-              </div>
-
-              {/* Desktop: Order Book moved here */}
-              <div className="hidden lg:flex w-[400px] flex-shrink-0 border-l border-white/10 flex-col min-h-0">
-                {marketsForOrderBook.length > 2 && (
-                  <div className="flex-shrink-0 border-b border-white/10 px-4 py-2">
-                    <div className="flex items-center gap-1 overflow-x-auto custom-select-scrollbar">
-                      {marketsForOrderBook.map((market, index) => (
-                        <button
-                          key={market.marketTicker}
-                          onClick={() => setSelectedMarketIndex(index)}
-                          className={`px-3 py-1.5 text-xs font-medium whitespace-nowrap transition-colors ${
-                            selectedMarketIndex === index
-                              ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                              : "text-white/60 hover:text-white/80"
-                          }`}
-                        >
-                          {market.marketTitle}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  <KalshiOrderBook
-                    marketTicker={selectedMarketTicker}
-                    yesPrice={currentYesPrice}
-                    noPrice={currentNoPrice}
-                    onBuyClick={handleOrderBookBuyClick}
-                    selectedOutcome={selectedOrderBookOutcome}
-                    showDepthToggle={false}
-                  />
-                </div>
-              </div>
+          {/* Phones and tablets: order book under the ticket */}
+          <section className="mk-book mk-book--stack" aria-label="Order book">
+            <div className="mk-sec-head">
+              <span className="rx-eyebrow">Order book</span>
             </div>
+            {outcomeTabs}
+            <div
+              className={
+                mobileOrderBookDepthExpanded ? "mk-book__fill is-open" : "mk-book__fill"
+              }
+            >
+              <KalshiOrderBook
+                marketTicker={selectedMarketTicker}
+                yesPrice={currentYesPrice}
+                noPrice={currentNoPrice}
+                onBuyClick={handleOrderBookBuyClick}
+                selectedOutcome={selectedOrderBookOutcome}
+                onDepthExpandedChange={setMobileOrderBookDepthExpanded}
+              />
+            </div>
+          </section>
+
+          {/* Comments / activity, and the order book beside them on desktop */}
+          <div className="mk-lower">
+            <section className="mk-feed" aria-label="Comments and activity">
+              <FeedTabs
+                tabs={[
+                  {
+                    key: "comments" as const,
+                    label: "Comments",
+                    count:
+                      typeof commentsCount === "number" ? commentsCount : undefined,
+                  },
+                  { key: "activity" as const, label: "Latest activity" },
+                ]}
+                active={activeTab}
+                onChange={setActiveTab}
+              />
+              <div className="mk-feed__body" role="tabpanel">
+                {activeTab === "activity" ? (
+                  <KalshiActivityFeed seriesTicker={marketDetails.series_ticker} />
+                ) : (
+                  <KalshiComments eventTicker={eventTicker || undefined} />
+                )}
+              </div>
+            </section>
+
+            <section className="mk-book mk-book--side" aria-label="Order book">
+              <div className="mk-sec-head">
+                <span className="rx-eyebrow">Order book</span>
+              </div>
+              {outcomeTabs}
+              <KalshiOrderBook
+                marketTicker={selectedMarketTicker}
+                yesPrice={currentYesPrice}
+                noPrice={currentNoPrice}
+                onBuyClick={handleOrderBookBuyClick}
+                selectedOutcome={selectedOrderBookOutcome}
+                showDepthToggle={false}
+              />
+            </section>
           </div>
         </div>
       </div>
 
-      {/* Buy/Sell Modal - Mobile Only (same UI as Polymarket) */}
+      {/* Buy/Sell sheet - phones only (opened from the order book) */}
       <BuySellModal
         isOpen={isBuySellModalOpen}
         onClose={() => setIsBuySellModalOpen(false)}
@@ -571,35 +498,22 @@ export default function KalshiTradingInterface({
         currentNoPrice={currentNoPrice}
         onBuyClick={handleBuyClick}
         onSellClick={handleSellClick}
-        symbolImageUrl={
-          typeof marketDetails.symbol_image_url === "string"
-            ? marketDetails.symbol_image_url
-            : undefined
-        }
+        symbolImageUrl={symbolImageUrl}
         marketTitle={
           typeof marketTitle === "string" ? marketTitle : undefined
         }
         availableMarkets={availableMarkets}
-        marketsForOrderBook={marketsForOrderBook.map((m) => ({
-          clobTokenId: null,
-          clobNoTokenId: null,
-          marketTitle: m.marketTitle,
-          ticker: m.ticker,
-          conditionId: m.ticker,
-          yesPrice: m.yesPrice,
-          noPrice: m.noPrice,
-          volume: m.volume,
-        }))}
+        marketsForOrderBook={ticketMarkets}
         selectedMarketIndex={selectedMarketIndex}
         onMarketIndexChange={setSelectedMarketIndex}
         initialOutcome={modalInitialOutcome}
       />
-<PaywallModal
-      open={showPaywall}
-      onClose={() => setShowPaywall(false)}
-      context="rexmarkets"
-      paymentMetadata={userId ? { userId } : undefined}
-    />
+      <PaywallModal
+        open={showPaywall}
+        onClose={() => setShowPaywall(false)}
+        context="rexmarkets"
+        paymentMetadata={userId ? { userId } : undefined}
+      />
     </div>
   );
 }

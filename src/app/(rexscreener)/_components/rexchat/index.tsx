@@ -17,6 +17,8 @@ interface RexChatProps {
   onCloseSidebar?: () => void;
   /** Bring up the panel's swap (What's New "Trade" card); `full` shows the Exchange on its own. */
   onOpenExchange?: (opts?: { full?: boolean }) => void;
+  /** Minimize control in the report pane head. */
+  onMinimize?: () => void;
 }
 
 export function RexChat({
@@ -29,6 +31,7 @@ export function RexChat({
   onViewHistory,
   onCloseSidebar,
   onOpenExchange,
+  onMinimize,
 }: RexChatProps) {
   const [selectedReportId, setSelectedReportId] = useState<string | null>(
     initialReportId
@@ -53,7 +56,7 @@ export function RexChat({
   };
 
   return (
-    <div className="flex h-full w-full max-w-360 mx-auto overflow-x-hidden min-h-0">
+    <div className="flex h-full w-full min-h-0 flex-1 overflow-x-hidden">
       {isSidebarOpen && (
         <div className="h-full w-80 shrink-0">
           <ChatSidebar
@@ -75,22 +78,20 @@ export function RexChat({
             reportHistoryCount={reports.length}
             onCloseSidebar={onCloseSidebar}
             onOpenExchange={onOpenExchange}
+            onMinimize={onMinimize}
           />
         ) : (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-center">
-              <p className="text-white/60 mb-4">
-                Generate a report to start chatting
-              </p>
+          <div className="sb-body">
+            <div className="empty">
+              <p>Generate a report to start chatting</p>
               {reports.length > 0 && isSidebarOpen && (
-                <p className="text-white/40 text-sm">
-                  Or select a report from the history
-                </p>
+                <p className="rx-small">Or select a report from the history</p>
               )}
               {!isSidebarOpen && reports.length > 0 && (
                 <button
+                  type="button"
                   onClick={() => setIsSidebarOpen(true)}
-                  className="mt-4 px-4 py-2 bg-[#ffc000] text-black font-semibold rounded-lg hover:bg-[#00b050] transition"
+                  className="rx-btn rx-btn--secondary rx-btn--s"
                 >
                   Open History ({reports.length})
                 </button>

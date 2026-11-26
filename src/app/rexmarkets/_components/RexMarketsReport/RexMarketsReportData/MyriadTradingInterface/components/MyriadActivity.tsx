@@ -4,23 +4,28 @@ import { useMyriadMarketEvents } from "@/hooks/useMyriadMarketEvents";
 import { formatAddress, getTimeAgo } from "@/utils/polymarketTrading";
 import HolderAvatar from "../../PolymarketTradingInterface/components/shared/HolderAvatar";
 
+/** Recent Myriad trades (activity tab). Styles: market.css (.mk-act). */
 export default function MyriadActivity({ slug }: { slug: string | null }) {
   const { data, isLoading, isError } = useMyriadMarketEvents(slug, 1, 40);
 
   if (isLoading) {
-    return <div className="text-xs text-white/60 py-2">Loading activity...</div>;
+    return (
+      <div className="mk-msg" role="status">
+        Loading activity...
+      </div>
+    );
   }
   if (isError) {
-    return <div className="text-xs text-white/60 py-2">Could not load activity</div>;
+    return <div className="mk-msg">Could not load activity</div>;
   }
 
   const rows = data?.data ?? [];
   if (rows.length === 0) {
-    return <div className="text-xs text-white/60 py-2">No recent activity</div>;
+    return <div className="mk-msg">No recent activity</div>;
   }
 
   return (
-    <div className="space-y-0">
+    <div className="mk-acts-list">
       {rows.map((ev, idx) => {
         const isBuy = ev.action === "buy" || ev.action === "add_liquidity";
         const ts = ev.timestamp ? new Date(ev.timestamp * 1000) : new Date();
@@ -31,35 +36,30 @@ export default function MyriadActivity({ slug }: { slug: string | null }) {
         const outcome = ev.outcomeTitle ?? "—";
 
         return (
-          <div
-            key={`${ev.user}-${ev.timestamp}-${idx}`}
-            className="flex items-start gap-3 py-3 px-2 border-b border-white/5 last:border-b-0 hover:bg-white/5 rounded"
-          >
+          <div key={`${ev.user}-${ev.timestamp}-${idx}`} className="mk-act">
             <HolderAvatar name={ev.user} tone="gold" />
-            <div className="flex-1 min-w-0 text-sm text-white/90 leading-snug">
-              <span className="font-medium">{name}</span>{" "}
-              <span className={isBuy ? "text-green-400" : "text-red-400"}>{ev.action}</span>{" "}
-              <span className="font-semibold text-white">{outcome}</span>
+            <div className="mk-act__line">
+              <b title={ev.user}>{name}</b>{" "}
+              <span className={isBuy ? "is-buy" : "is-sell"}>{ev.action}</span> <b>{outcome}</b>
               {shares > 0 ? (
                 <>
                   {" "}
                   ·{" "}
-                  <span className="text-white/80">
-                    {shares.toLocaleString(undefined, { maximumFractionDigits: 2 })} shares
-                  </span>
+                  <span className="rx-num">
+                    {shares.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  </span>{" "}
+                  shares
                 </>
               ) : null}
               {val > 0 ? (
                 <>
                   {" "}
-                  (
-                  <span className="text-white/70">
-                    ${val.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                  <span className="rx-num">
+                    (${val.toLocaleString(undefined, { maximumFractionDigits: 2 })})
                   </span>
-                  )
                 </>
-              ) : null}
-              <span className="text-white/50 text-xs ml-1">{timeAgo}</span>
+              ) : null}{" "}
+              <span className="mk-act__time">{timeAgo}</span>
             </div>
           </div>
         );

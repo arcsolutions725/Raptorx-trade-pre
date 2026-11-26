@@ -1,16 +1,19 @@
 "use client";
 
-import { useState, useEffect, useRef, useContext, useCallback } from "react";
-import { useQueryClient } from "@tanstack/react-query";
 import {
-  Copy,
-  Check,
-  ArrowDownCircle,
-  ArrowUpCircle,
-  RefreshCw,
-  CircleAlert,
-} from "lucide-react";
+  useState,
+  useEffect,
+  useRef,
+  useContext,
+  useCallback,
+  type ReactNode,
+} from "react";
+import Image from "next/image";
+import clsx from "clsx";
+import { useQueryClient } from "@tanstack/react-query";
+import { Check, Compass, RefreshCw, CircleAlert, Wallet } from "lucide-react";
 import copy from "copy-to-clipboard";
+import { AcctModal, AcctModalHead } from "@/components/ui/modal/accountUi";
 import { useWallet } from "@/contexts/WalletContext";
 import useSafeDeployment from "@/hooks/useSafeDeployment";
 import { usePolymarketDepositAddresses } from "@/hooks/usePolymarketDepositAddresses";
@@ -290,17 +293,7 @@ export default function DepositWithdrawModal({
     }
   }, [isOpen, onClose]);
 
-  // Prevent body scroll when modal is open
-  useEffect(() => {
-    if (isOpen) {
-      document.body.style.overflow = "hidden";
-    } else {
-      document.body.style.overflow = "unset";
-    }
-    return () => {
-      document.body.style.overflow = "unset";
-    };
-  }, [isOpen]);
+  // Page scroll is locked by the modal shell (AcctModal) while the dialog is open.
 
   const handleCopyAddress = (address: string, type: "evm" | "svm" | "btc") => {
     if (!address) return;
@@ -973,1163 +966,987 @@ export default function DepositWithdrawModal({
   };
 
   const isPredictFunBsc = platformTab === "predictfun";
-  const bscAccentActive = "bg-[#ffc000] text-black";
-  const bscAccentMax = "bg-[#ffc000] hover:bg-[#ffd000] text-black";
-  const bscAccentSubmit =
-    "bg-[#ffc000] hover:bg-[#ffd000] disabled:bg-gray-600 disabled:cursor-not-allowed text-black";
-  const bscFocusBorder = "focus:border-[#ffc000]";
-  const bscRefreshHover = "hover:text-[#ffc000]";
-  const bscBalanceAccent = "text-[#ffc000]";
+  const bscVenueName = isPredictFunBsc ? "Predict.fun" : "Myriad";
 
   if (!isOpen) return null;
 
-  return (
+  /* ---------- Kalshi ---------- */
+  const kalshiDeposit = (
     <>
-      <div className="absolute inset-0 bg-black/50 backdrop-blur-sm z-40" />
-      <div className="absolute inset-0 flex items-center justify-center z-50 pointer-events-none">
+      <div className="acct-intro">
+        <h3 className="rx-h3">Solana wallet · Kalshi</h3>
+        <p>Send SOL or USDC to this address to fund your Kalshi trading account.</p>
+      </div>
+      {isSolanaAddressLoading ? (
+        <DwLoading label="Loading your Solana address" />
+      ) : !solanaAddress ? (
+        <DwNote>
+          Connect your Phantom or Privy wallet to see your Solana address.
+        </DwNote>
+      ) : (
+        <>
+          <DwAddressField
+            label={`Solana (SVM) address${
+              solanaSource
+                ? ` · connected via ${solanaSource === "phantom" ? "Phantom" : "Privy"}`
+                : ""
+            }`}
+            address={solanaAddress}
+            copied={copiedAddress === "svm"}
+            onCopy={() => handleCopyAddress(solanaAddress, "svm")}
+            copyLabel="Copy Solana address"
+          />
+          <div className="rx-well dw-bal">
+            <span className="rx-small">Wallet balance</span>
+            <span className="dw-bal__v">
+              {isKalshiUsdcBalanceLoading ||
+              isSolanaBalanceLoading ||
+              isRefreshingBalance ? (
+                <span className="rx-skel" aria-label="Loading balance" />
+              ) : (
+                <span>
+                  {kalshiUsdcBalanceData?.formatted ?? "0.00"} USDC{" "}
+                  <small>({solanaBalanceData?.formatted ?? "0"} SOL)</small>
+                </span>
+              )}
+              <DwRefreshButton
+                onClick={handleRefreshKalshiBalance}
+                disabled={
+                  isRefreshingBalance ||
+                  isSolanaBalanceLoading ||
+                  isKalshiUsdcBalanceLoading
+                }
+                spinning={isRefreshingBalance}
+              />
+            </span>
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  const kalshiWithdraw = (
+    <>
+      {kalshiWithdrawError && <DwError>{kalshiWithdrawError}</DwError>}
+      <div className="rx-field">
+        <span className="rx-label" id="dw-kalshi-asset">
+          Withdraw as
+        </span>
         <div
-          ref={modalRef}
-          className="w-125 max-w-[90%] bg-[#0D0D0D] rounded-xl shadow-2xl border border-white/10 pointer-events-auto max-h-[80vh] overflow-y-auto custom-sidebar-scrollbar"
+          className="rx-seg dw-assets"
+          role="group"
+          aria-labelledby="dw-kalshi-asset"
         >
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-white/10">
-            <h2 className="text-xl font-bold text-white">Deposit & Withdraw</h2>
+          {(["USDC", "SOL"] as const).map((asset) => (
             <button
-              onClick={onClose}
-              className="p-2 hover:bg-gray-800 rounded-lg transition text-gray-400 hover:text-white"
-              aria-label="Close modal"
-            >
-              <svg
-                className="w-5 h-5"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={2}
-                  d="M6 18L18 6M6 6l12 12"
-                />
-              </svg>
-            </button>
-          </div>
-
-          {/* Platform tabs — equal-width grid keeps labels centered per column */}
-          <div className="mx-4 mt-4 bg-[#141414] p-1 rounded-lg grid grid-cols-5 gap-1">
-            <button
+              key={asset}
               type="button"
-              onClick={() => setPlatformTab("kalshi")}
-              className={`py-2 px-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors text-center leading-tight ${
-                platformTab === "kalshi"
-                  ? "bg-[#17cb91] text-black"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              Kalshi
-            </button>
-            <button
-              type="button"
-              onClick={() => setPlatformTab("polymarket")}
-              className={`py-2 px-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors text-center leading-tight ${
-                platformTab === "polymarket"
-                  ? "bg-[#2C59F7] text-white"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              Polymarket
-            </button>
-            <button
-              type="button"
-              onClick={() => setPlatformTab("limitless")}
-              className={`py-2 px-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors text-center leading-tight ${
-                platformTab === "limitless"
-                  ? "bg-black text-white border border-white/20"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              Limitless
-            </button>
-            <button
-              type="button"
-              onClick={() => setPlatformTab("myriad")}
-              className={`py-2 px-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors text-center leading-tight ${
-                platformTab === "myriad"
-                  ? "bg-[#ffc000] text-black"
-                  : "text-gray-400 hover:text-white"
-              }`}
-            >
-              Myriad
-            </button>
-            <button
-              type="button"
+              aria-pressed={kalshiWithdrawAsset === asset}
+              className={clsx(
+                "rx-seg__item",
+                kalshiWithdrawAsset === asset && "is-active",
+              )}
               onClick={() => {
-                setPlatformTab("predictfun");
-                setMyriadWithdrawAsset("USDT");
+                setKalshiWithdrawAsset(asset);
+                setAmount("");
               }}
-              className={`py-2 px-1 rounded-md text-[10px] sm:text-xs font-medium transition-colors text-center leading-tight ${
-                platformTab === "predictfun"
-                  ? "bg-[#A855F7] text-white"
-                  : "text-gray-400 hover:text-white"
-              }`}
             >
-              <span className="sm:hidden">Predict</span>
-              <span className="hidden sm:inline">Predict.fun</span>
+              {asset}
             </button>
-          </div>
-
-          {/* Deposit / Withdraw tabs */}
-          {(platformTab === "polymarket" ||
-            platformTab === "kalshi" ||
-            platformTab === "limitless" ||
-            platformTab === "myriad" ||
-            platformTab === "predictfun") && (
-            <div className="mx-4 mt-2 bg-[#141414] p-1 rounded-lg grid grid-cols-2 gap-1">
-              <button
-                type="button"
-                onClick={() => setActiveTab("deposit")}
-                className={`py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-                  activeTab === "deposit"
-                    ? "bg-[#ffc000] text-black"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                <ArrowDownCircle className="w-4 h-4" />
-                Deposit
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab("withdraw")}
-                className={`py-2 px-4 rounded-md text-sm font-medium transition-colors flex items-center justify-center gap-2 ${
-                  activeTab === "withdraw"
-                    ? "bg-[#ffc000] text-black"
-                    : "text-gray-400 hover:text-white"
-                }`}
-              >
-                <ArrowUpCircle className="w-4 h-4" />
-                Withdraw
-              </button>
-            </div>
-          )}
-
-          {/* Content */}
-          <div className="p-4">
-            {platformTab === "kalshi" ? (
-              activeTab === "deposit" ? (
-                /* Kalshi Deposit: Solana wallet address + balance (Phantom or Privy) */
-                <div className="space-y-4">
-                  <div className="bg-white/5 rounded-lg p-4">
-                    <h4 className="text-white font-semibold mb-3">
-                      Solana Wallet (Kalshi)
-                    </h4>
-                    <p className="text-xs text-gray-400 mb-3">
-                      Send SOL or USDC to this address to fund your Kalshi
-                      trading account.
-                    </p>
-                    {isSolanaAddressLoading ? (
-                      <div className="flex items-center justify-center py-4">
-                        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#17cb91]" />
-                      </div>
-                    ) : !solanaAddress ? (
-                      <p className="text-gray-400 text-sm py-2">
-                        Connect your Phantom or Privy wallet to see your Solana
-                        address.
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        {solanaSource && (
-                          <span className="text-xs text-gray-500">
-                            Connected via{" "}
-                            {solanaSource === "phantom" ? "Phantom" : "Privy"}
-                          </span>
-                        )}
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 text-xs">
-                            Solana (SVM) Address:
-                          </span>
-                          <div className="flex items-center gap-2 bg-black/30 rounded px-2 py-1.5">
-                            <span className="text-white text-xs font-mono break-all flex-1 min-w-0">
-                              {solanaAddress}
-                            </span>
-                            <button
-                              onClick={() =>
-                                handleCopyAddress(solanaAddress, "svm")
-                              }
-                              className="p-1 hover:bg-white/10 rounded transition-colors shrink-0"
-                              title="Copy Solana address"
-                            >
-                              {copiedAddress === "svm" ? (
-                                <Check className="w-4 h-4 text-green-400" />
-                              ) : (
-                                <Copy className="w-4 h-4 text-gray-400 hover:text-white" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="bg-black/30 rounded-lg p-3 mt-2 space-y-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="text-xs text-gray-400">
-                              Wallet Balance
-                            </p>
-                            <button
-                              type="button"
-                              onClick={handleRefreshKalshiBalance}
-                              disabled={
-                                isRefreshingBalance ||
-                                isSolanaBalanceLoading ||
-                                isKalshiUsdcBalanceLoading
-                              }
-                              className="p-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Refresh balance"
-                            >
-                              <RefreshCw
-                                className={`w-4 h-4 text-gray-400 hover:text-[#ffc000] ${
-                                  isRefreshingBalance ? "animate-spin" : ""
-                                }`}
-                              />
-                            </button>
-                          </div>
-                          <div className="flex flex-col gap-1 text-[14px]">
-                            {isKalshiUsdcBalanceLoading ||
-                            isSolanaBalanceLoading ||
-                            isRefreshingBalance ? (
-                              <span className="inline-block animate-pulse h-5 w-16 bg-white/10 rounded align-middle" />
-                            ) : (
-                              <>
-                                <span className="text-white/90 font-semibold text-[12px]">
-                                  {kalshiUsdcBalanceData?.formatted ?? "0.00"}{" "}
-                                  USDC (
-                                  <span className="text-white/90 font-semibold">
-                                    {solanaBalanceData?.formatted ?? "0"} SOL
-                                  </span>
-                                  )
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                /* Kalshi Withdraw: send SOL or USDC to another Solana address */
-                <div className="space-y-4">
-                  {kalshiWithdrawError && (
-                    <div className="bg-red-500/20 border border-red-500/40 rounded-lg p-3">
-                      <p className="text-red-300 text-sm">
-                        {kalshiWithdrawError}
-                      </p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-xs text-gray-400 mb-2">Withdraw as</p>
-                    <div className="flex rounded-lg overflow-hidden border border-white/10">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setKalshiWithdrawAsset("USDC");
-                          setAmount("");
-                        }}
-                        className={`flex-1 py-2 px-3 text-sm font-medium ${
-                          kalshiWithdrawAsset === "USDC"
-                            ? "bg-[#17cb91] text-black"
-                            : "bg-white/5 text-gray-400 hover:text-white"
-                        }`}
-                      >
-                        USDC
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setKalshiWithdrawAsset("SOL");
-                          setAmount("");
-                        }}
-                        className={`flex-1 py-2 px-3 text-sm font-medium ${
-                          kalshiWithdrawAsset === "SOL"
-                            ? "bg-[#17cb91] text-black"
-                            : "bg-white/5 text-gray-400 hover:text-white"
-                        }`}
-                      >
-                        SOL
-                      </button>
-                    </div>
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">
-                      Recipient (Solana address)
-                    </label>
-                    <input
-                      type="text"
-                      value={recipient}
-                      onChange={(e) => setRecipient(e.target.value)}
-                      placeholder="e.g. 9NvE68JVWHHHGLp5NNELtM5fiBw6SXHrzqQJjUqaykC1"
-                      className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-[#17cb91] text-white font-mono text-sm"
-                      disabled={isSendingSol || isSendingUsdc}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">
-                      Available Balance (
-                      {kalshiWithdrawAsset === "USDC"
-                        ? (kalshiUsdcBalanceData?.formatted ?? "0.00 USDC") +
-                          " USDC"
-                        : (solanaBalanceData?.formatted ?? "0") + " SOL"}
-                      )
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        placeholder={
-                          kalshiWithdrawAsset === "USDC" ? "0.00" : "0.0000"
-                        }
-                        className="w-full px-4 py-2 pr-16 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-[#17cb91] text-white"
-                        disabled={isSendingSol || isSendingUsdc}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (kalshiWithdrawAsset === "USDC") {
-                            setAmount(kalshiUsdcBalanceData?.formatted ?? "0");
-                          } else {
-                            setAmount(
-                              solanaBalanceData
-                                ? String(
-                                    Math.max(
-                                      0,
-                                      solanaBalanceData.sol - 0.0001,
-                                    ).toFixed(4),
-                                  )
-                                : "0",
-                            );
-                          }
-                        }}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs bg-[#17cb91] hover:bg-[#1ee0a0] rounded text-black font-semibold"
-                      >
-                        MAX
-                      </button>
-                    </div>
-                  </div>
-                  <button
-                    onClick={
-                      kalshiWithdrawAsset === "USDC"
-                        ? handleKalshiWithdrawUsdc
-                        : handleKalshiWithdraw
-                    }
-                    disabled={
-                      isSendingSol ||
-                      isSendingUsdc ||
-                      !recipient.trim() ||
-                      !amount ||
-                      !solanaAddress ||
-                      (solanaSource === "privy" && !privySolanaWallet)
-                    }
-                    className="w-full py-3 bg-[#17cb91] hover:bg-[#1ee0a0] disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-bold rounded-lg transition-colors"
-                  >
-                    {isSendingUsdc
-                      ? "Sending..."
-                      : isSendingSol
-                        ? "Sending..."
-                        : kalshiWithdrawAsset === "USDC"
-                          ? "Send USDC"
-                          : "Send SOL"}
-                  </button>
-                  {!solanaAddress && (
-                    <p className="text-xs text-yellow-400 text-center">
-                      Connect your Phantom or Privy Solana wallet to withdraw.
-                    </p>
-                  )}
-                </div>
-              )
-            ) : platformTab === "limitless" ? (
-              activeTab === "deposit" ? (
-                /* Limitless Deposit: Base address + balance */
-                <div className="space-y-4">
-                  <div className="bg-white/5 rounded-lg p-4">
-                    <h4 className="text-white font-semibold mb-3">
-                      Base Wallet (Limitless)
-                    </h4>
-                    <p className="text-xs text-gray-400 mb-3">
-                      Send USDC or ETH on Base to this address to fund your Limitless trading.
-                    </p>
-                    {!eoaAddress ? (
-                      <p className="text-gray-400 text-sm py-2">
-                        Connect your wallet to see your Base address.
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 text-xs">Base (EVM) Address:</span>
-                          <div className="flex items-center gap-2 bg-black/30 rounded px-2 py-1.5">
-                            <span className="text-white text-xs font-mono break-all flex-1 min-w-0">
-                              {eoaAddress}
-                            </span>
-                            <button
-                              onClick={() => handleCopyAddress(eoaAddress, "evm")}
-                              className="p-1 hover:bg-white/10 rounded transition-colors shrink-0"
-                              title="Copy Base address"
-                            >
-                              {copiedAddress === "evm" ? (
-                                <Check className="w-4 h-4 text-green-400" />
-                              ) : (
-                                <Copy className="w-4 h-4 text-gray-400 hover:text-white" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="bg-black/30 rounded-lg p-3 mt-2 space-y-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="text-xs text-gray-400">
-                              Wallet Balance (Base)
-                            </p>
-                            <button
-                              type="button"
-                              onClick={handleRefreshLimitlessBalance}
-                              disabled={
-                                isRefreshingBaseBalance ||
-                                isBaseBalanceLoading
-                              }
-                              className="p-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Refresh balance"
-                            >
-                              <RefreshCw
-                                className={`w-4 h-4 text-gray-400 hover:text-[#ffc000] ${
-                                  isRefreshingBaseBalance ? "animate-spin" : ""
-                                }`}
-                              />
-                            </button>
-                          </div>
-                          <div className="flex flex-col gap-1 text-[14px]">
-                            {isBaseBalanceLoading || isRefreshingBaseBalance ? (
-                              <span className="inline-block animate-pulse h-5 w-24 bg-white/10 rounded align-middle" />
-                            ) : (
-                              <span className="text-white/90 font-semibold text-[12px]">
-                                {baseUsdcFormatted} USDC ({baseEthFormatted} ETH)
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                /* Limitless Withdraw: USDC on Base */
-                <div className="space-y-4">
-                  {limitlessWithdrawError && (
-                    <div className="bg-red-500/20 border border-red-500/40 rounded-lg p-3">
-                      <p className="text-red-300 text-sm">{limitlessWithdrawError}</p>
-                    </div>
-                  )}
-                  {showSuccess && (
-                    <div className="bg-green-500/20 border border-green-500/40 rounded-lg p-3">
-                      <p className="text-green-300 font-medium text-sm">Transfer successful!</p>
-                    </div>
-                  )}
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">Recipient (EVM address)</label>
-                    <input
-                      type="text"
-                      value={recipient}
-                      onChange={(e) => setRecipient(e.target.value)}
-                      placeholder="0x..."
-                      className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-[#ffc000] text-white font-mono text-sm"
-                      disabled={isSendingLimitlessUsdc}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">
-                      Available: {baseUsdcFormatted} USDC (Base)
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value.replace(/[^0-9.]/g, ""))}
-                        placeholder="0.00"
-                        className="w-full px-4 py-2 pr-16 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-[#ffc000] text-white"
-                        disabled={isSendingLimitlessUsdc}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setAmount(baseUsdcFormatted)}
-                        className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs bg-[#ffc000] hover:bg-[#ffd000] rounded text-black font-semibold"
-                      >
-                        MAX
-                      </button>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleLimitlessWithdraw}
-                    disabled={
-                      isSendingLimitlessUsdc ||
-                      !recipient.trim() ||
-                      !amount ||
-                      !eoaAddress ||
-                      baseUsdcBalance <= 0
-                    }
-                    className="w-full py-3 bg-[#ffc000] hover:bg-[#ffd000] disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-bold rounded-lg transition-colors"
-                  >
-                    {isSendingLimitlessUsdc ? "Sending..." : "Send USDC (Base)"}
-                  </button>
-                  {!eoaAddress && (
-                    <p className="text-xs text-yellow-400 text-center">
-                      Connect your wallet to withdraw.
-                    </p>
-                  )}
-                </div>
-              )
-            ) : platformTab === "myriad" || platformTab === "predictfun" ? (
-              activeTab === "deposit" ? (
-                <div className="space-y-4">
-                  <div className="bg-white/5 rounded-lg p-4">
-                    <h4 className="text-white font-semibold mb-3">
-                      BNB Smart Chain (
-                      {platformTab === "predictfun" ? "Predict.fun" : "Myriad"})
-                    </h4>
-                    <div
-                      className="flex gap-3 rounded-lg border border-amber-500/35 bg-amber-950/35 px-3 py-2.5 mb-3"
-                      role="note"
-                    >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full">
-                        <CircleAlert
-                          className="h-4 w-4 text-amber-300"
-                          aria-hidden
-                        />
-                      </div>
-                      <p className="text-[13px] leading-snug text-amber-200/95">
-                        {platformTab === "predictfun" ? (
-                          <>
-                            Only send{" "}
-                            <strong className="font-semibold text-amber-100">
-                              USDT
-                            </strong>{" "}
-                            (BEP-20) on{" "}
-                            <strong className="font-semibold text-amber-100">
-                              BNB Smart Chain
-                            </strong>{" "}
-                            to this address to trade on Predict.fun.
-                          </>
-                        ) : (
-                          <>
-                            Only send{" "}
-                            <strong className="font-semibold text-amber-100">
-                              USD1
-                            </strong>{" "}
-                            or{" "}
-                            <strong className="font-semibold text-amber-100">
-                              USDT
-                            </strong>{" "}
-                            (BEP-20) on{" "}
-                            <strong className="font-semibold text-amber-100">
-                              BNB Smart Chain
-                            </strong>{" "}
-                            to this address to trade on Myriad.
-                          </>
-                        )}
-                      </p>
-                    </div>
-                    {!eoaAddress ? (
-                      <p className="text-gray-400 text-sm py-2">
-                        Connect your wallet to see your BNB Chain address.
-                      </p>
-                    ) : (
-                      <div className="space-y-3">
-                        <div className="flex flex-col gap-1">
-                          <span className="text-gray-400 text-xs">
-                            BNB Chain (EVM) address
-                          </span>
-                          <div className="flex items-center gap-2 bg-black/30 rounded px-2 py-1.5">
-                            <span className="text-white text-xs font-mono break-all flex-1 min-w-0">
-                              {eoaAddress}
-                            </span>
-                            <button
-                              type="button"
-                              onClick={() => handleCopyAddress(eoaAddress, "evm")}
-                              className="p-1 hover:bg-white/10 rounded transition-colors shrink-0"
-                              title="Copy address"
-                            >
-                              {copiedAddress === "evm" ? (
-                                <Check className="w-4 h-4 text-green-400" />
-                              ) : (
-                                <Copy className="w-4 h-4 text-gray-400 hover:text-white" />
-                              )}
-                            </button>
-                          </div>
-                        </div>
-                        <div className="bg-black/30 rounded-lg p-3 mt-2 space-y-2">
-                          <div className="flex items-center justify-between mb-1">
-                            <p className="text-xs text-gray-400">
-                              Wallet balance (BNB Chain)
-                            </p>
-                            <button
-                              type="button"
-                              onClick={() => void handleRefreshMyriadBscBalance()}
-                              disabled={isRefreshingMyriadBsc || isMyriadBscBalancesLoading}
-                              className="p-1.5 rounded transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-                              title="Refresh"
-                            >
-                              <RefreshCw
-                                className={`w-4 h-4 text-gray-400 ${bscRefreshHover} ${
-                                  isRefreshingMyriadBsc ? "animate-spin" : ""
-                                }`}
-                              />
-                            </button>
-                          </div>
-                          {isMyriadBscBalancesLoading || isRefreshingMyriadBsc ? (
-                            <span className="inline-block animate-pulse h-5 w-32 bg-white/10 rounded" />
-                          ) : (
-                            <div className="flex flex-col gap-1 text-[14px]">
-                              {isPredictFunBsc ? (
-                                <>
-                                  <span
-                                    className={`text-white/90 font-semibold text-lg tabular-nums ${bscBalanceAccent}`}
-                                  >
-                                    {myriadBscBalances?.usdtFormatted ?? "0"} USDT
-                                  </span>
-                                  <span className="text-white/90 font-semibold text-[12px] break-words">
-                                    {myriadBscBalances?.bnbFormatted ?? "0"} BNB (gas)
-                                  </span>
-                                </>
-                              ) : (
-                                <>
-                                  <span
-                                    className={`text-white/90 font-semibold text-lg tabular-nums ${bscBalanceAccent}`}
-                                  >
-                                    {formatCurrency(
-                                      myriadBscBalances?.totalUsdApprox ?? 0,
-                                    )}
-                                  </span>
-                                  <span className="text-white/90 font-semibold text-[12px] break-words">
-                                    {myriadBscBalances?.bnbFormatted ?? "0"} BNB ·{" "}
-                                    {myriadBscBalances?.usd1Formatted ?? "0"} USD1 ·{" "}
-                                    {myriadBscBalances?.usdtFormatted ?? "0"} USDT
-                                  </span>
-                                  {(myriadBscBalances?.usdc ?? 0) > 0 && (
-                                    <span className="text-[11px] text-gray-500">
-                                      USDC included in total above
-                                    </span>
-                                  )}
-                                </>
-                              )}
-                              <p className="text-[11px] text-gray-500 leading-snug pt-1 border-t border-white/10 mt-1">
-                                Keep native BNB on this chain for gas (trades, transfers). As a rule of
-                                thumb, leave at least{" "}
-                                <span className="text-gray-400 font-medium">
-                                  {MYRIAD_BNB_WITHDRAW_GAS_RESERVE_BNB} BNB
-                                </span>{" "}
-                                or more if you trade often.
-                              </p>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {myriadWithdrawError && (
-                    <div className="bg-red-500/20 border border-red-500/40 rounded-lg p-3">
-                      <p className="text-red-300 text-sm">{myriadWithdrawError}</p>
-                    </div>
-                  )}
-                  {showSuccess && (
-                    <div className="bg-green-500/20 border border-green-500/40 rounded-lg p-3">
-                      <p className="text-green-300 font-medium text-sm">Transfer successful!</p>
-                    </div>
-                  )}
-                  <div>
-                    <p className="text-xs text-gray-400 mb-2">Withdraw asset</p>
-                    <div
-                      className={`grid ${
-                        isPredictFunBsc ? "grid-cols-2" : "grid-cols-3"
-                      } rounded-lg overflow-hidden border border-white/10`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMyriadWithdrawAsset("BNB");
-                          setAmount("");
-                        }}
-                        className={`py-2 px-2 text-xs sm:text-sm font-medium ${
-                          myriadWithdrawAsset === "BNB"
-                            ? bscAccentActive
-                            : "bg-white/5 text-gray-400 hover:text-white"
-                        }`}
-                      >
-                        BNB
-                      </button>
-                      {!isPredictFunBsc && (
-                        <button
-                          type="button"
-                          onClick={() => {
-                            setMyriadWithdrawAsset("USD1");
-                            setAmount("");
-                          }}
-                          className={`py-2 px-2 text-xs sm:text-sm font-medium border-l border-white/10 ${
-                            myriadWithdrawAsset === "USD1"
-                              ? bscAccentActive
-                              : "bg-white/5 text-gray-400 hover:text-white"
-                          }`}
-                        >
-                          USD1
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setMyriadWithdrawAsset("USDT");
-                          setAmount("");
-                        }}
-                        className={`py-2 px-2 text-xs sm:text-sm font-medium border-l border-white/10 ${
-                          myriadWithdrawAsset === "USDT"
-                            ? bscAccentActive
-                            : "bg-white/5 text-gray-400 hover:text-white"
-                        }`}
-                      >
-                        USDT
-                      </button>
-                    </div>
-                    <p className="text-[11px] text-gray-500 mt-1.5">
-                      {isPredictFunBsc
-                        ? "Native BNB or BEP-20 USDT on BNB Smart Chain. Switch network if prompted."
-                        : "Native BNB or BEP-20 USD1 / USDT on BNB Smart Chain. Switch network if prompted."}
-                    </p>
-                    {myriadWithdrawAsset === "BNB" ? (
-                      <div
-                        className="flex gap-2.5 rounded-lg border border-amber-500/35 bg-amber-950/35 px-3 py-2.5 mt-2"
-                        role="note"
-                      >
-                        <CircleAlert
-                          className="h-4 w-4 shrink-0 text-amber-300 mt-0.5"
-                          aria-hidden
-                        />
-                        <p className="text-[12px] leading-snug text-amber-100/95">
-                          <span className="font-semibold text-amber-50">BNB gas reserve: </span>
-                          Max withdraw leaves about{" "}
-                          <strong className="font-semibold text-amber-50">
-                            {MYRIAD_BNB_WITHDRAW_GAS_RESERVE_BNB} BNB
-                          </strong>{" "}
-                          in your wallet so you can still pay network fees on BNB Smart Chain.{" "}
-                          <span className="text-amber-200/90">
-                            The <strong className="text-amber-100">MAX</strong> button only fills the
-                            amount above that reserve.
-                          </span>
-                        </p>
-                      </div>
-                    ) : (
-                      <p className="text-[11px] text-gray-500 mt-2 leading-snug">
-                        Sending {isPredictFunBsc ? "USDT" : "USD1 or USDT"} still uses a small
-                        amount of <span className="text-gray-400">BNB</span> for gas—keep native BNB
-                        in this wallet (e.g. at least ~{MYRIAD_BNB_WITHDRAW_GAS_RESERVE_BNB} BNB).
-                      </p>
-                    )}
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">
-                      Recipient (EVM address)
-                    </label>
-                    <input
-                      type="text"
-                      value={recipient}
-                      onChange={(e) => setRecipient(e.target.value)}
-                      placeholder="0x..."
-                      className={`w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none ${bscFocusBorder} text-white font-mono text-sm`}
-                      disabled={isSendingMyriadStable}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-sm text-gray-400 mb-2">
-                      {!isPredictFunBsc && (
-                        <>
-                          Total balance (est.):{" "}
-                          {formatCurrency(myriadBscBalances?.totalUsdApprox ?? 0)} ·{" "}
-                        </>
-                      )}
-                      Available to send:{" "}
-                      {myriadWithdrawAsset === "USD1"
-                        ? `${myriadBscBalances?.usd1Formatted ?? "0"} USD1`
-                        : myriadWithdrawAsset === "USDT"
-                          ? `${myriadBscBalances?.usdtFormatted ?? "0"} USDT`
-                          : `${myriadBscBalances?.bnbMaxSendAfterReserveFormatted ?? "0"} BNB`}{" "}
-                      {myriadWithdrawAsset === "BNB"
-                        ? `· Wallet: ${myriadBscBalances?.bnbFormatted ?? "0"} BNB (BNB Chain)`
-                        : "(BNB Chain)"}
-                    </label>
-                    <div className="relative">
-                      <input
-                        type="text"
-                        value={amount}
-                        onChange={(e) =>
-                          setAmount(e.target.value.replace(/[^0-9.]/g, ""))
-                        }
-                        placeholder={
-                          myriadWithdrawAsset === "BNB" ? "0.0000" : "0.00"
-                        }
-                        className={`w-full px-4 py-2 pr-16 bg-white/5 border border-white/10 rounded-lg focus:outline-none ${bscFocusBorder} text-white`}
-                        disabled={isSendingMyriadStable}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => {
-                          if (myriadWithdrawAsset === "USD1") {
-                            setAmount(myriadBscBalances?.usd1Formatted ?? "0");
-                          } else if (myriadWithdrawAsset === "USDT") {
-                            setAmount(myriadBscBalances?.usdtFormatted ?? "0");
-                          } else {
-                            setAmount(
-                              myriadBscBalances?.bnbMaxSendAfterReserveFormatted ??
-                                "0",
-                            );
-                          }
-                        }}
-                        className={`absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs rounded font-semibold ${bscAccentMax}`}
-                      >
-                        MAX
-                      </button>
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => void handleMyriadWithdraw()}
-                    disabled={
-                      isSendingMyriadStable ||
-                      !recipient.trim() ||
-                      !amount ||
-                      !eoaAddress ||
-                      (myriadWithdrawAsset === "USD1"
-                        ? (myriadBscBalances?.usd1 ?? 0) <= 0
-                        : myriadWithdrawAsset === "USDT"
-                          ? (myriadBscBalances?.usdt ?? 0) <= 0
-                          : BigInt(
-                                myriadBscBalances?.bnbMaxSendAfterReserveWei ??
-                                  "0",
-                              ) === BigInt(0))
-                    }
-                    className={`w-full py-3 disabled:cursor-not-allowed font-bold rounded-lg transition-colors ${bscAccentSubmit}`}
-                  >
-                    {isSendingMyriadStable
-                      ? "Sending..."
-                      : myriadWithdrawAsset === "BNB"
-                        ? "Send BNB"
-                        : myriadWithdrawAsset === "USD1"
-                          ? "Send USD1"
-                          : "Send USDT"}
-                  </button>
-                  {!eoaAddress && (
-                    <p className="text-xs text-yellow-400 text-center">
-                      Connect your wallet to withdraw.
-                    </p>
-                  )}
-                </div>
-              )
-            ) : activeTab === "deposit" ? (
-              <div className="space-y-4">
-                {!safeAddr ? (
-                  <div className="text-center py-8 space-y-3">
-                    {isWalletsLoading ? (
-                      <>
-                        <div className="flex items-center justify-center">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#ffc000]"></div>
-                        </div>
-                        <p className="text-gray-400">
-                          Setting up your wallet...
-                        </p>
-                      </>
-                    ) : (
-                      <p className="text-gray-400">
-                        Please connect your wallet to view deposit addresses. If
-                        you just logged in, your wallet may still be
-                        initializing.
-                      </p>
-                    )}
-                  </div>
-                ) : (
-                  <>
-                    <div className="bg-white/5 rounded-lg p-4">
-                      <h4 className="text-white font-semibold mb-3">
-                        Deposit Addresses
-                      </h4>
-                      <p className="text-xs text-gray-400 mb-3">
-                        Send assets to these addresses to bridge and swap to
-                        USDC.e on Polygon for trading.
-                      </p>
-                      {isLoadingDepositAddresses ? (
-                        <div className="flex items-center justify-center py-4">
-                          <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-[#ffc000]"></div>
-                        </div>
-                      ) : depositAddressesError ? (
-                        <div className="text-red-400 text-sm py-2">
-                          Failed to load deposit addresses. Please try again
-                          later.
-                        </div>
-                      ) : depositAddressesData?.address ? (
-                        <div className="space-y-3">
-                          {/* Polygon (USDC.e) Address */}
-                          <div className="flex flex-col gap-1">
-                            <span className="text-gray-400 text-xs">
-                              Polygon (USDC.e):
-                            </span>
-                            <div className="flex items-center gap-2 bg-black/30 rounded px-2 py-1.5">
-                              <span className="text-white text-xs font-mono break-all flex-1 min-w-0">
-                                {depositAddressesData.address.evm}
-                              </span>
-                              <button
-                                onClick={() =>
-                                  handleCopyAddress(
-                                    depositAddressesData.address.evm,
-                                    "evm",
-                                  )
-                                }
-                                className="p-1 hover:bg-white/10 rounded transition-colors shrink-0"
-                                title="Copy Polygon address"
-                              >
-                                {copiedAddress === "evm" ? (
-                                  <Check className="w-4 h-4 text-green-400" />
-                                ) : (
-                                  <Copy className="w-4 h-4 text-gray-400 hover:text-white" />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Solana Address */}
-                          <div className="flex flex-col gap-1">
-                            <span className="text-gray-400 text-xs">
-                              Solana (SVM):
-                            </span>
-                            <div className="flex items-center gap-2 bg-black/30 rounded px-2 py-1.5">
-                              <span className="text-white text-xs font-mono break-all flex-1 min-w-0">
-                                {depositAddressesData.address.svm}
-                              </span>
-                              <button
-                                onClick={() =>
-                                  handleCopyAddress(
-                                    depositAddressesData.address.svm,
-                                    "svm",
-                                  )
-                                }
-                                className="p-1 hover:bg-white/10 rounded transition-colors shrink-0"
-                                title="Copy Solana address"
-                              >
-                                {copiedAddress === "svm" ? (
-                                  <Check className="w-4 h-4 text-green-400" />
-                                ) : (
-                                  <Copy className="w-4 h-4 text-gray-400 hover:text-white" />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-
-                          {/* Bitcoin Address */}
-                          <div className="flex flex-col gap-1">
-                            <span className="text-gray-400 text-xs">
-                              Bitcoin:
-                            </span>
-                            <div className="flex items-center gap-2 bg-black/30 rounded px-2 py-1.5">
-                              <span className="text-white text-xs font-mono break-all flex-1 min-w-0">
-                                {depositAddressesData.address.btc}
-                              </span>
-                              <button
-                                onClick={() =>
-                                  handleCopyAddress(
-                                    depositAddressesData.address.btc,
-                                    "btc",
-                                  )
-                                }
-                                className="p-1 hover:bg-white/10 rounded transition-colors shrink-0"
-                                title="Copy Bitcoin address"
-                              >
-                                {copiedAddress === "btc" ? (
-                                  <Check className="w-4 h-4 text-green-400" />
-                                ) : (
-                                  <Copy className="w-4 h-4 text-gray-400 hover:text-white" />
-                                )}
-                              </button>
-                            </div>
-                          </div>
-
-                          {depositAddressesData.note && (
-                            <p className="text-xs text-gray-500 mt-2 italic">
-                              {depositAddressesData.note}
-                            </p>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="text-gray-400 text-sm py-2">
-                          No deposit addresses available.
-                        </div>
-                      )}
-                    </div>
-                  </>
-                )}
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {/* Success Message */}
-                {showSuccess && (
-                  <div className="bg-green-500/20 border border-green-500/40 rounded-lg p-3">
-                    <p className="text-green-300 font-medium text-sm">
-                      Transfer successful!
-                    </p>
-                  </div>
-                )}
-
-                {/* Error Message */}
-                {error && showError && (
-                  <div className="bg-red-500/20 border border-red-500/40 rounded-lg p-3">
-                    <p className="text-red-300 text-sm">{getErrorMessage()}</p>
-                  </div>
-                )}
-
-                {/* Address Validation Error */}
-                {addressError && showError && (
-                  <div className="bg-red-500/20 border border-red-500/40 rounded-lg p-3">
-                    <p className="text-red-300 text-sm">{addressError}</p>
-                  </div>
-                )}
-
-                {/* Balance Display */}
-                <div className="bg-white/5 rounded-lg p-3">
-                  <p className="text-xs text-gray-400 mb-1">
-                    Available Balance
-                  </p>
-                  <p className="text-lg font-bold">
-                    ${formattedUsdcBalance} USDC.e
-                  </p>
-                </div>
-
-                {/* Recipient Input */}
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2">
-                    Recipient Address
-                  </label>
-                  <input
-                    type="text"
-                    value={recipient}
-                    onChange={(e) => setRecipient(e.target.value)}
-                    placeholder="0x..."
-                    className="w-full px-4 py-2 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-[#ffc000] text-white font-mono text-sm"
-                    disabled={isTransferring}
-                  />
-                </div>
-
-                {/* Amount Input */}
-                <div>
-                  <label className="block text-sm text-gray-400 mb-2">
-                    Amount (USDC.e)
-                  </label>
-                  <div className="relative">
-                    <input
-                      type="text"
-                      value={amount}
-                      onChange={(e) => setAmount(e.target.value)}
-                      placeholder="0.00"
-                      className="w-full px-4 py-2 pr-16 bg-white/5 border border-white/10 rounded-lg focus:outline-none focus:border-[#ffc000] text-white"
-                      disabled={isTransferring}
-                    />
-                    <button
-                      type="button"
-                      onClick={handleSendMax}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 px-2 py-1 text-xs bg-[#ffc000] hover:bg-[#ffd000] rounded text-black font-semibold"
-                    >
-                      MAX
-                    </button>
-                  </div>
-                </div>
-
-                {/* Send Button */}
-                <button
-                  onClick={handleTransfer}
-                  disabled={
-                    isTransferring ||
-                    !recipient ||
-                    !amount ||
-                    !relayClient ||
-                    !safeAddr
-                  }
-                  className="w-full py-3 bg-[#ffc000] hover:bg-[#ffd000] disabled:bg-gray-600 disabled:cursor-not-allowed text-black font-bold rounded-lg transition-colors"
-                >
-                  {isTransferring ? "Sending..." : "Send USDC.e"}
-                </button>
-
-                {!relayClient && eoaAddress && initializeTradingSession && (
-                  <div className="space-y-3 mt-2">
-                    <button
-                      onClick={async () => {
-                        if (!initializeTradingSession) return;
-                        setIsInitializing(true);
-                        try {
-                          await initializeTradingSession();
-                        } catch (error) {
-                          console.error("Failed to initialize trading:", error);
-                        } finally {
-                          setIsInitializing(false);
-                        }
-                      }}
-                      disabled={
-                        isInitializing ||
-                        currentStep !== "idle" ||
-                        isTradingSessionComplete ||
-                        isGeoblocked
-                      }
-                      className="w-full px-6 py-3 bg-[#ffc000] text-black font-semibold rounded-lg hover:bg-[#ffd633] transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-[#ffc000]"
-                    >
-                      {isInitializing || currentStep !== "idle" ? (
-                        <span className="flex items-center justify-center gap-2">
-                          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-black"></div>
-                          {currentStep === "checking"
-                            ? "Checking..."
-                            : currentStep === "deploying"
-                              ? "Deploying Safe..."
-                              : currentStep === "credentials"
-                                ? "Setting up credentials..."
-                                : currentStep === "approvals"
-                                  ? "Setting approvals..."
-                                  : "Initializing..."}
-                        </span>
-                      ) : isGeoblocked ? (
-                        "Trading not available in your region"
-                      ) : (
-                        "Initialize Trading"
-                      )}
-                    </button>
-                    {/* Show geoblock message when geoblocked */}
-                    {isGeoblocked &&
-                      !isInitializing &&
-                      currentStep === "idle" && (
-                        <p className="text-yellow-400 text-sm text-center">
-                          {geoblockStatus?.country || geoblockStatus?.region
-                            ? `Trading is not available in your region (${geoblockStatus.country}${geoblockStatus.region ? `, ${geoblockStatus.region}` : ""}). Polymarket is geoblocked in your location.`
-                            : "Trading is not available in your region. Polymarket is geoblocked in your location."}
-                        </p>
-                      )}
-                    {sessionError && (
-                      <p className="text-red-400 text-sm text-center">
-                        {sessionError.message ||
-                          "Failed to initialize trading session"}
-                      </p>
-                    )}
-                  </div>
-                )}
-                {!relayClient && !eoaAddress && (
-                  <p className="text-xs text-yellow-400 mt-2 text-center">
-                    Please connect your wallet first
-                  </p>
-                )}
-                {!relayClient && eoaAddress && !initializeTradingSession && (
-                  <p className="text-xs text-yellow-400 mt-2 text-center">
-                    Start a trading session first
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
+          ))}
         </div>
       </div>
+      <DwAmountField
+        available={
+          kalshiWithdrawAsset === "USDC"
+            ? `${kalshiUsdcBalanceData?.formatted ?? "0.00"} USDC`
+            : `${solanaBalanceData?.formatted ?? "0"} SOL`
+        }
+        value={amount}
+        onChange={(v) => setAmount(v)}
+        placeholder={kalshiWithdrawAsset === "USDC" ? "0.00" : "0.0000"}
+        disabled={isSendingSol || isSendingUsdc}
+        onMax={() => {
+          if (kalshiWithdrawAsset === "USDC") {
+            setAmount(kalshiUsdcBalanceData?.formatted ?? "0");
+          } else {
+            setAmount(
+              solanaBalanceData
+                ? String(
+                    Math.max(0, solanaBalanceData.sol - 0.0001).toFixed(4),
+                  )
+                : "0",
+            );
+          }
+        }}
+      />
+      <DwRecipientField
+        label="Send to (Solana address)"
+        placeholder="Paste a Solana address"
+        value={recipient}
+        onChange={setRecipient}
+        disabled={isSendingSol || isSendingUsdc}
+      />
     </>
+  );
+
+  /* ---------- Limitless (Base) ---------- */
+  const limitlessDeposit = (
+    <>
+      <div className="acct-intro">
+        <h3 className="rx-h3">Base wallet · Limitless</h3>
+        <p>
+          Send USDC or ETH on Base to this address to fund your Limitless
+          trading.
+        </p>
+      </div>
+      {!eoaAddress ? (
+        <DwNote>Connect your wallet to see your Base address.</DwNote>
+      ) : (
+        <>
+          <DwAddressField
+            label="Base (EVM) address"
+            address={eoaAddress}
+            copied={copiedAddress === "evm"}
+            onCopy={() => handleCopyAddress(eoaAddress, "evm")}
+            copyLabel="Copy Base address"
+            icon="/images/brands/base.webp"
+          />
+          <div className="rx-well dw-bal">
+            <span className="rx-small">Wallet balance (Base)</span>
+            <span className="dw-bal__v">
+              {isBaseBalanceLoading || isRefreshingBaseBalance ? (
+                <span className="rx-skel" aria-label="Loading balance" />
+              ) : (
+                <span>
+                  {baseUsdcFormatted} USDC <small>({baseEthFormatted} ETH)</small>
+                </span>
+              )}
+              <DwRefreshButton
+                onClick={handleRefreshLimitlessBalance}
+                disabled={isRefreshingBaseBalance || isBaseBalanceLoading}
+                spinning={isRefreshingBaseBalance}
+              />
+            </span>
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  const limitlessWithdraw = (
+    <>
+      {limitlessWithdrawError && <DwError>{limitlessWithdrawError}</DwError>}
+      {showSuccess && <DwSuccess />}
+      <DwAmountField
+        available={`${baseUsdcFormatted} USDC (Base)`}
+        value={amount}
+        onChange={(v) => setAmount(v.replace(/[^0-9.]/g, ""))}
+        placeholder="0.00"
+        disabled={isSendingLimitlessUsdc}
+        onMax={() => setAmount(baseUsdcFormatted)}
+      />
+      <DwRecipientField
+        label="Send to (EVM address)"
+        placeholder="0x…"
+        value={recipient}
+        onChange={setRecipient}
+        disabled={isSendingLimitlessUsdc}
+      />
+    </>
+  );
+
+  /* ---------- Myriad / Predict.fun (BNB Smart Chain) ---------- */
+  const bscDeposit = (
+    <>
+      <div className="acct-intro">
+        <h3 className="rx-h3">BNB Smart Chain · {bscVenueName}</h3>
+      </div>
+      <div className="acct-alert" role="note">
+        <CircleAlert className="size-4" aria-hidden />
+        <p>
+          {isPredictFunBsc ? (
+            <>
+              Only send <b>USDT</b> (BEP-20) on <b>BNB Smart Chain</b> to this
+              address to trade on Predict.fun.
+            </>
+          ) : (
+            <>
+              Only send <b>USD1</b> or <b>USDT</b> (BEP-20) on{" "}
+              <b>BNB Smart Chain</b> to this address to trade on Myriad.
+            </>
+          )}
+        </p>
+      </div>
+      {!eoaAddress ? (
+        <DwNote>Connect your wallet to see your BNB Chain address.</DwNote>
+      ) : (
+        <>
+          <DwAddressField
+            label="BNB Chain (EVM) address"
+            address={eoaAddress}
+            copied={copiedAddress === "evm"}
+            onCopy={() => handleCopyAddress(eoaAddress, "evm")}
+            copyLabel="Copy address"
+          />
+          <div className="rx-well dw-bal dw-bal--stack">
+            <div className="dw-bal__row">
+              <span className="rx-small">Wallet balance (BNB Chain)</span>
+              <DwRefreshButton
+                onClick={() => void handleRefreshMyriadBscBalance()}
+                disabled={isRefreshingMyriadBsc || isMyriadBscBalancesLoading}
+                spinning={isRefreshingMyriadBsc}
+              />
+            </div>
+            {isMyriadBscBalancesLoading || isRefreshingMyriadBsc ? (
+              <span className="rx-skel" aria-label="Loading balance" />
+            ) : (
+              <>
+                {isPredictFunBsc ? (
+                  <>
+                    <span className="dw-bal__big">
+                      {myriadBscBalances?.usdtFormatted ?? "0"} USDT
+                    </span>
+                    <span className="dw-bal__sub">
+                      {myriadBscBalances?.bnbFormatted ?? "0"} BNB (gas)
+                    </span>
+                  </>
+                ) : (
+                  <>
+                    <span className="dw-bal__big">
+                      {formatCurrency(myriadBscBalances?.totalUsdApprox ?? 0)}
+                    </span>
+                    <span className="dw-bal__sub">
+                      {myriadBscBalances?.bnbFormatted ?? "0"} BNB ·{" "}
+                      {myriadBscBalances?.usd1Formatted ?? "0"} USD1 ·{" "}
+                      {myriadBscBalances?.usdtFormatted ?? "0"} USDT
+                    </span>
+                    {(myriadBscBalances?.usdc ?? 0) > 0 && (
+                      <span className="rx-help">
+                        USDC included in total above
+                      </span>
+                    )}
+                  </>
+                )}
+                <p className="dw-bal__note">
+                  Keep native BNB on this chain for gas (trades, transfers). As
+                  a rule of thumb, leave at least{" "}
+                  <span className="rx-num text-rx-text-2">
+                    {MYRIAD_BNB_WITHDRAW_GAS_RESERVE_BNB} BNB
+                  </span>{" "}
+                  or more if you trade often.
+                </p>
+              </>
+            )}
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  const bscAssets: MyriadWithdrawAsset[] = isPredictFunBsc
+    ? ["BNB", "USDT"]
+    : ["BNB", "USD1", "USDT"];
+  const bscAvailable =
+    myriadWithdrawAsset === "USD1"
+      ? `${myriadBscBalances?.usd1Formatted ?? "0"} USD1`
+      : myriadWithdrawAsset === "USDT"
+        ? `${myriadBscBalances?.usdtFormatted ?? "0"} USDT`
+        : `${myriadBscBalances?.bnbMaxSendAfterReserveFormatted ?? "0"} BNB`;
+  const bscBalanceHelp = [
+    !isPredictFunBsc
+      ? `Total balance (est.) ${formatCurrency(myriadBscBalances?.totalUsdApprox ?? 0)}`
+      : null,
+    myriadWithdrawAsset === "BNB"
+      ? `Wallet ${myriadBscBalances?.bnbFormatted ?? "0"} BNB`
+      : null,
+    "BNB Chain",
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
+  const bscWithdraw = (
+    <>
+      {myriadWithdrawError && <DwError>{myriadWithdrawError}</DwError>}
+      {showSuccess && <DwSuccess />}
+      <div className="rx-field">
+        <span className="rx-label" id="dw-bsc-asset">
+          Withdraw asset
+        </span>
+        <div
+          className="rx-seg dw-assets"
+          role="group"
+          aria-labelledby="dw-bsc-asset"
+        >
+          {bscAssets.map((asset) => (
+            <button
+              key={asset}
+              type="button"
+              aria-pressed={myriadWithdrawAsset === asset}
+              className={clsx(
+                "rx-seg__item",
+                myriadWithdrawAsset === asset && "is-active",
+              )}
+              onClick={() => {
+                setMyriadWithdrawAsset(asset);
+                setAmount("");
+              }}
+            >
+              {asset}
+            </button>
+          ))}
+        </div>
+        <span className="rx-help">
+          {isPredictFunBsc
+            ? "Native BNB or BEP-20 USDT on BNB Smart Chain. Switch network if prompted."
+            : "Native BNB or BEP-20 USD1 / USDT on BNB Smart Chain. Switch network if prompted."}
+        </span>
+      </div>
+      {myriadWithdrawAsset === "BNB" ? (
+        <div className="acct-alert" role="note">
+          <CircleAlert className="size-4" aria-hidden />
+          <p>
+            <b>BNB gas reserve: </b>
+            Max withdraw leaves about{" "}
+            <b>{MYRIAD_BNB_WITHDRAW_GAS_RESERVE_BNB} BNB</b> in your wallet so
+            you can still pay network fees on BNB Smart Chain. The <b>Max</b>{" "}
+            button only fills the amount above that reserve.
+          </p>
+        </div>
+      ) : (
+        <p className="rx-help m-0">
+          Sending {isPredictFunBsc ? "USDT" : "USD1 or USDT"} still uses a small
+          amount of BNB for gas. Keep native BNB in this wallet (e.g. at least
+          ~{MYRIAD_BNB_WITHDRAW_GAS_RESERVE_BNB} BNB).
+        </p>
+      )}
+      <DwAmountField
+        available={bscAvailable}
+        help={bscBalanceHelp}
+        value={amount}
+        onChange={(v) => setAmount(v.replace(/[^0-9.]/g, ""))}
+        placeholder={myriadWithdrawAsset === "BNB" ? "0.0000" : "0.00"}
+        disabled={isSendingMyriadStable}
+        onMax={() => {
+          if (myriadWithdrawAsset === "USD1") {
+            setAmount(myriadBscBalances?.usd1Formatted ?? "0");
+          } else if (myriadWithdrawAsset === "USDT") {
+            setAmount(myriadBscBalances?.usdtFormatted ?? "0");
+          } else {
+            setAmount(myriadBscBalances?.bnbMaxSendAfterReserveFormatted ?? "0");
+          }
+        }}
+      />
+      <DwRecipientField
+        label="Send to (EVM address)"
+        placeholder="0x…"
+        value={recipient}
+        onChange={setRecipient}
+        disabled={isSendingMyriadStable}
+      />
+    </>
+  );
+
+  /* ---------- Polymarket ---------- */
+  const polymarketDeposit = !safeAddr ? (
+    isWalletsLoading ? (
+      <DwLoading label="Setting up your wallet" />
+    ) : (
+      <DwNote>
+        Please connect your wallet to view deposit addresses. If you just
+        logged in, your wallet may still be initializing.
+      </DwNote>
+    )
+  ) : (
+    <>
+      <div className="acct-intro">
+        <h3 className="rx-h3">Deposit addresses · Polymarket</h3>
+        <p>
+          Send assets to these addresses to bridge and swap to USDC.e on Polygon
+          for trading.
+        </p>
+      </div>
+      {isLoadingDepositAddresses ? (
+        <DwLoading label="Loading deposit addresses" />
+      ) : depositAddressesError ? (
+        <DwError>Failed to load deposit addresses. Please try again later.</DwError>
+      ) : depositAddressesData?.address ? (
+        <>
+          <DwAddressField
+            label="Polygon (USDC.e)"
+            address={depositAddressesData.address.evm}
+            copied={copiedAddress === "evm"}
+            onCopy={() =>
+              handleCopyAddress(depositAddressesData.address.evm, "evm")
+            }
+            copyLabel="Copy Polygon address"
+          />
+          <DwAddressField
+            label="Solana (SVM)"
+            address={depositAddressesData.address.svm}
+            copied={copiedAddress === "svm"}
+            onCopy={() =>
+              handleCopyAddress(depositAddressesData.address.svm, "svm")
+            }
+            copyLabel="Copy Solana address"
+          />
+          <DwAddressField
+            label="Bitcoin"
+            address={depositAddressesData.address.btc}
+            copied={copiedAddress === "btc"}
+            onCopy={() =>
+              handleCopyAddress(depositAddressesData.address.btc, "btc")
+            }
+            copyLabel="Copy Bitcoin address"
+          />
+          {depositAddressesData.note && (
+            <p className="rx-help m-0">{depositAddressesData.note}</p>
+          )}
+        </>
+      ) : (
+        <DwNote>No deposit addresses available.</DwNote>
+      )}
+    </>
+  );
+
+  const showInitTrading =
+    !relayClient && !!eoaAddress && !!initializeTradingSession;
+  const showGeoblock =
+    showInitTrading && isGeoblocked && !isInitializing && currentStep === "idle";
+
+  const polymarketWithdraw = (
+    <>
+      {showSuccess && <DwSuccess />}
+      {error && showError && <DwError>{getErrorMessage()}</DwError>}
+      {addressError && showError && <DwError>{addressError}</DwError>}
+      <div className="rx-well dw-bal">
+        <span className="rx-small">Available balance</span>
+        <span className="dw-bal__v">
+          <span>${formattedUsdcBalance} USDC.e</span>
+        </span>
+      </div>
+      <DwAmountField
+        label="Amount (USDC.e)"
+        available={`$${formattedUsdcBalance}`}
+        value={amount}
+        onChange={(v) => setAmount(v)}
+        placeholder="0.00"
+        disabled={isTransferring}
+        onMax={handleSendMax}
+      />
+      <DwRecipientField
+        label="Send to (Polygon address)"
+        placeholder="0x…"
+        value={recipient}
+        onChange={setRecipient}
+        disabled={isTransferring}
+      />
+      {showGeoblock && (
+        <div className="rx-raised acct-blocked" role="note">
+          <span className="acct-blocked__ico" aria-hidden="true">
+            <Compass className="size-6" />
+          </span>
+          <span className="rx-eyebrow">Region restricted</span>
+          <b>Trading isn&apos;t available in your region</b>
+          <p>
+            {geoblockStatus?.country || geoblockStatus?.region
+              ? `Trading is not available in your region (${geoblockStatus.country}${geoblockStatus.region ? `, ${geoblockStatus.region}` : ""}). Polymarket is geoblocked in your location.`
+              : "Trading is not available in your region. Polymarket is geoblocked in your location."}
+          </p>
+        </div>
+      )}
+      {showInitTrading && sessionError && (
+        <DwError>
+          {sessionError.message || "Failed to initialize trading session"}
+        </DwError>
+      )}
+    </>
+  );
+
+  /* ---------- footer: the step's main action ---------- */
+  const sendingLabel = (
+    <>
+      <span className="rx-spin" aria-hidden="true" />
+      Sending…
+    </>
+  );
+
+  let foot: ReactNode;
+  if (activeTab === "deposit") {
+    foot = (
+      <button
+        type="button"
+        className="rx-btn rx-btn--secondary rx-btn--block"
+        onClick={onClose}
+      >
+        Done
+      </button>
+    );
+  } else if (platformTab === "kalshi") {
+    const busy = isSendingSol || isSendingUsdc;
+    foot = (
+      <>
+        <button
+          type="button"
+          className="rx-btn rx-btn--primary rx-btn--block"
+          onClick={
+            kalshiWithdrawAsset === "USDC"
+              ? handleKalshiWithdrawUsdc
+              : handleKalshiWithdraw
+          }
+          disabled={
+            isSendingSol ||
+            isSendingUsdc ||
+            !recipient.trim() ||
+            !amount ||
+            !solanaAddress ||
+            (solanaSource === "privy" && !privySolanaWallet)
+          }
+          aria-busy={busy || undefined}
+        >
+          {busy
+            ? sendingLabel
+            : kalshiWithdrawAsset === "USDC"
+              ? "Send USDC"
+              : "Send SOL"}
+        </button>
+        {!solanaAddress && (
+          <p className="rx-help m-0">
+            Connect your Phantom or Privy Solana wallet to withdraw.
+          </p>
+        )}
+      </>
+    );
+  } else if (platformTab === "limitless") {
+    foot = (
+      <>
+        <button
+          type="button"
+          className="rx-btn rx-btn--primary rx-btn--block"
+          onClick={handleLimitlessWithdraw}
+          disabled={
+            isSendingLimitlessUsdc ||
+            !recipient.trim() ||
+            !amount ||
+            !eoaAddress ||
+            baseUsdcBalance <= 0
+          }
+          aria-busy={isSendingLimitlessUsdc || undefined}
+        >
+          {isSendingLimitlessUsdc ? sendingLabel : "Send USDC (Base)"}
+        </button>
+        {!eoaAddress && (
+          <p className="rx-help m-0">Connect your wallet to withdraw.</p>
+        )}
+      </>
+    );
+  } else if (platformTab === "myriad" || platformTab === "predictfun") {
+    foot = (
+      <>
+        <button
+          type="button"
+          className="rx-btn rx-btn--primary rx-btn--block"
+          onClick={() => void handleMyriadWithdraw()}
+          disabled={
+            isSendingMyriadStable ||
+            !recipient.trim() ||
+            !amount ||
+            !eoaAddress ||
+            (myriadWithdrawAsset === "USD1"
+              ? (myriadBscBalances?.usd1 ?? 0) <= 0
+              : myriadWithdrawAsset === "USDT"
+                ? (myriadBscBalances?.usdt ?? 0) <= 0
+                : BigInt(myriadBscBalances?.bnbMaxSendAfterReserveWei ?? "0") ===
+                  BigInt(0))
+          }
+          aria-busy={isSendingMyriadStable || undefined}
+        >
+          {isSendingMyriadStable
+            ? sendingLabel
+            : myriadWithdrawAsset === "BNB"
+              ? "Send BNB"
+              : myriadWithdrawAsset === "USD1"
+                ? "Send USD1"
+                : "Send USDT"}
+        </button>
+        {!eoaAddress && (
+          <p className="rx-help m-0">Connect your wallet to withdraw.</p>
+        )}
+      </>
+    );
+  } else {
+    const initBusy = isInitializing || currentStep !== "idle";
+    foot = (
+      <>
+        <button
+          type="button"
+          className="rx-btn rx-btn--primary rx-btn--block"
+          onClick={handleTransfer}
+          disabled={
+            isTransferring || !recipient || !amount || !relayClient || !safeAddr
+          }
+          aria-busy={isTransferring || undefined}
+        >
+          {isTransferring ? sendingLabel : "Send USDC.e"}
+        </button>
+        {showInitTrading && !showGeoblock && (
+          <button
+            type="button"
+            className="rx-btn rx-btn--secondary rx-btn--block"
+            onClick={async () => {
+              if (!initializeTradingSession) return;
+              setIsInitializing(true);
+              try {
+                await initializeTradingSession();
+              } catch (error) {
+                console.error("Failed to initialize trading:", error);
+              } finally {
+                setIsInitializing(false);
+              }
+            }}
+            disabled={
+              isInitializing ||
+              currentStep !== "idle" ||
+              isTradingSessionComplete ||
+              isGeoblocked
+            }
+            aria-busy={initBusy || undefined}
+          >
+            {initBusy ? (
+              <>
+                <span className="rx-spin" aria-hidden="true" />
+                {currentStep === "checking"
+                  ? "Checking…"
+                  : currentStep === "deploying"
+                    ? "Deploying Safe…"
+                    : currentStep === "credentials"
+                      ? "Setting up credentials…"
+                      : currentStep === "approvals"
+                        ? "Setting approvals…"
+                        : "Initializing…"}
+              </>
+            ) : isGeoblocked ? (
+              "Trading not available in your region"
+            ) : (
+              "Initialize trading"
+            )}
+          </button>
+        )}
+        {!relayClient && !eoaAddress && (
+          <p className="rx-help m-0">Please connect your wallet first</p>
+        )}
+        {!relayClient && eoaAddress && !initializeTradingSession && (
+          <p className="rx-help m-0">Start a trading session first</p>
+        )}
+      </>
+    );
+  }
+
+  const body =
+    platformTab === "kalshi"
+      ? activeTab === "deposit"
+        ? kalshiDeposit
+        : kalshiWithdraw
+      : platformTab === "limitless"
+        ? activeTab === "deposit"
+          ? limitlessDeposit
+          : limitlessWithdraw
+        : platformTab === "myriad" || platformTab === "predictfun"
+          ? activeTab === "deposit"
+            ? bscDeposit
+            : bscWithdraw
+          : activeTab === "deposit"
+            ? polymarketDeposit
+            : polymarketWithdraw;
+
+  return (
+    <AcctModal labelledBy="dw-title" variant="plain" modalRef={modalRef}>
+      <AcctModalHead
+        id="dw-title"
+        title="Deposit and withdraw"
+        description="Fund your prediction market accounts"
+        onClose={onClose}
+        closeLabel="Close deposit and withdraw"
+      />
+
+      <div className="acct-modal__body">
+        {/* venue: five equal columns, logo over the name */}
+        <div className="rx-seg dw-kinds" role="tablist" aria-label="Account">
+          {DW_VENUES.map((v) => (
+            <button
+              key={v.key}
+              type="button"
+              role="tab"
+              aria-selected={platformTab === v.key}
+              className={clsx(
+                "rx-seg__item",
+                platformTab === v.key && "is-active",
+              )}
+              onClick={() => {
+                setPlatformTab(v.key);
+                if (v.key === "predictfun") setMyriadWithdrawAsset("USDT");
+              }}
+            >
+              <Image
+                className="dw-ico"
+                src={v.icon}
+                alt=""
+                width={18}
+                height={18}
+              />
+              {v.short ? (
+                <>
+                  <span className="sm:hidden">{v.short}</span>
+                  <span className="max-sm:hidden">{v.label}</span>
+                </>
+              ) : (
+                v.label
+              )}
+            </button>
+          ))}
+        </div>
+
+        <div className="rx-seg dw-modes" role="group" aria-label="Deposit or withdraw">
+          {(
+            [
+              ["deposit", "Deposit"],
+              ["withdraw", "Withdraw"],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              type="button"
+              aria-pressed={activeTab === key}
+              className={clsx("rx-seg__item", activeTab === key && "is-active")}
+              onClick={() => setActiveTab(key)}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {body}
+      </div>
+
+      <div className="acct-modal__foot acct-modal__foot--stack">{foot}</div>
+    </AcctModal>
+  );
+}
+
+/* ---------------- presentation helpers (props only) ---------------- */
+
+const DW_VENUES: {
+  key: PlatformTab;
+  label: string;
+  short?: string;
+  icon: string;
+}[] = [
+  { key: "kalshi", label: "Kalshi", icon: "/images/brands/kalshi.webp" },
+  { key: "polymarket", label: "Polymarket", icon: "/images/brands/polymarket.webp" },
+  { key: "limitless", label: "Limitless", icon: "/images/brands/limitless.webp" },
+  { key: "myriad", label: "Myriad", icon: "/images/brands/myriad.webp" },
+  {
+    key: "predictfun",
+    label: "Predict.fun",
+    short: "Predict",
+    icon: "/images/brands/predictfun.webp",
+  },
+];
+
+/** Read-only deposit address: label, the full address (wraps), and Copy. */
+function DwAddressField({
+  label,
+  address,
+  copied,
+  onCopy,
+  copyLabel,
+  icon,
+}: {
+  label: string;
+  address: string;
+  copied: boolean;
+  onCopy: () => void;
+  copyLabel: string;
+  icon?: string;
+}) {
+  return (
+    <div className="rx-field">
+      <span className="rx-label">{label}</span>
+      <div className="dw-addr">
+        {icon ? (
+          <Image className="dw-ico" src={icon} alt="" width={18} height={18} />
+        ) : null}
+        <span className="dw-addr__v">{address}</span>
+        <button
+          type="button"
+          className={clsx("rx-btn rx-btn--secondary rx-btn--s", copied && "is-done")}
+          onClick={onCopy}
+          title={copyLabel}
+          aria-label={copied ? "Copied" : copyLabel}
+        >
+          {copied ? (
+            <>
+              <Check className="size-3.5" aria-hidden="true" />
+              Copied
+            </>
+          ) : (
+            "Copy"
+          )}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Amount input with the available balance and Max. */
+function DwAmountField({
+  label = "Amount",
+  available,
+  help,
+  value,
+  onChange,
+  placeholder,
+  disabled,
+  onMax,
+}: {
+  label?: string;
+  available: string;
+  help?: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder: string;
+  disabled?: boolean;
+  onMax: () => void;
+}) {
+  return (
+    <div className="rx-field">
+      <div className="dw-field-head">
+        <label className="rx-label" htmlFor="dw-amount">
+          {label}
+        </label>
+        <span className="rx-help">
+          Available <span className="rx-num">{available}</span>
+        </span>
+      </div>
+      <div className="rx-input">
+        <input
+          id="dw-amount"
+          type="text"
+          inputMode="decimal"
+          autoComplete="off"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+        />
+        <div className="rx-pct">
+          <button type="button" onClick={onMax}>
+            Max
+          </button>
+        </div>
+      </div>
+      {help ? <span className="rx-help">{help}</span> : null}
+    </div>
+  );
+}
+
+function DwRecipientField({
+  label,
+  placeholder,
+  value,
+  onChange,
+  disabled,
+}: {
+  label: string;
+  placeholder: string;
+  value: string;
+  onChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="rx-field">
+      <label className="rx-label" htmlFor="dw-recipient">
+        {label}
+      </label>
+      <div className="rx-input">
+        <input
+          id="dw-recipient"
+          type="text"
+          autoComplete="off"
+          spellCheck={false}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder={placeholder}
+          disabled={disabled}
+        />
+      </div>
+      <span className="rx-help">
+        Double-check the address. Withdrawals can&apos;t be reversed.
+      </span>
+    </div>
+  );
+}
+
+function DwRefreshButton({
+  onClick,
+  disabled,
+  spinning,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  spinning: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className="acct-copy"
+      onClick={onClick}
+      disabled={disabled}
+      title="Refresh balance"
+      aria-label="Refresh balance"
+    >
+      <RefreshCw
+        className={clsx("size-[13px]", spinning && "is-spinning")}
+        aria-hidden="true"
+      />
+    </button>
+  );
+}
+
+function DwLoading({ label }: { label: string }) {
+  return (
+    <div className="dw-loading" role="status">
+      <span className="rx-spin" aria-hidden="true" />
+      {label}…
+    </div>
+  );
+}
+
+function DwNote({ children }: { children: ReactNode }) {
+  return (
+    <div className="acct-alert acct-alert--muted">
+      <Wallet className="size-4" aria-hidden="true" />
+      <p>{children}</p>
+    </div>
+  );
+}
+
+function DwError({ children }: { children: ReactNode }) {
+  return (
+    <div className="acct-alert acct-alert--down" role="alert">
+      <CircleAlert className="size-4" aria-hidden="true" />
+      <p>{children}</p>
+    </div>
+  );
+}
+
+function DwSuccess() {
+  return (
+    <div className="acct-alert acct-alert--up" role="status">
+      <Check className="size-4" aria-hidden="true" />
+      <p>
+        <b>Transfer successful!</b>
+      </p>
+    </div>
   );
 }

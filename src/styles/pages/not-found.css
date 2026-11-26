@@ -1,0 +1,25 @@
+/* 404 page (src/app/not-found.tsx). Ported from design/404.html + design/css/pages.css (.err).
+   Scoped under .rx-404. Unlayered on purpose: globals.css styles bare h1 outside any layer. */
+
+.rx-404 .err { flex: 1 1 auto; min-height: 0; overflow-y: auto; display: flex; align-items: center; justify-content: center; padding: 48px var(--rx-gutter); }
+.rx-404 .err__card { max-width: 560px; width: 100%; margin: auto; padding: 44px clamp(22px, 4vw, 48px); display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; }
+.rx-404 .err__code { font-family: var(--rx-display); font-stretch: 125%; font-weight: 850; font-size: clamp(84px, 12vw, 140px); line-height: .9; letter-spacing: -.02em;
+  background: linear-gradient(180deg, #FFE7A6 0%, #FFB800 45%, #8A5A00 100%); -webkit-background-clip: text; background-clip: text; color: transparent; filter: drop-shadow(0 10px 30px rgba(255,184,0,.18)); }
+.rx-404 .err h1 { margin: 0; font-family: var(--rx-display); font-stretch: 112%; font-weight: 750; font-size: 26px; line-height: 1.2; letter-spacing: 0; color: var(--rx-text); }
+.rx-404 .err p { margin: 0; font-size: 15px; line-height: 1.55; color: var(--rx-text-2); max-width: 420px; }
+.rx-404 .err__acts { display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-top: 8px; }
+.rx-404 .err__acts .rx-btn { text-decoration: none; }
+.rx-404 .err__links { display: flex; flex-wrap: wrap; gap: 16px 18px; justify-content: center; margin-top: 4px; font-size: 13px; }
+.rx-404 .err__links a { color: var(--rx-text-2); text-decoration: none; padding: 7px 4px; margin: -7px -4px; border-radius: 6px; }
+.rx-404 .err__links a:hover { color: var(--rx-gold-hi); }
+.rx-404 .err__links a:focus-visible { outline: 2px solid var(--rx-gold-hi); outline-offset: 2px; }
+
+/* app header only, as on design/404.html: no "Market overview" page head */
+.rx-404 .rx-page-head { display: none; }
+.rx-404__chrome { flex-shrink: 0; }
+
+
+@media (max-width: 767px) {
+  .rx-404 .err { padding: 32px 16px 40px; }
+  .rx-404 .err__acts .rx-btn { min-height: 44px; }
+}

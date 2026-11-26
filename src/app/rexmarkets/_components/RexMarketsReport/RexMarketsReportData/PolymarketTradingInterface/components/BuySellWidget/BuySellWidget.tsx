@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback, useEffect, useRef } from "react";
-import Image from "next/image";
+import { useState, useMemo, useCallback, useEffect, useRef, useId } from "react";
 import { formatShares, formatCurrency } from "@/utils/format";
 import { calculateTotalCost, convertCentsToPrice } from "@/utils/order";
 import {
@@ -12,6 +11,14 @@ import {
   MIN_ORDER_SIZE,
 } from "@/utils/validation";
 import { Select, SelectOption } from "@/components/ui/Select";
+import {
+  AmountField,
+  PriceWell,
+  RegionBlockedNotice,
+  SideSeg,
+  TicketHead,
+  YesNoPair,
+} from "../../../shared/marketUi";
 import { useTrading } from "@/providers/TradingProvder";
 import useClobOrder, { type OrderParams } from "@/hooks/useClobOrder";
 import usePolygonBalances from "@/hooks/usePolygonBalances";
@@ -98,6 +105,7 @@ export default function BuySellWidget({
     currentStep,
     sessionError,
     isGeoblocked,
+    geoblockStatus,
   } = useTrading();
 
   const {
@@ -710,466 +718,248 @@ export default function BuySellWidget({
   };
 
   const disableReason = getDisableReason();
+  const fieldUid = useId().replace(/:/g, "");
+  const amountId = `pm-amount-${fieldUid}`;
+  const limitId = `pm-limit-${fieldUid}`;
 
   return (
-    <div className="flex flex-col border border-white/10 rounded-lg overflow-hidden">
-      {/* Profile Section - pr-12 on mobile for modal close button; title max-w on mobile */}
-      <div className="flex items-center gap-3 px-4 py-3 pr-12 lg:pr-4 border-b border-white/10">
-        {symbolImageUrl ? (
-          <div className="relative w-10 h-10 rounded-full overflow-hidden flex-shrink-0">
-            <Image
-              src={symbolImageUrl}
-              alt={marketTitle || "Market"}
-              width={40}
-              height={40}
-              className="object-cover"
-              unoptimized
-            />
-          </div>
-        ) : (
-          <div className="w-10 h-10 rounded-full flex items-center justify-center flex-shrink-0">
-            <span className="text-white/60 text-xs">?</span>
-          </div>
-        )}
-        <div className="flex-1 min-w-0 max-w-[65%] lg:max-w-none">
-          <div className="text-sm font-medium text-white truncate">
-            {marketTitle || "Market"}
-          </div>
-          <div className="text-xs text-white/60">No change</div>
-        </div>
+    <div className="mk-ticket">
+      {/* Mini market head */}
+      <TicketHead imageUrl={symbolImageUrl} title={marketTitle || "Market"} sub="No change" />
+
+      {/* Buy / Sell and the outcome picker */}
+      <div className="mk-ticket__row">
+        <SideSeg
+          value={activeTab}
+          onChange={(side) => {
+            setActiveTab(side);
+            setSelectedOutcome(null);
+          }}
+        />
+        <Select
+          value={selectedMarketValue}
+          onChange={handleMarketChange}
+          options={marketOptions}
+          placeholder="Market"
+          className="mk-select"
+          searchable
+          searchPlaceholder="Search options..."
+        />
       </div>
 
-      {/* Buy/Sell Tabs and Market Dropdown */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => {
-              setActiveTab("buy");
-              setSelectedOutcome(null);
-            }}
-            className={`px-4 py-2 text-sm font-semibold transition-colors rounded-t ${
-              activeTab === "buy"
-                ? "text-[#ffc000] border-b-2 border-[#ffc000]"
-                : "text-white/60 hover:text-white/80"
-            }`}
-          >
-            Buy
-          </button>
-          <button
-            onClick={() => {
-              setActiveTab("sell");
-              setSelectedOutcome(null);
-            }}
-            className={`px-4 py-2 text-sm font-semibold transition-colors rounded-t ${
-              activeTab === "sell"
-                ? "text-[#ffc000] border-b-2 border-[#ffc000] bg-[#0a0a0a]"
-                : "text-white/60 hover:text-white/80"
-            }`}
-          >
-            Sell
-          </button>
-        </div>
-        <div className="min-w-[140px] max-w-[200px] flex-1">
-          <Select
-            value={selectedMarketValue}
-            onChange={handleMarketChange}
-            options={marketOptions}
-            placeholder="Market"
-            className="w-full"
-            searchable
-            searchPlaceholder="Search options..."
-          />
-        </div>
-      </div>
+      {/* Yes / No */}
+      <YesNoPair
+        selected={selectedOutcome}
+        yesPrice={formatPrice(currentYesPrice)}
+        noPrice={formatPrice(currentNoPrice)}
+        onSelect={handleOutcomeSelect}
+      />
 
-      {/* Yes/No Selection Buttons */}
-      <div className="p-4 flex gap-3 bg-[#0a0a0a]">
-        <button
-          onClick={() => handleOutcomeSelect("Yes")}
-          className={`flex-1 py-2 px-2 rounded-lg font-semibold text-white transition-all relative ${
-            selectedOutcome === "Yes"
-              ? "bg-green-600 hover:bg-green-700 shadow-lg shadow-green-500/20"
-              : "bg-gray-600 hover:bg-gray-500 active:scale-[0.98]"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-center gap-2">
-            {selectedOutcome === "Yes" && (
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={3}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            )}
-            <span className="text-sm">Yes</span>
-            <span className="text-sm font-bold">
-              {formatPrice(currentYesPrice)}
-            </span>
-          </div>
-        </button>
-        <button
-          onClick={() => handleOutcomeSelect("No")}
-          className={`flex-1 py-2 px-2 rounded-lg font-semibold text-white transition-all relative ${
-            selectedOutcome === "No"
-              ? "bg-red-600 hover:bg-red-700 shadow-lg shadow-red-500/20"
-              : "bg-gray-600 hover:bg-gray-500 active:scale-[0.98]"
-          }`}
-        >
-          <div className="flex flex-row items-center justify-center gap-2">
-            {selectedOutcome === "No" && (
-              <svg
-                className="w-4 h-4"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth={3}
-                  d="M5 13l4 4L19 7"
-                />
-              </svg>
-            )}
-            <span className="text-sm">No</span>
-            <span className="text-sm font-bold">
-              {formatPrice(currentNoPrice)}
-            </span>
-          </div>
-        </button>
-      </div>
-
-      {/* Order Type Toggle */}
-      <div className="px-4 py-3 border-t border-white/10">
-        <label className="block text-xs text-white/60 mb-2">Order Type</label>
-        <div className="flex gap-2">
+      {/* Order type */}
+      <div className="mk-otype">
+        <span className="rx-label">Order type</span>
+        <div className="rx-seg" role="group" aria-label="Order type">
           <button
+            type="button"
             onClick={() => setOrderType("market")}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-              orderType === "market"
-                ? "bg-[#ffc000] text-black"
-                : "bg-white/5 text-white/60 hover:bg-white/10"
-            }`}
+            className={`rx-seg__item${orderType === "market" ? " is-active" : ""}`}
+            aria-pressed={orderType === "market"}
           >
             Market
           </button>
           <button
+            type="button"
             onClick={() => setOrderType("limit")}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${
-              orderType === "limit"
-                ? "bg-[#ffc000] text-black"
-                : "bg-white/5 text-white/60 hover:bg-white/10"
-            }`}
+            className={`rx-seg__item${orderType === "limit" ? " is-active" : ""}`}
+            aria-pressed={orderType === "limit"}
           >
             Limit
           </button>
         </div>
       </div>
 
-      {/* Size Input Section */}
-      <div className="px-4 py-4 border-t border-white/10">
-        {/* Current Market Price */}
-        <div className="mb-3 bg-white/5 rounded-lg p-3">
-          <p className="text-xs text-white/60 mb-1">Current Market Price</p>
-          <p className="text-lg font-bold text-white">
-            {formatPrice(
-              selectedOutcome === "Yes" ? currentYesPrice : currentNoPrice
-            )}
-          </p>
-        </div>
+      <PriceWell
+        label="Current market price"
+        value={formatPrice(
+          selectedOutcome === "Yes" ? currentYesPrice : currentNoPrice
+        )}
+      />
 
-        {/* Size/Amount Input */}
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm text-white/80">
-              {activeTab === "buy" ? "Amount" : "Size (shares)"}
+      {/* Size/Amount Input */}
+      <AmountField
+        id={amountId}
+        label={activeTab === "buy" ? "Amount ($)" : "Size (shares)"}
+        aside={
+          isTradingSessionComplete ? (
+            activeTab === "buy" ? (
+              <>Available: <b>{formatCurrency(usdcBalance ?? 0)}</b></>
+            ) : selectedOutcome ? (
+              <>Available shares: <b>{formatShares(availableShares)}</b></>
+            ) : (
+              <>
+                Available: Yes <b>{formatShares(availableSharesYes)}</b>, No{" "}
+                <b>{formatShares(availableSharesNo)}</b>
+              </>
+            )
+          ) : undefined
+        }
+        prefix={activeTab === "buy" ? "$" : undefined}
+        value={size}
+        onChange={handleSizeChange}
+        disabled={isSubmitting}
+        pcts={
+          isTradingSessionComplete
+            ? ([25, 50, 75, 100] as const).map((pct) => ({
+                label: pct === 100 ? "Max" : `${pct}%`,
+                onClick: () => handlePercentClick(pct),
+                disabled:
+                  isSubmitting ||
+                  (activeTab === "buy"
+                    ? (usdcBalance ?? 0) <= 0
+                    : availableShares <= 0),
+              }))
+            : undefined
+        }
+      />
+
+      {/* Limit Price Input */}
+      {orderType === "limit" && (
+        <div className="rx-field mk-amount">
+          <div className="mk-amount__top">
+            <label className="rx-label" htmlFor={limitId}>
+              Limit price (¢)
             </label>
-            {isTradingSessionComplete && (
-              <div className="flex flex-col items-start">
-                <span className="text-sm text-white/80">
-                  {activeTab === "buy" ? (
-                    <>Available: {formatCurrency(usdcBalance ?? 0)}</>
-                  ) : selectedOutcome ? (
-                    <>Available shares: {formatShares(availableShares)}</>
-                  ) : (
-                    <>
-                      Available: Yes {formatShares(availableSharesYes)}, No {formatShares(availableSharesNo)}
-                    </>
-                  )}
-                </span>
-                <div className="flex gap-1 mt-1.5">
-                  {([25, 50, 75, 100] as const).map((pct) => (
-                    <button
-                      key={pct}
-                      type="button"
-                      onClick={() => handlePercentClick(pct)}
-                      disabled={
-                        isSubmitting ||
-                        (activeTab === "buy"
-                          ? (usdcBalance ?? 0) <= 0
-                          : availableShares <= 0)
-                      }
-                      className="py-1 px-2 rounded border border-green-500/50 bg-white/5 text-white/90 text-[10px] font-medium hover:bg-white/10 hover:border-green-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white/5 transition-colors"
-                    >
-                      {pct === 100 ? "Max" : `${pct}%`}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
-          <div className="relative">
-            {activeTab === "buy" && (
-              <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white text-sm pointer-events-none">
-                $
-              </span>
-            )}
+          <div className="rx-input">
             <input
+              id={limitId}
               type="text"
-              value={size}
-              onChange={(e) => handleSizeChange(e.target.value)}
+              inputMode="numeric"
+              autoComplete="off"
+              value={limitPrice}
+              onChange={(e) => handleLimitPriceChange(e.target.value)}
               placeholder="0"
-              className={`w-full py-2 bg-transparent border border-white/10 rounded-lg focus:outline-none focus:border-[#ffc000] text-white text-sm placeholder-white/30 ${
-                activeTab === "buy" ? "pl-6" : "px-3"
-              }`}
+              maxLength={2}
               disabled={isSubmitting}
             />
+            <span className="rx-num mk-amount__suf" aria-hidden="true">¢</span>
           </div>
+          <p className="rx-help">Enter 1-99 (e.g., 55 = $0.55 or 55¢)</p>
         </div>
+      )}
 
-        {/* Limit Price Input */}
-        {orderType === "limit" && (
-          <div className="mb-3">
-            <label className="block text-sm text-white/80 mb-2">
-              Limit Price (¢)
-            </label>
-            <div className="relative">
-              <input
-                type="text"
-                inputMode="numeric"
-                value={limitPrice}
-                onChange={(e) => handleLimitPriceChange(e.target.value)}
-                placeholder="0"
-                maxLength={2}
-                className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg focus:outline-none focus:border-[#ffc000] text-white text-sm placeholder-white/30"
-                disabled={isSubmitting}
-              />
-            </div>
-            <p className="text-xs text-white/60 mt-1">
-              Enter 1-99 (e.g., 55 = $0.55 or 55¢)
-            </p>
-          </div>
-        )}
+      {/* Order Summary / To Win - Shows when size/amount and outcome are selected */}
+      {selectedOutcome &&
+        (() => {
+          const inputAmount = parseFloat(size) || 0;
+          if (inputAmount <= 0) return null;
 
-        {/* Order Summary / To Win - Shows when size/amount and outcome are selected */}
-        {selectedOutcome &&
-          (() => {
-            const inputAmount = parseFloat(size) || 0;
-            if (inputAmount <= 0) return null;
+          const currentPrice =
+            selectedOutcome === "Yes" ? currentYesPrice : currentNoPrice;
+          let effectivePrice: number;
 
-            const currentPrice =
-              selectedOutcome === "Yes" ? currentYesPrice : currentNoPrice;
-            let effectivePrice: number;
-
-            if (orderType === "limit") {
-              const limitPriceNum = limitPrice ? parseInt(limitPrice) : 0;
-              if (isNaN(limitPriceNum) || limitPriceNum === 0) {
-                effectivePrice = 0;
-              } else {
-                effectivePrice = convertCentsToPrice(limitPriceNum);
-              }
+          if (orderType === "limit") {
+            const limitPriceNum = limitPrice ? parseInt(limitPrice) : 0;
+            if (isNaN(limitPriceNum) || limitPriceNum === 0) {
+              effectivePrice = 0;
             } else {
-              effectivePrice = currentPrice;
+              effectivePrice = convertCentsToPrice(limitPriceNum);
             }
+          } else {
+            effectivePrice = currentPrice;
+          }
 
-            // For buy orders, show "To win" section
-            if (activeTab === "buy" && effectivePrice > 0) {
-              // Potential win = amount / price (e.g., $1 / $0.008 = $125)
-              const potentialWin = inputAmount / effectivePrice;
+          // For buy orders, show "To win" section
+          if (activeTab === "buy" && effectivePrice > 0) {
+            // Potential win = amount / price (e.g., $1 / $0.008 = $125)
+            const potentialWin = inputAmount / effectivePrice;
 
-              return (
-                <div className="mt-4 bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-1 mb-1">
-                        <span className="text-sm text-white/60">To win</span>
-                        <svg
-                          className="w-4 h-4 text-green-500"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-white/60">
-                          Avg. Price
-                        </span>
-                        <span className="text-xs text-white/60">
-                          {formatPrice(effectivePrice)}
-                        </span>
-                        <svg
-                          className="w-3 h-3 text-white/40"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                    <span className="text-2xl font-bold text-green-500">
-                      {formatCurrency(potentialWin)}
-                    </span>
-                  </div>
-                </div>
-              );
-            }
+            return (
+              <div className="rx-well mk-win">
+                <span className="mk-win__label">
+                  To win
+                  <span>Avg. price {formatPrice(effectivePrice)}</span>
+                </span>
+                <span className="mk-win__value">
+                  {formatCurrency(potentialWin)}
+                </span>
+              </div>
+            );
+          }
 
-            // For sell orders, show "You'll receive" section
-            // For sell orders, inputAmount is already in shares
-            // Amount you'll receive = shares * sell_price (e.g., 125 shares * $0.007 = $0.88)
-            if (activeTab === "sell" && effectivePrice > 0) {
-              const sharesForSell = inputAmount;
-              const amountYoullReceive = sharesForSell * effectivePrice;
+          // For sell orders, show "You'll receive" section
+          // For sell orders, inputAmount is already in shares
+          // Amount you'll receive = shares * sell_price (e.g., 125 shares * $0.007 = $0.88)
+          if (activeTab === "sell" && effectivePrice > 0) {
+            const sharesForSell = inputAmount;
+            const amountYoullReceive = sharesForSell * effectivePrice;
 
-              return (
-                <div className="mt-4 bg-white/5 rounded-lg p-3 border border-white/10">
-                  <div className="flex items-center justify-between">
-                    <div className="flex flex-col">
-                      <div className="flex items-center gap-1 mb-1">
-                        <span className="text-sm text-white">
-                          You'll receive
-                        </span>
-                        <svg
-                          className="w-4 h-4 text-green-500"
-                          fill="none"
-                          stroke="currentColor"
-                          viewBox="0 0 24 24"
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            strokeWidth={2}
-                            d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
-                          />
-                        </svg>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <span className="text-xs text-white/60">
-                          Avg. Price
-                        </span>
-                        <span className="text-xs text-white/60">
-                          {formatPrice(effectivePrice)}
-                        </span>
-                        <svg
-                          className="w-3 h-3 text-white/40"
-                          fill="currentColor"
-                          viewBox="0 0 20 20"
-                        >
-                          <path
-                            fillRule="evenodd"
-                            d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-8-3a1 1 0 00-.867.5 1 1 0 11-1.731-1A3 3 0 0113 8a3.001 3.001 0 01-2 2.83V11a1 1 0 11-2 0v-1a1 1 0 011-1 1 1 0 100-2zm0 8a1 1 0 100-2 1 1 0 000 2z"
-                            clipRule="evenodd"
-                          />
-                        </svg>
-                      </div>
-                    </div>
-                    <span className="text-2xl font-bold text-green-500">
-                      {formatCurrency(amountYoullReceive)}
-                    </span>
-                  </div>
-                </div>
-              );
-            }
+            return (
+              <div className="rx-well mk-win">
+                <span className="mk-win__label">
+                  You&apos;ll receive
+                  <span>Avg. price {formatPrice(effectivePrice)}</span>
+                </span>
+                <span className="mk-win__value">
+                  {formatCurrency(amountYoullReceive)}
+                </span>
+              </div>
+            );
+          }
 
-            return null;
-          })()}
-      </div>
+          return null;
+        })()}
 
-      {/* Error/Success Messages */}
       {/* Profit/Loss Display - Only show on Sell tab when user has a position */}
       {activeTab === "sell" &&
         isTradingSessionComplete &&
         profitLoss !== null &&
         userPosition &&
         availableShares > 0 && (
-          <div className="px-4 py-2 border-t border-white/10">
-            <div className="text-sm text-white">
-              <span className="text-green-500">Profit</span>
-              <span className="text-white">/</span>
-              <span className="text-red-500">Loss</span>
-              <span className="text-white"> if you sell now: </span>
-              <span
-                className={`font-medium ${
-                  profitLoss >= 0 ? "text-green-500" : "text-red-500"
-                }`}
-              >
-                {profitLoss >= 0
-                  ? `+${formatCurrency(profitLoss)}`
-                  : `-${formatCurrency(Math.abs(profitLoss))}`}
-              </span>
-            </div>
+          <div className="rx-well mk-pnl">
+            <span>Profit / loss if you sell now</span>
+            <b className={profitLoss >= 0 ? "is-up" : "is-down"}>
+              {profitLoss >= 0
+                ? `+${formatCurrency(profitLoss)}`
+                : `-${formatCurrency(Math.abs(profitLoss))}`}
+            </b>
           </div>
         )}
 
       {/* USDC Balance Display */}
       {isTradingSessionComplete && (
-        <div className="px-4 py-2 border-t border-white/10">
-          <div className="text-xs text-white/60">
-            USDC Balance:{" "}
-            <span className="text-white font-medium">
-              ${formattedUsdcBalance}
-            </span>
-          </div>
-        </div>
+        <p className="mk-balance">
+          USDC balance <b>${formattedUsdcBalance}</b>
+        </p>
       )}
 
+      {/* Region-blocked notice (design/blocked.html, compact) */}
+      {isGeoblocked && <RegionBlockedNotice country={geoblockStatus?.country} />}
+
       {/* Combined Trade/Initialize Button */}
-      <div className="p-4 border-t border-white/10">
-        <button
-          onClick={handleTrade}
-          disabled={isTradeDisabled}
-          className={`w-full py-2.5 px-4 rounded-lg font-bold text-base transition-all ${
-            isTradeDisabled
-              ? "bg-[#ffc000]/30 cursor-not-allowed opacity-50 text-white/70"
-              : "bg-[#ffc000] hover:bg-[#ffd000] shadow-lg shadow-[#ffc000]/20 hover:shadow-[#ffc000]/30 active:scale-[0.98] text-black"
-          }`}
-        >
-          {isSubmitting
-            ? "Submitting..."
-            : !authenticated
-            ? activeTab === "buy"
-              ? "Place Order"
-              : "Sell"
-            : isInitializing ||
-              (currentStep !== "idle" && !isTradingSessionComplete)
-            ? "Initializing..."
-            : !isTradingSessionComplete
-            ? "Initialize Trading"
-            : disableReason
-            ? disableReason
-            : activeTab === "buy"
-            ? "Place Order"
-            : "Sell"}
-        </button>
-      </div>
+      <button
+        type="button"
+        onClick={handleTrade}
+        disabled={isTradeDisabled}
+        className="rx-btn rx-btn--primary rx-btn--l rx-btn--block mk-ticket__cta"
+      >
+        {isSubmitting
+          ? "Submitting..."
+          : !authenticated
+          ? activeTab === "buy"
+            ? "Place order"
+            : "Sell"
+          : isInitializing ||
+            (currentStep !== "idle" && !isTradingSessionComplete)
+          ? "Initializing..."
+          : !isTradingSessionComplete
+          ? "Initialize trading"
+          : disableReason
+          ? disableReason
+          : activeTab === "buy"
+          ? "Place order"
+          : "Sell"}
+      </button>
 
       <LoginModal
         isOpen={showLoginModal}

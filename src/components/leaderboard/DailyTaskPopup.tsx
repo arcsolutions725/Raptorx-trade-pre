@@ -1,10 +1,37 @@
-/* eslint-disable react/no-unescaped-entities */
 "use client";
 
-import { useEffect, useState } from "react";
-import Image from "next/image";
-import { X, CheckCircle, Circle, Star } from "lucide-react";
+/**
+ * Daily missions popup (prototype design/js/shell.js `missions:` view, design/css/rewards.css).
+ * Shell: AcctModal (reward family, warm aura). Styles: styles/pages/rewards.css.
+ * Data and behaviour are unchanged: /api/daily-tasks on open, close via X or the footer button.
+ * Left out (main has no such data): raptor tiers / tier climb, the reset countdown, per-task links.
+ */
+
+import "@/styles/pages/rewards.css";
+import {
+  useEffect,
+  useId,
+  useRef,
+  useState,
+  type CSSProperties,
+  type ReactNode,
+} from "react";
+import clsx from "clsx";
+import {
+  Check,
+  CircleAlert,
+  Clock,
+  FileText,
+  MessageCircle,
+  Zap,
+} from "lucide-react";
 import type { DailyTasksStatus } from "@/app/api/daily-tasks/route";
+import {
+  AcctEmpty,
+  AcctLoading,
+  AcctModal,
+  AcctModalHead,
+} from "@/components/ui/modal/accountUi";
 
 interface DailyTasksPopupProps {
   userId: string;
@@ -20,6 +47,7 @@ export function DailyTasksPopup({
   const [tasks, setTasks] = useState<DailyTasksStatus | null>(null);
   const [loading, setLoading] = useState(false);
   const [userPoints, setUserPoints] = useState(0);
+  const modalRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     if (isOpen && userId) {
@@ -27,15 +55,7 @@ export function DailyTasksPopup({
     }
   }, [isOpen, userId]);
 
-  // Optional: lock background scroll while open
-  useEffect(() => {
-    if (!isOpen) return;
-    const prev = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.body.style.overflow = prev;
-    };
-  }, [isOpen]);
+  // Page scroll is locked by the modal shell (AcctModal) while the dialog is open.
 
   const fetchDailyTasks = async () => {
     if (!userId) return;
@@ -63,190 +83,229 @@ export function DailyTasksPopup({
   if (!isOpen) return null;
 
   return (
-    <div
-      className="fixed inset-0 z-80 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4 sm:p-6"
-      role="dialog"
-      aria-modal="true"
-    >
-      {/* Modal container: constrained height + internal flex layout */}
-      <div className="bg-[#0D0D0D] border border-[#303030] rounded-2xl shadow-2xl w-full max-w-md max-h-[90vh] overflow-hidden flex flex-col">
-        {/* Header (fixed) */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-700">
-          <div className="flex items-center gap-3">
-            <Image
-              src="/images/mission.webp"
-              alt="Daily Missions"
-              width={24}
-              height={24}
-              className="w-14 h-14 object-contain"
-            />
-            <div>
-              <h2 className="text-xl font-bold text-white">Daily Missions</h2>
-              <p className="text-sm text-gray-400">
-                Complete tasks to earn points
-              </p>
-            </div>
-          </div>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-white transition-colors p-1"
-            aria-label="Close"
+    <AcctModal labelledBy="dm-title" variant="rw" modalRef={modalRef}>
+      <AcctModalHead
+        id="dm-title"
+        title="Daily missions"
+        description="Complete tasks to earn points"
+        onClose={onClose}
+      />
+
+      <div className="acct-modal__body">
+        {loading ? (
+          <AcctLoading label="Loading tasks" />
+        ) : tasks ? (
+          <MissionsView tasks={tasks} userPoints={userPoints} />
+        ) : (
+          <AcctEmpty
+            icon={<CircleAlert className="size-5" />}
+            title="Missions aren't available right now"
           >
-            <X className="w-5 h-5" />
-          </button>
-        </div>
+            Try again in a moment.
+          </AcctEmpty>
+        )}
+      </div>
 
-        {/* Scrollable body */}
-        <div className="px-6 py-4 overflow-y-auto custom-sidebar-scrollbar">
-          {/* Points Display */}
-          <div className="bg-[#191919] rounded-lg p-4 mb-6">
-            <div className="flex items-center justify-between text-white">
-              <div>
-                <p className="text-sm text-[#7A7A7A]">Total Points</p>
-                <p className="text-2xl font-bold">
-                  {userPoints.toLocaleString()}
-                </p>
-              </div>
-              <Star className="w-8 h-8 text-white" />
-            </div>
+      <div className="acct-modal__foot">
+        <button
+          type="button"
+          onClick={onClose}
+          className="rx-btn rx-btn--primary rx-btn--block"
+        >
+          {tasks?.isCompleted ? "Awesome" : "Let's go"}
+        </button>
+      </div>
+    </AcctModal>
+  );
+}
+
+type Mission = {
+  key: string;
+  title: string;
+  done: number;
+  of: number;
+  icon: ReactNode;
+};
+
+function MissionsView({
+  tasks,
+  userPoints,
+}: {
+  tasks: DailyTasksStatus;
+  userPoints: number;
+}) {
+  const missions: Mission[] = [
+    {
+      key: "reports",
+      title: "Generate 3 reports",
+      done: tasks.reportsCompleted,
+      of: tasks.reportsRequired,
+      icon: <FileText className="size-5" aria-hidden="true" />,
+    },
+    {
+      key: "queries",
+      title: "Ask 3 follow-up questions",
+      done: tasks.queriesCompleted,
+      of: tasks.queriesRequired,
+      icon: <MessageCircle className="size-5" aria-hidden="true" />,
+    },
+  ];
+  const stepsDone = missions.reduce((a, m) => a + Math.min(m.done, m.of), 0);
+  const stepsAll = missions.reduce((a, m) => a + m.of, 0);
+  const missionsDone = missions.filter((m) => m.done >= m.of).length;
+
+  return (
+    <>
+      <div className="dm-hero rw-in">
+        <div className="dm-ringwrap">
+          <MissionRing missions={missions} />
+          <div className="dm-ringwrap__c">
+            <b>
+              {stepsDone}/{stepsAll}
+            </b>
+            <span>tasks today</span>
           </div>
-
-          {/* Loading State */}
-          {loading && (
-            <div className="flex items-center justify-center py-8">
-              <div className="w-8 h-8 border-2 border-[#ffc000] border-t-transparent rounded-full animate-spin"></div>
-              <p className="ml-3 text-gray-400">Loading tasks...</p>
-            </div>
-          )}
-
-          {/* Tasks */}
-          {!loading && tasks && (
-            <div className="space-y-4">
-              {/* Today's Mission Header */}
-              <div className="text-center mb-4">
-                <h3 className="text-lg font-semibold text-white mb-1">
-                  Today's Mission
-                </h3>
-                <p className="text-sm text-gray-400">
-                  Complete all tasks to earn{" "}
-                  <span className="text-green-400 font-semibold">
-                    {tasks.pointsAvailable} points
-                  </span>
-                </p>
-              </div>
-
-              {/* Mission Progress */}
-              <div className="bg-[#191919] rounded-xl p-4 border border-[#303030]">
-                <div className="flex items-center justify-between mb-3">
-                  <h4 className="font-semibold text-white">
-                    Daily Mission Progress
-                  </h4>
-                  <span
-                    className={`px-2 py-1 rounded-full text-xs text-nowrap font-medium ${
-                      tasks.isCompleted
-                        ? "bg-green-500/20 text-green-400"
-                        : "bg-yellow-500/20 text-yellow-400"
-                    }`}
-                  >
-                    {tasks.isCompleted ? "Completed!" : "In Progress"}
-                  </span>
-                </div>
-
-                {/* Task 1: Generate Reports */}
-                <div className="flex items-center gap-3 mb-3">
-                  {tasks.reportsCompleted >= tasks.reportsRequired ? (
-                    <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-                  ) : (
-                    <Circle className="w-5 h-5 text-gray-500 shrink-0" />
-                  )}
-                  <div className="flex-1">
-                    <p className="text-white text-sm">Generate 3 reports</p>
-                    <p className="text-xs text-gray-400">
-                      {tasks.reportsCompleted}/{tasks.reportsRequired} completed
-                      • +100 points each
-                    </p>
-                  </div>
-                  {tasks.reportsCompleted > 0 && (
-                    <span className="text-green-400 text-sm font-medium">
-                      +{tasks.reportsCompleted * 100}
-                    </span>
-                  )}
-                </div>
-
-                {/* Task 2: Follow-up Queries */}
-                <div className="flex items-center gap-3">
-                  {tasks.queriesCompleted >= tasks.queriesRequired ? (
-                    <CheckCircle className="w-5 h-5 text-green-500 shrink-0" />
-                  ) : (
-                    <Circle className="w-5 h-5 text-gray-500 shrink-0" />
-                  )}
-                  <div className="flex-1">
-                    <p className="text-white text-sm">
-                      Ask 3 follow-up queries
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      {tasks.queriesCompleted}/{tasks.queriesRequired} completed
-                      • +100 points each
-                    </p>
-                  </div>
-                  {tasks.queriesCompleted > 0 && (
-                    <span className="text-green-400 text-sm font-medium">
-                      +{tasks.queriesCompleted * 100}
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Mission Completion */}
-              {tasks.isCompleted && (
-                <div className="bg-linear-to-r from-green-600 to-emerald-600 rounded-lg p-4">
-                  <div className="text-center text-white">
-                    <CheckCircle className="w-8 h-8 mx-auto mb-2" />
-                    <h4 className="font-bold">Mission Completed!</h4>
-                    <p className="text-sm opacity-90">
-                      You have earned 600 points today. Keep up the great work!
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Instructions */}
-              <div className="bg-[#191919] rounded-lg p-4 border border-[#303030]">
-                <h4 className="text-white font-medium mb-2">
-                  How to complete:
-                </h4>
-                <ul className="text-sm text-gray-400 space-y-1">
-                  <li>• Generate a token analysis report</li>
-                  <li>• Ask a follow-up question about any report</li>
-                  <li>• Tasks reset daily at midnight</li>
-                  <li>• Each completed task earns 100 points</li>
-                </ul>
-              </div>
-
-              <div className="bg-[#191919] rounded-lg p-4 border border-[#303030]">
-                <h4 className="text-white font-medium mb-2">
-                  Earn from Referrals
-                </h4>
-                <p className="text-sm text-gray-400">
-                  Earn points by referring your friends. Referral link is in the{" "}
-                  <span className="text-white font-medium">Account</span>{" "}
-                  section on the top right
-                </p>
-              </div>
-            </div>
-          )}
         </div>
-
-        {/* Footer (fixed) */}
-        <div className="p-6 border-t border-gray-700">
-          <button
-            onClick={onClose}
-            className="w-full bg-[#ffc000] cursor-pointer text-black font-semibold py-3 px-4 rounded-lg transition-all duration-300"
-          >
-            {tasks?.isCompleted ? "Awesome" : "Let's Go"}
-          </button>
+        <div className="dm-hero__t">
+          <span className="rw-eyebrow">Today&apos;s hunt</span>
+          <h3>
+            {missionsDone} of {missions.length} missions done
+          </h3>
+          <div className="dm-meta">
+            {tasks.isCompleted ? (
+              <span className="dm-chip dm-chip--done">
+                <Check className="size-3" aria-hidden="true" />
+                Completed
+              </span>
+            ) : (
+              <span className="dm-chip dm-chip--pts">
+                Today&apos;s reward <b>{tasks.pointsAvailable} pts</b>
+              </span>
+            )}
+            <span className="dm-chip">
+              Your points <b>{userPoints.toLocaleString()}</b>
+            </span>
+          </div>
         </div>
       </div>
-    </div>
+
+      <div className="dm-list">
+        {missions.map((m, i) => {
+          const complete = m.done >= m.of;
+          return (
+            <div
+              key={m.key}
+              className={clsx("dm-card rw-in", complete && "is-done")}
+              style={{ animationDelay: `${0.08 + i * 0.08}s` }}
+            >
+              <span className="dm-card__ico">
+                {complete ? <Check className="size-5" aria-hidden="true" /> : m.icon}
+              </span>
+              <div className="dm-card__t">
+                <b>{m.title}</b>
+                <div
+                  className="dm-pips"
+                  role="img"
+                  aria-label={`${m.done} of ${m.of} done`}
+                >
+                  {Array.from({ length: m.of }, (_, k) => (
+                    <i key={k} className={k < m.done ? "on" : undefined} />
+                  ))}
+                </div>
+                <span className="dm-card__m">
+                  {m.done}/{m.of} done · <b>+100</b> pts each
+                </span>
+              </div>
+              {m.done > 0 ? (
+                <span className="dm-earned">+{m.done * 100}</span>
+              ) : (
+                <span aria-hidden="true" />
+              )}
+            </div>
+          );
+        })}
+      </div>
+
+      {tasks.isCompleted && (
+        <div className="acct-alert acct-alert--up rw-in" role="status">
+          <Check className="size-4" aria-hidden="true" />
+          <p>
+            <b>Mission completed!</b> You have earned 600 points today. Keep up
+            the great work!
+          </p>
+        </div>
+      )}
+
+      <h3 className="rx-h3">How it works</h3>
+      <ul className="dm-how">
+        <li>
+          <FileText className="size-3.5" aria-hidden="true" />
+          Generate a token analysis report.
+        </li>
+        <li>
+          <MessageCircle className="size-3.5" aria-hidden="true" />
+          Ask a follow-up question about any report.
+        </li>
+        <li>
+          <Clock className="size-3.5" aria-hidden="true" />
+          Tasks reset daily at midnight.
+        </li>
+        <li>
+          <Zap className="size-3.5" aria-hidden="true" />
+          Each completed task earns 100 points.
+        </li>
+      </ul>
+
+      <div className="acct-alert">
+        <p>
+          <b>Earn from referrals.</b> Earn points by referring your friends.
+          Your referral link is in the Account section on the top right.
+        </p>
+      </div>
+    </>
+  );
+}
+
+/** One arc per task step (6 in all); finished steps draw in with the ember gradient. */
+function MissionRing({ missions }: { missions: Mission[] }) {
+  const gradId = `dm-grad-${useId().replace(/:/g, "")}`;
+  const steps = missions.flatMap((m) =>
+    Array.from({ length: m.of }, (_, i) => i < m.done),
+  );
+  if (steps.length === 0) return null;
+  const R = 56;
+  const C = 2 * Math.PI * R;
+  const gap = steps.length > 1 ? 7 : 0;
+  const L = C / steps.length - gap;
+  return (
+    <svg width="132" height="132" viewBox="0 0 132 132" aria-hidden="true">
+      <defs>
+        <linearGradient id={gradId} x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#FF6A13" />
+          <stop offset="1" stopColor="#FFD15C" />
+        </linearGradient>
+      </defs>
+      {steps.map((done, i) => (
+        <circle
+          key={i}
+          className={clsx("seg", done && "is-done")}
+          cx="66"
+          cy="66"
+          r={R}
+          style={
+            {
+              strokeDasharray: `${L.toFixed(1)} ${(C - L).toFixed(1)}`,
+              strokeDashoffset: `${(-i * (L + gap)).toFixed(1)}`,
+              ...(done
+                ? {
+                    stroke: `url(#${gradId})`,
+                    animationDelay: `${0.3 + i * 0.15}s`,
+                  }
+                : null),
+            } as CSSProperties
+          }
+        />
+      ))}
+    </svg>
   );
 }

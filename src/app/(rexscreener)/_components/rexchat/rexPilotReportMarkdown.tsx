@@ -106,6 +106,201 @@ export function renderRexPilotMarkdownSection(body: string): React.ReactNode {
   });
 }
 
+type MdBlock =
+  | { k: "p" | "h2" | "h3"; text: string }
+  | { k: "ul"; items: string[] }
+  | { k: "ol"; items: { n: string; text: string }[] }
+  | { k: "table"; head: string[] | null; rows: string[][] };
+
+const isTableLine = (line: string) => {
+  const t = line.trim();
+  return t.startsWith("|") && t.endsWith("|") && t.length > 1;
+};
+const isTableRule = (line: string) =>
+  /^\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?$/.test(line.trim());
+/** "$72.22", "-7.74%", "1.2K", "▲ 132%": set in mono and right-aligned like the prototype's td.n. */
+const isNumericCell = (cell: string) =>
+  /^[\s$€£+\-−~≈<>▲▼]*\d[\d.,\s]*[%kmbtx]?\s*$/i.test(cell.replace(/\*/g, ""));
+const tableCells = (line: string) =>
+  line
+    .trim()
+    .replace(/^\|/, "")
+    .replace(/\|$/, "")
+    .split("|")
+    .map((c) => c.trim());
+
+/**
+ * RexScreener sidebar report body (prototype .report typography): the same line rules and
+ * bold handling as `renderRexPilotMarkdownSection`, grouped into real lists, numbered lists and
+ * tables so they get the design's gold-square bullets and mono table heads
+ * (styles/pages/screener-side.css `.ss-md`). Claw keeps the original renderer above.
+ */
+export function renderScreenerReportMarkdown(body: string): React.ReactNode {
+  const toHtml = (s: string) =>
+    s
+      .replace(/\*\*(.*?)\*\*/g, "<strong>$1</strong>")
+      .replace(/\*(.*?)\*/g, "<strong>$1</strong>");
+
+  const lines = body.split("\n");
+  const blocks: MdBlock[] = [];
+  const last = () => blocks[blocks.length - 1];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    if (!line.trim()) {
+      // a blank line ends a list, like a paragraph break
+      blocks.push({ k: "p", text: "" });
+      continue;
+    }
+    if (line.startsWith("### ")) {
+      blocks.push({ k: "h3", text: line.slice(4) });
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      blocks.push({ k: "h2", text: line.slice(3) });
+      continue;
+    }
+    if (isTableLine(line)) {
+      const rows: string[][] = [];
+      let head: string[] | null = null;
+      let j = i;
+      while (j < lines.length && isTableLine(lines[j])) {
+        if (isTableRule(lines[j])) {
+          if (rows.length === 1 && !head) head = rows.pop()!;
+        } else {
+          rows.push(tableCells(lines[j]));
+        }
+        j++;
+      }
+      blocks.push({ k: "table", head, rows });
+      i = j - 1;
+      continue;
+    }
+    const numbered = line.match(/^(\d+)\.\s+(.+)$/);
+    if (numbered) {
+      const prev = last();
+      if (prev?.k === "ol") prev.items.push({ n: numbered[1], text: numbered[2] });
+      else blocks.push({ k: "ol", items: [{ n: numbered[1], text: numbered[2] }] });
+      continue;
+    }
+    const trimmed = line.trimStart();
+    const bullet = /^\*\s+/.test(line)
+      ? line.replace(/^\*\s+/, "")
+      : trimmed.startsWith("- ")
+        ? trimmed.slice(2)
+        : null;
+    if (bullet !== null) {
+      const prev = last();
+      if (prev?.k === "ul") prev.items.push(bullet);
+      else blocks.push({ k: "ul", items: [bullet] });
+      continue;
+    }
+    blocks.push({ k: "p", text: line });
+  }
+
+  const out = blocks.filter((b) => !(b.k === "p" && !b.text));
+  return (
+    <div className="ss-md">
+      {out.map((b, idx) => {
+        if (b.k === "h3")
+          return <h3 key={idx} className="ss-h3" dangerouslySetInnerHTML={{ __html: toHtml(b.text) }} />;
+        if (b.k === "h2")
+          return <h2 key={idx} className="ss-h2" dangerouslySetInnerHTML={{ __html: toHtml(b.text) }} />;
+        if (b.k === "ul")
+          return (
+            <ul key={idx}>
+              {b.items.map((it, n) => (
+                <li key={n}>
+                  <span dangerouslySetInnerHTML={{ __html: toHtml(it) }} />
+                </li>
+              ))}
+            </ul>
+          );
+        if (b.k === "ol")
+          return (
+            <ol key={idx}>
+              {b.items.map((it, n) => (
+                <li key={n}>
+                  <span className="ss-ol__n" aria-hidden="true">
+                    {it.n}.
+                  </span>
+                  <span dangerouslySetInnerHTML={{ __html: toHtml(it.text) }} />
+                </li>
+              ))}
+            </ol>
+          );
+        if (b.k === "table") {
+          const cols = Math.max(b.head?.length ?? 0, ...b.rows.map((r) => r.length));
+          const numeric = Array.from({ length: cols }, (_, c) => {
+            const cells = b.rows.map((r) => r[c] ?? "").filter((v) => v.trim());
+            return cells.length > 0 && cells.every(isNumericCell);
+          });
+          return (
+            <div key={idx} className="ss-table">
+              <table>
+                {b.head ? (
+                  <thead>
+                    <tr>
+                      {b.head.map((c, n) => (
+                        <th
+                          key={n}
+                          scope="col"
+                          className={numeric[n] ? "n" : undefined}
+                          dangerouslySetInnerHTML={{ __html: toHtml(c) }}
+                        />
+                      ))}
+                    </tr>
+                  </thead>
+                ) : null}
+                <tbody>
+                  {b.rows.map((r, rn) => (
+                    <tr key={rn}>
+                      {r.map((c, n) => (
+                        <td
+                          key={n}
+                          className={numeric[n] ? "n" : undefined}
+                          dangerouslySetInnerHTML={{ __html: toHtml(c) }}
+                        />
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          );
+        }
+        return <p key={idx} dangerouslySetInnerHTML={{ __html: toHtml(b.text) }} />;
+      })}
+    </div>
+  );
+}
+
+/**
+ * Small mark after a section title in the screener sidebar report: the Golden Report badge on
+ * Team Updates and the X glyph on Top Tweets. Other sections stay plain, like the prototype.
+ */
+export function screenerReportSectionBadge(title: string): React.ReactNode {
+  const t = title.toLowerCase();
+  if (t.includes("team updates"))
+    return (
+      <span className="ss-sec__badge">
+        <Image src="/images/golden-report-badge.webp" alt="Golden Report" width={22} height={22} />
+      </span>
+    );
+  if (t.includes("individual tweets") || t.includes("top tweets"))
+    return (
+      <span className="ss-sec__badge" aria-hidden="true">
+        <svg width={15} height={15} viewBox="0 0 14 14" fill="none">
+          <path
+            d="M11.025 0.65625H13.172L8.482 6.03025L14 13.3442H9.68L6.294 8.90925L2.424 13.3442H0.275L5.291 7.59425L0 0.65725H4.43L7.486 4.71025L11.025 0.65625ZM10.27 12.0562H11.46L3.78 1.87725H2.504L10.27 12.0562Z"
+            fill="currentColor"
+          />
+        </svg>
+      </span>
+    );
+  return null;
+}
+
 export function getRexPilotReportSectionIcon(title: string): React.ReactNode {
   const t = title.toLowerCase();
   if (t.includes("what it is"))

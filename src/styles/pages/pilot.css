@@ -1,0 +1,174 @@
+/* Rex Pilot sidebar on the prediction market pages.
+   Source: design/market.html (aside.pilot-sb) + design/css/predictions.css ("docked Rex Pilot sidebar",
+   "Rex Pilot disclosures"), design/css/components.css (.report, .stats, .empty, .panel__title, .panel-ctl)
+   and design/css/pages.css ("Terminal layout": flat background + 1px line on desktop).
+   Scoped under .rx-pilot (root of RexMarketsReport); unlayered, so it wins over the layered DS rules. */
+
+.rx-pilot{position:relative;display:flex;flex-direction:column;width:100%;height:100%;min-height:0;max-height:100dvh;overflow:hidden;
+  background:linear-gradient(180deg,var(--rx-pop-a),var(--rx-pop-b));color:var(--rx-text);font-family:var(--rx-ui);
+  box-shadow:inset 1px 0 0 var(--rx-gold-line)}
+/* gold glint along the left edge */
+.rx-pilot::before{content:"";position:absolute;left:0;top:24px;bottom:24px;width:1px;z-index:20;pointer-events:none;
+  background:linear-gradient(180deg,rgba(255,209,92,0),rgba(255,209,92,.7),rgba(255,209,92,0))}
+@media (min-width:1024px){
+  .rx-pilot{background:var(--rx-bg);box-shadow:inset 1px 0 0 var(--rx-line)}
+}
+
+/* ---------- two panes: Rex Pilot (top) · News intelligence report (bottom) ---------- */
+.rx-pilot .sb-panes{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+.rx-pilot .sb-pane{min-height:0;display:flex;flex-direction:column;overflow:hidden;transition:flex-basis .3s var(--rx-ease),flex-grow .3s var(--rx-ease)}
+.rx-pilot .sb-pane--pilot{flex:0 0 var(--pilot-h,50%)}
+.rx-pilot .sb-pane--news{flex:1 1 0}
+.rx-pilot .sb-panes[data-state="both"] .sb-pane--pilot{max-height:calc(100% - 140px);min-height:140px}
+.rx-pilot .sb-panes[data-state="pilot-min"] .sb-pane--pilot,
+.rx-pilot .sb-panes[data-state="news-min"] .sb-pane--news{flex:0 0 56px}
+.rx-pilot .sb-panes[data-state="news-min"] .sb-pane--pilot,
+.rx-pilot .sb-panes[data-state="pilot-min"] .sb-pane--news{flex:1 1 0}
+.rx-pilot .sb-pane__main{flex:1 1 auto;min-height:0;display:flex;flex-direction:column}
+body.is-resizing .rx-pilot .sb-pane{transition:none}
+
+/* split between the panes: a 1px line that is also the drag handle (wide invisible hit area) */
+.rx-pilot .sb-split{position:relative;flex:0 0 1px;background:var(--rx-line);z-index:8;outline:none;transition:background .15s,box-shadow .15s}
+.rx-pilot .sb-split[role="separator"]{cursor:row-resize;touch-action:none}
+.rx-pilot .sb-split[role="separator"]::before{content:"";position:absolute;left:0;right:0;top:-5px;height:11px}
+.rx-pilot .sb-split[role="separator"]:hover,.rx-pilot .sb-split[role="separator"]:focus-visible,.rx-pilot .sb-split.is-active{background:var(--rx-gold);box-shadow:0 0 10px rgba(255,184,0,.45)}
+
+/* pane header */
+.rx-pilot .sb-head{display:flex;align-items:center;gap:10px;padding:12px 16px;background:rgba(18,15,11,.9);border-bottom:1px solid var(--rx-line);flex-shrink:0}
+.rx-pilot .sb-mark{width:28px;height:28px;border-radius:8px;background:var(--rx-claw);display:inline-flex;align-items:center;justify-content:center;color:#fff;flex-shrink:0}
+.rx-pilot .sb-mark--gold{background:var(--rx-gold-tint);border:1px solid var(--rx-gold-line);color:var(--rx-gold)}
+.rx-pilot .panel__title{flex:1 1 auto;display:flex;flex-direction:column;min-width:0}
+.rx-pilot .panel__title b{display:flex;align-items:center;gap:8px;min-width:0;font-size:14px;font-weight:600;line-height:1.35;color:var(--rx-text);white-space:nowrap}
+.rx-pilot .panel__title b > .t{min-width:0;overflow:hidden;text-overflow:ellipsis}
+.rx-pilot .panel__sub{font-size:11px;line-height:1.4;color:var(--rx-text-3);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rx-pilot .panel-ctl{width:32px;height:32px;border-radius:9px;flex-shrink:0}
+.rx-pilot .sb-head__tools{display:flex;align-items:center;gap:8px;flex-shrink:0}
+
+/* minimized pane: one 56px bar that expands it again */
+.rx-pilot .sb-min{display:flex;align-items:center;gap:8px;height:100%;min-height:56px;padding:0 12px 0 16px}
+.rx-pilot .sb-bar{flex:1 1 auto;display:flex;align-items:center;justify-content:center;gap:10px;min-width:0;height:100%;border:0;border-radius:10px;background:transparent;color:var(--rx-text-2);font:inherit;font-size:15px;cursor:pointer}
+.rx-pilot .sb-bar b{color:var(--rx-gold-hi);font-weight:600}
+.rx-pilot .sb-bar:hover{color:var(--rx-text);background:rgba(255,184,0,.04)}
+.rx-pilot .sb-bar:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:-2px}
+.rx-pilot .sb-bar > svg:last-child{color:var(--rx-text-3)}
+
+/* scrolling body + ask bar */
+.rx-pilot .sb-body{flex:1 1 auto;min-height:0;overflow-y:auto;overflow-x:hidden;padding:20px 22px;overscroll-behavior:contain;-webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;scrollbar-color:var(--rx-line-strong) transparent}
+.rx-pilot .sb-body::-webkit-scrollbar{width:8px;height:8px}
+.rx-pilot .sb-body::-webkit-scrollbar-thumb{background:var(--rx-line-strong);border-radius:8px}
+.rx-pilot .sb-body::-webkit-scrollbar-track{background:transparent}
+.rx-pilot .sb-ask{display:flex;align-items:flex-end;gap:8px;padding:12px 16px;border-top:1px solid var(--rx-line);flex-shrink:0}
+.rx-pilot .sb-ask .rx-input{flex:1 1 auto;min-width:0;height:auto;min-height:44px;align-items:stretch}
+.rx-pilot .sb-ask textarea{flex:1 1 auto;min-width:0;display:block;margin:0;padding:11px 0;border:0;outline:none;background:transparent;resize:none;
+  color:var(--rx-text);font:inherit;font-size:14px;line-height:1.45;max-height:160px}
+.rx-pilot .sb-ask textarea::placeholder{color:var(--rx-text-3)}
+.rx-pilot .sb-ask textarea:disabled{opacity:.6}
+.rx-pilot .sb-ask .rx-btn{height:44px;flex-shrink:0}
+
+/* ---------- Rex Pilot report ---------- */
+.rx-pilot .report{display:flex;flex-direction:column;gap:14px;font-size:15px;line-height:1.65;color:var(--rx-text)}
+.rx-pilot .report h2{margin:8px 0 0;font-family:var(--rx-display);font-stretch:112%;font-weight:700;font-size:19px;line-height:1.3;letter-spacing:0;color:var(--rx-gold-hi)}
+.rx-pilot .report h2:first-child{margin-top:0}
+.rx-pilot .report h2.report__title{color:var(--rx-text);font-size:20px;overflow-wrap:anywhere}
+.rx-pilot .report p{margin:0}
+.rx-pilot .report__text{font-size:15px;line-height:1.65;color:var(--rx-text);overflow-wrap:anywhere}
+.rx-pilot .report__text strong,.rx-pilot .report__text b{font-weight:600;color:var(--rx-gold-hi)}
+.rx-pilot .report__muted{margin:0;font-size:14px;color:var(--rx-text-3)}
+
+/* disclosures: header and content in one container */
+.rx-pilot .disc-box{border:1px solid var(--rx-line);border-radius:14px;background:var(--rx-surface-1);overflow:hidden;margin:14px 0}
+.rx-pilot .disc{display:flex;align-items:center;justify-content:space-between;width:100%;height:46px;padding:0 14px;border:0;border-radius:0;background:transparent;
+  color:var(--rx-text);font:inherit;font-weight:600;font-size:14px;cursor:pointer;transition:background .15s}
+.rx-pilot .disc:hover{background:rgba(var(--rx-hair),.03)}
+.rx-pilot .disc:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:-2px}
+.rx-pilot .disc[aria-expanded="true"]{border-bottom:1px solid var(--rx-line)}
+.rx-pilot .disc svg{flex-shrink:0;transition:transform .2s var(--rx-ease)}
+.rx-pilot .disc[aria-expanded="false"] svg{transform:rotate(-90deg)}
+.rx-pilot .disc-body--table{overflow-x:auto;scrollbar-width:thin;scrollbar-color:var(--rx-line-strong) transparent}
+.rx-pilot .disc-body--chart{padding:12px 14px 14px;display:flex;flex-direction:column;gap:10px}
+
+/* market data table (lb-table + sb-table) */
+.rx-pilot .sb-table{width:100%;border-collapse:collapse;font-size:12px;white-space:nowrap}
+.rx-pilot .sb-table th{padding:10px 8px 10px 14px;font-family:var(--rx-mono);font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--rx-text-3);text-align:right;border-bottom:1px solid var(--rx-line)}
+.rx-pilot .sb-table td{padding:11px 8px 11px 14px;text-align:right;color:var(--rx-text);border-bottom:1px solid rgba(36,36,36,.6)}
+.rx-pilot .sb-table th:first-child,.rx-pilot .sb-table td:first-child{text-align:left}
+.rx-pilot .sb-table th:last-child,.rx-pilot .sb-table td:last-child{padding-right:14px}
+.rx-pilot .sb-table tbody tr:last-child td{border-bottom:0}
+.rx-pilot .sb-table .is-up{color:var(--rx-up)}
+.rx-pilot .sb-table .is-down{color:var(--rx-down)}
+.rx-pilot .sb-table td.is-empty{padding:28px 14px;text-align:center;color:var(--rx-text-3);font-family:var(--rx-ui)}
+
+/* charts inside the sidebar: flat grid, mono axis labels (recharts) */
+.rx-pilot .recharts-cartesian-grid line{stroke:rgba(var(--rx-hair),.07);stroke-dasharray:0}
+.rx-pilot .recharts-cartesian-grid-vertical{display:none}
+.rx-pilot .recharts-cartesian-axis-line,.rx-pilot .recharts-cartesian-axis-tick-line{display:none}
+.rx-pilot .recharts-cartesian-axis-tick-value{font-family:var(--rx-mono);font-size:11px;fill:var(--rx-text-3)}
+.rx-pilot .rx-chart-msg{display:flex;align-items:center;justify-content:center;padding:32px 12px;text-align:center;font-size:13px;color:var(--rx-text-3)}
+
+/* insights: numbered list with gold counters */
+.rx-pilot .insights{margin:0;padding:0;list-style:none;counter-reset:ins;display:flex;flex-direction:column;gap:12px}
+.rx-pilot .insights li{counter-increment:ins;display:grid;grid-template-columns:28px minmax(0,1fr);gap:10px;font-size:14px;line-height:1.6;color:var(--rx-text)}
+.rx-pilot .insights li::before{content:counter(ins);width:24px;height:24px;border-radius:7px;background:var(--rx-gold-tint);border:1px solid var(--rx-gold-line);color:var(--rx-gold-hi);
+  font-family:var(--rx-mono);font-size:12px;display:flex;align-items:center;justify-content:center;margin-top:1px}
+.rx-pilot .insights li > div{min-width:0;overflow-wrap:anywhere}
+.rx-pilot .insights strong,.rx-pilot .insights b{font-weight:600;color:var(--rx-gold-hi)}
+
+/* statistics */
+.rx-pilot .stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.rx-pilot .stats--one{grid-template-columns:minmax(0,1fr)}
+.rx-pilot .stat{padding:14px 16px;display:flex;flex-direction:column;gap:6px;min-width:0}
+.rx-pilot .stat__label{font-size:12px;line-height:1.4;color:var(--rx-text-2)}
+.rx-pilot .stat__value{font-family:var(--rx-mono);font-size:18px;font-weight:600;line-height:1.3;color:var(--rx-text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* empty state (no report yet / no market) */
+.rx-pilot .empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:100%;padding:28px 12px;text-align:center}
+.rx-pilot .empty__mark{width:56px;height:56px;border-radius:16px;background:var(--rx-claw);display:inline-flex;align-items:center;justify-content:center;flex-shrink:0;box-shadow:0 10px 26px rgba(200,16,46,.35)}
+.rx-pilot .empty b{font-family:var(--rx-display);font-stretch:112%;font-weight:700;font-size:17px;color:var(--rx-text)}
+.rx-pilot .empty p{margin:0;max-width:300px;font-size:13px;line-height:1.45;color:var(--rx-text-2)}
+.rx-pilot .empty .rx-btn{margin-top:4px}
+
+/* loading */
+.rx-pilot .sb-loading{display:flex;flex-direction:column}
+.rx-pilot .sb-loading .rx-skel{height:12px;margin-bottom:10px}
+
+/* follow-up questions and answers */
+.rx-pilot .qa{display:flex;flex-direction:column;gap:16px;margin-top:22px;padding-top:20px;border-top:1px solid var(--rx-line)}
+.rx-pilot .qa__me{align-self:flex-end;max-width:85%;padding:10px 14px;border-radius:16px 16px 6px 16px;background:var(--rx-surface-3);border:1px solid var(--rx-line-strong);
+  font-size:14px;line-height:1.5;color:var(--rx-text);white-space:pre-wrap;overflow-wrap:anywhere}
+.rx-pilot .qa__ai{display:grid;grid-template-columns:28px minmax(0,1fr);gap:12px;align-items:start}
+.rx-pilot .qa__body{min-width:0;padding-top:3px;font-size:15px;line-height:1.65;color:var(--rx-text);overflow-wrap:anywhere}
+.rx-pilot .qa__body strong,.rx-pilot .qa__body b{font-weight:600;color:var(--rx-gold-hi)}
+.rx-pilot .qa__caret{display:inline-block;width:7px;height:15px;margin-left:3px;vertical-align:-2px;border-radius:1px;background:var(--rx-gold);animation:rx-pilot-blink 1s steps(1) infinite}
+@keyframes rx-pilot-blink{50%{opacity:0}}
+
+/* News intelligence report: market header + generated document */
+.rx-pilot .rep-head{display:flex;align-items:center;gap:12px;padding-bottom:16px;margin-bottom:18px;border-bottom:1px solid var(--rx-line)}
+.rx-pilot .rep-head__img{position:relative;width:44px;height:44px;border-radius:12px;overflow:hidden;flex-shrink:0;background:var(--rx-surface-2);border:1px solid var(--rx-line)}
+.rx-pilot .rep-head h2{margin:0;min-width:0;font-family:var(--rx-display);font-stretch:112%;font-weight:700;font-size:20px;line-height:1.25;letter-spacing:0;color:var(--rx-text);overflow-wrap:anywhere}
+.rx-pilot .rex-markets-report-md,.rx-pilot .rex-markets-report-md *{font-family:var(--rx-ui) !important}
+.rx-pilot .rex-markets-report-md{max-width:none;font-size:15px;line-height:1.65;color:var(--rx-text)}
+.rx-pilot .rex-markets-report-md h1,.rx-pilot .rex-markets-report-md h2{font-family:var(--rx-display) !important;font-stretch:112%;font-weight:700;font-size:19px;line-height:1.3;letter-spacing:0;color:var(--rx-gold-hi);margin:22px 0 8px}
+.rx-pilot .rex-markets-report-md > :first-child{margin-top:0}
+.rx-pilot .rex-markets-report-md h3{font-size:16px;font-weight:650;line-height:1.4;color:var(--rx-text);margin:18px 0 6px}
+.rx-pilot .rex-markets-report-md h4,.rx-pilot .rex-markets-report-md h5,.rx-pilot .rex-markets-report-md h6{font-size:15px;font-weight:650;color:var(--rx-text);margin:14px 0 4px}
+.rx-pilot .rex-markets-report-md p,.rx-pilot .rex-markets-report-md li{color:var(--rx-text)}
+.rx-pilot .rex-markets-report-md strong,.rx-pilot .rex-markets-report-md b{color:var(--rx-gold-hi);font-weight:600}
+.rx-pilot .rex-markets-report-md li::marker{color:var(--rx-gold)}
+.rx-pilot .rex-markets-report-md a{color:var(--rx-gold-hi);text-decoration:none;border-bottom:1px solid var(--rx-gold-line)}
+.rx-pilot .rex-markets-report-md a:hover{color:var(--rx-gold-hi);border-bottom-color:var(--rx-gold)}
+.rx-pilot .rex-markets-report-md code,.rx-pilot .rex-markets-report-md pre,.rx-pilot .rex-markets-report-md pre *{font-family:var(--rx-mono) !important}
+.rx-pilot .rex-markets-report-md table{font-size:13px}
+.rx-pilot .rex-markets-report-md th{font-family:var(--rx-mono) !important;font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--rx-text-3);border-color:var(--rx-line) !important}
+.rx-pilot .rex-markets-report-md td{border-color:var(--rx-line) !important}
+.rx-pilot .rep-caret{display:inline-block;width:7px;height:15px;margin-left:3px;vertical-align:-2px;border-radius:1px;background:var(--rx-gold);animation:rx-pilot-blink 1s steps(1) infinite}
+
+@media (max-width:767px){
+  .rx-pilot .panel__sub{display:none}
+  .rx-pilot .sb-body{padding:16px}
+  .rx-pilot .sb-ask{padding:10px 12px calc(10px + env(safe-area-inset-bottom))}
+}
+@media (prefers-reduced-motion:reduce){
+  .rx-pilot .sb-pane,.rx-pilot .disc svg{transition:none}
+  .rx-pilot .qa__caret,.rx-pilot .rep-caret{animation:none}
+}

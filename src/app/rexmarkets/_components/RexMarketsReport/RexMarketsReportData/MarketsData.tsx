@@ -1,8 +1,6 @@
 "use client";
 
-import Image from "next/image";
-import { useState, useEffect, useCallback, useRef, useMemo } from "react";
-import { ChevronDown, ChevronRight, Square } from "lucide-react";
+import { useState, useEffect, useCallback, useRef, useMemo, useId } from "react";
 import {
   useMarketDetails,
   useMarketSummary,
@@ -48,12 +46,13 @@ import { usePredictFunMultiTimeseries } from "@/hooks/usePredictFunMultiTimeseri
 import { usePredictFunTimeseries } from "@/hooks/usePredictFunTimeseries";
 import { predictFunDisplayVolumeUsd, predictFunDisplayOutcomeVolume } from "@/lib/predictfun/mapPredictFunMarketRow";
 import { usePredictFunPilotSubMarkets } from "@/hooks/usePredictFunPilotSubMarkets";
+import { AskBar, ClawIco, IconChev, QaThread, SkeletonLines } from "./pilotUi";
 
-// Format price to match RexMarketsTable style: $XX.XX¢
+// Price in cents, like the prototype table: 0.64 -> "64.00¢"
 function formatPrice(price?: number | string): string {
   const numPrice = typeof price === "string" ? Number(price) : price;
   if (typeof numPrice !== "number" || isNaN(numPrice)) return "—";
-  return `$${(numPrice * 100).toFixed(2)}¢`;
+  return `${(numPrice * 100).toFixed(2)}¢`;
 }
 
 // Format probability as percentage
@@ -137,7 +136,7 @@ export default function MarketsData({
     marketSource ?? null,
   );
 
-  const [imageError, setImageError] = useState(false);
+  const discId = useId();
   const [probabilityTableExpanded, setProbabilityTableExpanded] = useState(true);
   const [probabilityChartExpanded, setProbabilityChartExpanded] = useState(true);
   const [myriadChartTf, setMyriadChartTf] = useState<ChartTimeframeKey>("7d");
@@ -155,11 +154,6 @@ export default function MarketsData({
   const shouldAutoScrollRef = useRef(true);
   const hadStreamingRef = useRef(false);
   const abortControllerRef = useRef<AbortController | null>(null);
-
-  // Reset image error when market details change
-  useEffect(() => {
-    setImageError(false);
-  }, [marketDetails?.symbol_image_url]);
 
   useEffect(() => {
     setMyriadChartTf("7d");
@@ -211,9 +205,12 @@ export default function MarketsData({
       hadStreamingRef.current = false;
       return;
     }
-    if (shouldAutoScrollRef.current) {
+    // Only follow the conversation; with no follow-ups yet the pane stays on the title and brief.
+    // Scroll the pane itself so the page around the sidebar never moves.
+    if (shouldAutoScrollRef.current && messages.length > 0) {
       setTimeout(() => {
-        endRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+        const c = scrollContainerRef.current;
+        if (c) c.scrollTo({ top: c.scrollHeight, behavior: "smooth" });
       }, 0);
     }
   }, [messages.length, streamingContent]);
@@ -740,27 +737,17 @@ export default function MarketsData({
   // Show placeholder when no market is selected
   if (!eventTicker || !marketTitle) {
     return (
-      <div className="flex flex-col items-center justify-center h-full gap-10 px-10">
-        <header className="flex flex-col items-center justify-center">
-          <div className="flex items-end">
-            <Image
-              src="/images/rexmarket.png"
-              alt="Rex Market"
-              width={140}
-              height={140}
-              priority
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <h1 className="max-w-[600px] w-full !font-normal !text-[14px] sm:!text-[18px] text-center text-white">
-              Conversational Intelligence for Event-Traders.
-            </h1>
-            <h4 className="max-w-[600px] w-full !text-[12px] sm:!text-[14px] !font-normal text-[#F2F2F2] text-center">
-              Click <span className="text-[#00B050]">Generate</span> to get
-              Intelligence Reports for any prediction event!
-            </h4>
-          </div>
-        </header>
+      <div className="sb-body">
+        <div className="empty">
+          <span className="empty__mark" aria-hidden="true">
+            <ClawIco size={34} />
+          </span>
+          <b>Rex Markets</b>
+          <p>
+            Conversational intelligence for event traders. Generate an intelligence report for any
+            prediction event.
+          </p>
+        </div>
       </div>
     );
   }
@@ -768,162 +755,88 @@ export default function MarketsData({
   // Show loading state
   if (isLoadingDetails) {
     return (
-      <div className="flex flex-col items-center justify-center h-full">
-        <div className="text-white text-lg">Loading market data...</div>
+      <div className="sb-body" aria-busy="true">
+        <p className="rx-small" style={{ margin: "0 0 14px" }}>
+          Loading market data…
+        </p>
+        <SkeletonLines />
       </div>
     );
   }
 
-  // Show market details (for both Kalshi and Polymarket markets in sidebar)
+  const showChart =
+    detectedSource === "limitless" ||
+    detectedSource === "myriad" ||
+    detectedSource === "predictfun" ||
+    (marketDetails?.markets && marketDetails.markets.length > 0);
+  const tableId = `${discId}-table`;
+  const chartId = `${discId}-chart`;
+
+  // Rex Pilot pane (design/market.html #pane-pilot .report): title, situation brief, data table + chart
+  // disclosures, insights, statistics, then follow-up answers and the Ask bar.
   return (
-    <div
-      className="rex-pilot-panel text-white flex flex-col h-full relative overflow-hidden min-h-0"
-      style={{
-        maxHeight: "100dvh", // Use dynamic viewport height for mobile
-      }}
-    >
-      <div
-        ref={scrollContainerRef}
-        onScroll={handleScroll}
-        className="flex-1 overflow-y-auto overflow-x-hidden custom-sidebar-scrollbar pb-4 pr-2 min-h-0"
-        style={{
-          WebkitOverflowScrolling: "touch",
-          touchAction: "pan-y",
-          overscrollBehavior: "contain",
-          paddingBottom: "0.5rem", // Reduced padding on mobile
-        }}
-      >
-        {/* Header Section - Title and Image */}
-        <div className="flex-shrink-0 pb-6">
-          <div className="flex items-center gap-6">
-            {marketDetails?.symbol_image_url && !imageError && (
-              <div className="flex-shrink-0">
-                <Image
-                  src={marketDetails.symbol_image_url}
-                  alt={marketTitle || "Market"}
-                  width={60}
-                  height={60}
-                  className="rounded-lg"
-                  unoptimized
-                  onError={() => {
-                    console.error(
-                      "Image failed to load:",
-                      marketDetails.symbol_image_url,
-                    );
-                    setImageError(true);
-                  }}
-                />
-              </div>
-            )}
-            <div className="flex-1 min-w-0">
-              <div className="mb-2">
-                <h1 className="rex-pilot-market-title break-words">
-                  {marketTitle}
-                </h1>
-              </div>
-            </div>
-          </div>
-        </div>
+    <>
+      <div ref={scrollContainerRef} onScroll={handleScroll} className="sb-body">
+        <div className="report">
+          <h2 className="report__title">{marketTitle}</h2>
 
-        {/* Situation Brief Section */}
-        <div className="flex-shrink-0 pb-6">
-          <p className="rex-pilot-section-heading mb-3">
-            Situation Brief:
-          </p>
-          <div className="">
-            {isGeneratingSummary ? (
-              <div className="text-white/60 italic text-[15px] leading-[1.65]">
-                Generating summary...
-              </div>
-            ) : summary ? (
-              <div className="rex-pilot-body-text">
-                {formatRexPilotChatLines(summary)}
-              </div>
-            ) : (
-              <p className="text-white/60 italic text-[15px] leading-[1.65]">
-                No summary available
-              </p>
-            )}
-          </div>
-        </div>
+          <h2>Situation brief</h2>
+          {isGeneratingSummary ? (
+            <p className="report__muted">Generating summary…</p>
+          ) : summary ? (
+            <div className="report__text">{formatRexPilotChatLines(summary)}</div>
+          ) : (
+            <p className="report__muted">No summary available</p>
+          )}
 
-        {/* Probability Table (collapsible) */}
-        <div className="flex-shrink-0 pb-6">
-          <button
-            type="button"
-            onClick={() => setProbabilityTableExpanded((prev) => !prev)}
-            className="flex w-full items-center gap-2 py-3 text-left font-semibold text-white hover:text-[#ffc000] transition-colors"
-            aria-expanded={probabilityTableExpanded}
-            aria-label={
-              probabilityTableExpanded
-                ? "Collapse probability table"
-                : "Expand probability table"
-            }
-          >
-            {probabilityTableExpanded ? (
-              <ChevronDown className="h-5 w-5 flex-shrink-0" />
-            ) : (
-              <ChevronRight className="h-5 w-5 flex-shrink-0" />
-            )}
-            <span>
-              Market Data <span className="text-[#ffc000]">Table</span>
-            </span>
-          </button>
-          {probabilityTableExpanded && (
-            <div className="overflow-hidden">
-              <div className="overflow-x-auto max-w-full">
-                <table className="w-full text-sm min-w-[800px]">
-                  <thead className="border-b border-[#ffc000]">
+          <div className="disc-box">
+            <button
+              type="button"
+              className="disc"
+              onClick={() => setProbabilityTableExpanded((prev) => !prev)}
+              aria-expanded={probabilityTableExpanded}
+              aria-controls={probabilityTableExpanded ? tableId : undefined}
+            >
+              Market data table
+              <IconChev />
+            </button>
+            {probabilityTableExpanded && (
+              <div
+                id={tableId}
+                className="disc-body disc-body--table"
+                tabIndex={0}
+                role="region"
+                aria-label="Market data table, scrolls sideways"
+              >
+                <table className="sb-table">
+                  <thead>
                     <tr>
-                      <th className="px-3 py-3 text-left text-[#ffc000] font-semibold whitespace-nowrap">
-                        Outcome
-                      </th>
-                      <th className="px-3 py-3 text-left text-[#ffc000] font-semibold whitespace-nowrap">
-                        Probability
-                      </th>
-                      <th className="px-3 py-3 text-left text-[#ffc000] font-semibold whitespace-nowrap">
-                        <span className="text-[#00b050]">Yes</span> Price
-                      </th>
-                      <th className="px-3 py-3 text-left text-[#ffc000] font-semibold whitespace-nowrap">
-                        <span className="text-red-400">No</span> Price
-                      </th>
-                      <th className="px-3 py-3 text-left text-[#ffc000] font-semibold whitespace-nowrap">
-                        Volume
-                      </th>
-                      <th className="px-3 py-3 text-left text-[#ffc000] font-semibold whitespace-nowrap">
-                        <span className="text-[#00b050]">Bid</span> Depth
-                      </th>
-                      <th className="px-3 py-3 text-left text-[#ffc000] font-semibold whitespace-nowrap">
-                        <span className="text-red-400">Ask</span> Depth
-                      </th>
-                      <th className="px-3 py-3 text-left text-[#ffc000] font-semibold whitespace-nowrap">
-                        Liquidity
-                      </th>
+                      <th>Outcome</th>
+                      <th>Probability</th>
+                      <th>Yes</th>
+                      <th>No</th>
+                      <th>Volume</th>
+                      <th>Bid depth</th>
+                      <th>Ask depth</th>
+                      <th>Liquidity</th>
                     </tr>
                   </thead>
                   <tbody>
                     {outcomesForInsightsAndTable &&
                     outcomesForInsightsAndTable.length > 0 ? (
-                      outcomesForInsightsAndTable.map((outcome, idx) => (
-                        <tr
-                          key={outcome.ticker}
-                          className={`border-b border-white/10 ${
-                            idx % 2 === 0 ? "bg-white/5" : "bg-transparent"
-                          }`}
-                        >
-                          <td className="px-3 py-3 text-white font-medium">
-                            {outcome.subtitle}
-                          </td>
-                          <td className="px-3 py-3 text-[#ffc000] whitespace-nowrap">
+                      outcomesForInsightsAndTable.map((outcome) => (
+                        <tr key={outcome.ticker}>
+                          <td>{outcome.subtitle}</td>
+                          <td className="rx-num">
                             {formatProbability(outcome.probability)}
                           </td>
-                          <td className="px-3 py-3 text-[#00b050] whitespace-nowrap">
+                          <td className="rx-num is-up">
                             {formatPrice(outcome.yes_price)}
                           </td>
-                          <td className="px-3 py-3 text-red-400 whitespace-nowrap">
+                          <td className="rx-num is-down">
                             {formatPrice(outcome.no_price)}
                           </td>
-                          <td className="px-3 py-3 text-white whitespace-nowrap">
+                          <td className="rx-num">
                             {(
                               isPredictFun
                                 ? predictFunDisplayOutcomeVolume(outcome)
@@ -932,17 +845,17 @@ export default function MarketsData({
                               maximumFractionDigits: isPredictFun ? 0 : undefined,
                             })}
                           </td>
-                          <td className="px-3 py-3 text-white whitespace-nowrap">
+                          <td className="rx-num">
                             {(isPredictFun
                               ? formatPredictFunBidAsk
                               : formatBidAsk)(outcome.yes_bid)}
                           </td>
-                          <td className="px-3 py-3 text-white whitespace-nowrap">
+                          <td className="rx-num">
                             {(isPredictFun
                               ? formatPredictFunBidAsk
                               : formatBidAsk)(outcome.yes_ask)}
                           </td>
-                          <td className="px-3 py-3 text-white whitespace-nowrap">
+                          <td className="rx-num">
                             {(outcome.liquidity || 0).toLocaleString(undefined, {
                               maximumFractionDigits: 0,
                             })}
@@ -951,10 +864,7 @@ export default function MarketsData({
                       ))
                     ) : (
                       <tr>
-                        <td
-                          colSpan={8}
-                          className="px-4 py-8 text-center text-white/60"
-                        >
+                        <td colSpan={8} className="is-empty">
                           No outcome data available
                         </td>
                       </tr>
@@ -962,61 +872,43 @@ export default function MarketsData({
                   </tbody>
                 </table>
               </div>
-            </div>
-          )}
-        </div>
+            )}
+          </div>
 
-        {/* Market Data Chart (collapsible) - Limitless: PriceChart; Kalshi/Polymarket: ProbabilityChart */}
-        {(detectedSource === "limitless" ||
-          detectedSource === "myriad" ||
-          detectedSource === "predictfun" ||
-          (marketDetails?.markets && marketDetails.markets.length > 0)) && (
-          <div className="flex-shrink-0 pb-6">
-            <button
-              type="button"
-              onClick={() => setProbabilityChartExpanded((prev) => !prev)}
-              className="flex w-full items-center gap-2 py-3 text-left font-semibold text-white hover:text-[#ffc000] transition-colors"
-              aria-expanded={probabilityChartExpanded}
-              aria-label={
-                probabilityChartExpanded
-                  ? "Collapse probability chart"
-                  : "Expand probability chart"
-              }
-            >
-              {probabilityChartExpanded ? (
-                <ChevronDown className="h-5 w-5 flex-shrink-0" />
-              ) : (
-                <ChevronRight className="h-5 w-5 flex-shrink-0" />
-              )}
-              <span>
-                Market Data <span className="text-[#ffc000]">Chart</span>
-              </span>
-            </button>
-            {probabilityChartExpanded && (
-              <div>
-                {(isLoadingLimitlessChart && detectedSource === "limitless") ||
-                (predictFunChartLoading && detectedSource === "predictfun") ? (
-                  <div className="flex items-center justify-center py-8 text-white/60">
-                    Loading chart...
-                  </div>
-                ) : detectedSource === "predictfun" ? (
-                  <div className="w-full">
-                    {!predictFunIsCryptoUpDown ? (
-                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                        <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 w-full">
-                          <div className="text-white/80 text-sm shrink-0">
+          {/* Market data chart - Limitless: PriceChart; Kalshi/Polymarket: ProbabilityChart */}
+          {showChart && (
+            <div className="disc-box">
+              <button
+                type="button"
+                className="disc"
+                onClick={() => setProbabilityChartExpanded((prev) => !prev)}
+                aria-expanded={probabilityChartExpanded}
+                aria-controls={probabilityChartExpanded ? chartId : undefined}
+              >
+                Market data chart
+                <IconChev />
+              </button>
+              {probabilityChartExpanded && (
+                <div id={chartId} className="disc-body disc-body--chart">
+                  {(isLoadingLimitlessChart && detectedSource === "limitless") ||
+                  (predictFunChartLoading && detectedSource === "predictfun") ? (
+                    <div className="rx-chart-msg">Loading chart…</div>
+                  ) : detectedSource === "predictfun" ? (
+                    <>
+                      {!predictFunIsCryptoUpDown ? (
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <span className="rx-num font-semibold">
                             {predictFunPilotVolumeFormatted}
-                          </div>
-                          <div className="flex items-center gap-1 bg-white/10 rounded p-1 flex-wrap">
+                          </span>
+                          <div className="rx-seg rx-seg--mono" role="group" aria-label="Chart range">
                             {PREDICT_FUN_CHART_INTERVALS.map(({ key, label }) => (
                               <button
                                 key={key}
                                 type="button"
                                 onClick={() => setPredictFunChartTf(key)}
-                                className={`px-2 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap ${
-                                  predictFunChartTf === key
-                                    ? "bg-[#ffc000] text-black"
-                                    : "text-white/70 hover:text-white hover:bg-white/10"
+                                aria-pressed={predictFunChartTf === key}
+                                className={`rx-seg__item${
+                                  predictFunChartTf === key ? " is-active" : ""
                                 }`}
                               >
                                 {label}
@@ -1024,54 +916,52 @@ export default function MarketsData({
                             ))}
                           </div>
                         </div>
+                      ) : null}
+                      <div className="relative h-[300px] w-full overflow-visible">
+                        {predictFunIsCryptoUpDown && predictFunCryptoChartContext ? (
+                          <PredictFunCryptoUpDownChart
+                            context={predictFunCryptoChartContext}
+                            className="h-full rounded-[10px] overflow-hidden border border-rx-line"
+                          />
+                        ) : predictFunChartData.length > 0 &&
+                          predictFunMarketKeys.length > 0 ? (
+                          <LimitlessPriceChart
+                            key={`pilot-pf-${predictFunTopChartMarkets.map((m) => m.id).join("-")}-${predictFunChartTf}`}
+                            chartData={predictFunChartData}
+                            marketKeys={predictFunMarketKeys}
+                            accentColor="#ffc000"
+                          />
+                        ) : (
+                          <div className="rx-chart-msg absolute inset-0">
+                            No price history for this range yet.
+                          </div>
+                        )}
                       </div>
-                    ) : null}
-                    <div className="w-full h-[400px] relative overflow-visible pl-0 pr-1 sm:pr-3">
-                      {predictFunIsCryptoUpDown && predictFunCryptoChartContext ? (
-                        <PredictFunCryptoUpDownChart
-                          context={predictFunCryptoChartContext}
-                          className="h-full rounded-md overflow-hidden border border-white/10"
-                        />
-                      ) : predictFunChartData.length > 0 &&
-                        predictFunMarketKeys.length > 0 ? (
-                        <LimitlessPriceChart
-                          key={`pilot-pf-${predictFunTopChartMarkets.map((m) => m.id).join("-")}-${predictFunChartTf}`}
-                          chartData={predictFunChartData}
-                          marketKeys={predictFunMarketKeys}
-                          accentColor="#ffc000"
-                        />
-                      ) : (
-                        <div className="absolute inset-0 flex items-center justify-center text-white/60 text-sm px-4 text-center">
-                          No price history for this range yet.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : detectedSource === "limitless" ? (
-                  <ProbabilityChart
-                    markets={[]}
-                    limitlessChartData={limitlessChartData}
-                    limitlessMarketKeys={limitlessMarketKeys}
-                    limitlessHistory={limitlessChartHistory}
-                    limitlessVolumeFormatted={limitlessVolumeFormatted}
-                  />
-                ) : detectedSource === "myriad" ? (
-                  <div className="w-full">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-4">
-                      <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4 w-full">
-                        <div className="text-white/80 text-sm shrink-0">
+                    </>
+                  ) : detectedSource === "limitless" ? (
+                    <ProbabilityChart
+                      markets={[]}
+                      limitlessChartData={limitlessChartData}
+                      limitlessMarketKeys={limitlessMarketKeys}
+                      limitlessHistory={limitlessChartHistory}
+                      limitlessVolumeFormatted={limitlessVolumeFormatted}
+                      heightClassName="h-[300px]"
+                    />
+                  ) : detectedSource === "myriad" ? (
+                    <>
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="rx-num font-semibold">
                           {myriadPilotVolumeFormatted}
-                        </div>
-                        <div className="flex items-center gap-1 bg-white/10 rounded p-1 flex-wrap">
+                        </span>
+                        <div className="rx-seg rx-seg--mono" role="group" aria-label="Chart range">
                           {MYRIAD_CHART_INTERVALS.map(({ label, api }) => (
                             <button
                               key={api}
                               type="button"
                               onClick={() => setMyriadChartTf(api)}
-                              className={`px-2 py-1 text-xs font-medium rounded transition-colors whitespace-nowrap ${
-                                myriadChartTf === api
-                                  ? "bg-[#ffc000] text-black"
-                                  : "text-white/70 hover:text-white hover:bg-white/10"
+                              aria-pressed={myriadChartTf === api}
+                              className={`rx-seg__item${
+                                myriadChartTf === api ? " is-active" : ""
                               }`}
                             >
                               {label}
@@ -1079,214 +969,94 @@ export default function MarketsData({
                           ))}
                         </div>
                       </div>
-                    </div>
-                    <div className="w-full h-[400px] relative overflow-visible pl-0 pr-1 sm:pr-3">
-                      {myriadChartData.length > 0 && myriadMarketKeys.length > 0 ? (
-                        <LimitlessPriceChart
-                          chartData={myriadChartData}
-                          marketKeys={myriadMarketKeys}
-                          accentColor="#ffc000"
-                        />
-                      ) : (
-                        <div className="absolute inset-0 flex items-center justify-center text-white/60 text-sm px-4 text-center">
-                          No price history for this range yet.
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <ProbabilityChart
-                    markets={marketDetails!.markets}
-                    totalVolume={totalVolume || marketDetails!.total_volume}
-                  />
-                )}
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Content Section - AI Insights and below */}
-        <div className="flex-shrink-0">
-          {/* AI Insights Section */}
-          <div className="pb-6">
-            <div className="">
-              {isGeneratingInsights ? (
-                <div className="text-white/60 italic">
-                  Generating insights...
-                </div>
-              ) : insights && insights.length > 0 ? (
-                <>
-                  <p className="rex-pilot-section-heading mb-3">Market Insights:</p>
-                  <ul className="space-y-3">
-                    {insights.map((insight, idx) => (
-                      <li key={idx} className="flex items-start gap-3">
-                        <span className="text-[#f0cf7a] font-semibold flex-shrink-0 pt-0.5">
-                          {idx + 1}.
-                        </span>
-                        <div className="rex-pilot-body-text min-w-0 flex-1">
-                          {formatRexPilotChatLines(insight)}
-                        </div>
-                      </li>
-                    ))}
-                  </ul>
-                </>
-              ) : (
-                <div className="flex w-full items-center justify-center">
-                  <p className="text-white/60 italic">No insights available</p>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Market Volume Stats */}
-          {marketDetails && (
-            <div className="pb-6">
-              <p className="!text-[16px] font-semibold text-white mb-3">
-                Market <span className="text-[#ffc000]">Statistics</span>
-              </p>
-              <div className="bg-white/5 rounded-lg p-4">
-                <div className={detectedSource === "limitless" ? "" : "grid grid-cols-2 gap-4"}>
-                  <div>
-                    <p className="text-white/60 text-sm mb-1">Total Volume</p>
-                    <p className="text-white text-lg font-semibold">
-                      {detectedSource === "limitless"
-                        ? (limitlessVolumeFormatted != null && limitlessVolumeFormatted !== ""
-                          ? (limitlessVolumeFormatted.startsWith("$")
-                              ? limitlessVolumeFormatted
-                              : `$${limitlessVolumeFormatted}`)
-                          : `$${(totalVolume ?? 0).toLocaleString()}`)
-                        : `$${(marketDetails.total_volume ?? totalVolume ?? 0).toLocaleString()}`}
-                    </p>
-                  </div>
-                  {detectedSource !== "limitless" && (
-                    <div>
-                      <p className="text-white/60 text-sm mb-1">Series Volume</p>
-                      <p className="text-white text-lg font-semibold">
-                        ${(marketDetails.total_series_volume ?? totalVolume ?? 0).toLocaleString()}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          {/* Chat History Section */}
-          {messages.length > 0 && (
-            <div className="pb-6">
-              <div className="flex flex-col w-full space-y-4">
-                {messages.map((m, idx) => (
-                  <div
-                    key={idx}
-                    className={`mb-4 ${
-                      m.role === "user"
-                        ? "flex items-start justify-end"
-                        : "flex justify-end items-end"
-                    }`}
-                  >
-                    <div className="max-w-full p-4 rounded-lg break-words">
-                      <div className="flex items-center gap-2 mb-2">
-                        {m.role === "user" ? (
-                          <div className="w-10 h-10 rounded-full flex items-center justify-center bg-blue-500">
-                            <span className="text-white text-xs">U</span>
-                          </div>
+                      <div className="relative h-[300px] w-full overflow-visible">
+                        {myriadChartData.length > 0 && myriadMarketKeys.length > 0 ? (
+                          <LimitlessPriceChart
+                            chartData={myriadChartData}
+                            marketKeys={myriadMarketKeys}
+                            accentColor="#ffc000"
+                          />
                         ) : (
-                          <div>
-                            <Image
-                              src="/images/assistant_banner.png"
-                              alt="Assistant avatar"
-                              width={120}
-                              height={80}
-                            />
+                          <div className="rx-chart-msg absolute inset-0">
+                            No price history for this range yet.
                           </div>
                         )}
                       </div>
-                      <div className="rex-pilot-body-text break-words">
-                        {formatRexPilotChatLines(m.content)}
-                      </div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Streaming Content */}
-          {streamingContent && (
-            <div className="pb-6">
-              <div className="mb-4 flex justify-end">
-                <div className="p-4 rounded-lg max-w-full break-words">
-                  <div className="flex items-center">
-                    <Image
-                      src="/images/assistant_banner.png"
-                      alt="Assistant avatar"
-                      width={120}
-                      height={80}
+                    </>
+                  ) : (
+                    <ProbabilityChart
+                      markets={marketDetails!.markets}
+                      totalVolume={totalVolume || marketDetails!.total_volume}
+                      heightClassName="h-[300px]"
                     />
-                  </div>
-                  <div className="rex-pilot-body-text break-words">
-                    {formatRexPilotChatLines(streamingContent)}
-                    <span className="inline-block w-2 h-4 bg-white/60 animate-pulse ml-1" />
-                  </div>
+                  )}
                 </div>
-              </div>
+              )}
             </div>
           )}
-          <div ref={endRef} />
-        </div>
-      </div>
 
-      <div
-        className="flex-shrink-0 w-full flex justify-center px-4 sm:px-8 pb-2 sm:pb-2"
-        style={{
-          paddingBottom: "0.5rem", // Consistent padding on mobile
-          position: "sticky",
-          bottom: 0,
-          backgroundColor: "#141414",
-          zIndex: 10,
-        }}
-      >
-        <div className="relative w-full sm:w-[80%]">
-          <textarea
-            ref={taRef}
-            value={inputMessage}
-            onChange={(e) => setInputMessage(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Ask any questions about this market..."
-            disabled={isSending}
-            className="w-full max-w-full bg-[#262626] border-[0.5px] border-[#3C3C3C] text-[#BEBEBE] placeholder-[#BEBEBE] rounded-[8px] pl-4 pr-20 py-2.5 resize-none outline-none disabled:opacity-50 min-h-[50px] max-h-[200px] break-words text-[15px] leading-[1.65]"
-            rows={2}
-            aria-label="Message input"
-          />
-          {isSending ? (
-            <button
-              type="button"
-              onClick={handleStop}
-              className="absolute right-2 top-1/2 flex h-7 w-7 -translate-y-1/2 items-center justify-center rounded-lg bg-white/10 text-white/70 transition-colors hover:bg-white/15 hover:text-white"
-              aria-label="Stop generating"
-              title="Stop generating"
-            >
-              <Square className="h-4 w-4 fill-current text-white" />
-            </button>
+          {/* AI insights */}
+          <h2>Market insights</h2>
+          {isGeneratingInsights ? (
+            <p className="report__muted">Generating insights…</p>
+          ) : insights && insights.length > 0 ? (
+            <ol className="insights">
+              {insights.map((insight, idx) => (
+                <li key={idx}>
+                  <div>{formatRexPilotChatLines(insight)}</div>
+                </li>
+              ))}
+            </ol>
           ) : (
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!inputMessage.trim()}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-white font-semibold rounded-md transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-              aria-label="Send message"
-            >
-              <Image
-                src="/images/banner.png"
-                width={40}
-                height={40}
-                alt="Send"
-                className="scale-100 transition-transform duration-300"
-              />
-            </button>
+            <p className="report__muted">No insights available</p>
+          )}
+
+          {/* Market volume stats */}
+          {marketDetails && (
+            <>
+              <h2>Market statistics</h2>
+              <div className={`stats${detectedSource === "limitless" ? " stats--one" : ""}`}>
+                <div className="rx-well stat">
+                  <span className="stat__label">Total volume</span>
+                  <span className="stat__value">
+                    {detectedSource === "limitless"
+                      ? (limitlessVolumeFormatted != null && limitlessVolumeFormatted !== ""
+                        ? (limitlessVolumeFormatted.startsWith("$")
+                            ? limitlessVolumeFormatted
+                            : `$${limitlessVolumeFormatted}`)
+                        : `$${(totalVolume ?? 0).toLocaleString()}`)
+                      : `$${(marketDetails.total_volume ?? totalVolume ?? 0).toLocaleString()}`}
+                  </span>
+                </div>
+                {detectedSource !== "limitless" && (
+                  <div className="rx-well stat">
+                    <span className="stat__label">Series volume</span>
+                    <span className="stat__value">
+                      ${(marketDetails.total_series_volume ?? totalVolume ?? 0).toLocaleString()}
+                    </span>
+                  </div>
+                )}
+              </div>
+            </>
           )}
         </div>
+
+        {/* Follow-up questions and Rex Pilot answers */}
+        <QaThread messages={messages} streaming={streamingContent} />
+        <div ref={endRef} />
       </div>
-    </div>
+
+      <AskBar
+        value={inputMessage}
+        onChange={setInputMessage}
+        onSend={handleSend}
+        onStop={handleStop}
+        onKeyDown={onKeyDown}
+        isSending={isSending}
+        placeholder="Ask any question about this market"
+        label="Ask about this market"
+        taRef={taRef}
+      />
+    </>
   );
 }

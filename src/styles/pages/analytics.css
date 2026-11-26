@@ -1,0 +1,199 @@
+/* Data widgets inside AI reports: market metrics (Coin-O-Metry), holder analytics, safety checks,
+   project links and the "Jump to a section" menu.
+   Source: design/report.html (Full Report: "Market data" table, "Key characteristics", "Risks to watch"),
+   design/whats-new.html + js/shell.js (key facts, check/cross rows), design/css/components.css
+   (.stats/.stat, .report-takeaway, .lb-table, .rep-head__links, .menu/.sec-nav) and design/css/pages.css
+   (.article .report table, .facts).
+   They render in two hosts: the RexScreener report sidebar (.rx-pilot.rx-ss) and Claw AI answers (.rx-claw),
+   so every rule is scoped under .rx-an, the class on each widget's own root (portals included).
+   Unlayered: beats the layered DS and the bare h3/h4 sizes in globals.css. */
+
+.rx-an{font-family:var(--rx-ui);color:var(--rx-text);min-width:0}
+
+/* ---------- widget root (metrics / holders / safety) ---------- */
+.rx-an--w{container:rx-an / inline-size;display:flex;flex-direction:column;gap:22px;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
+.rx-an .an-block{display:flex;flex-direction:column;gap:10px;min-width:0}
+.rx-an .an-h{display:flex;align-items:center;gap:8px;margin:0;min-width:0;font-family:var(--rx-ui);font-size:14px;font-weight:600;line-height:1.35;letter-spacing:0;color:var(--rx-text)}
+.rx-an .an-h svg{width:16px;height:16px;flex-shrink:0}
+.rx-an .an-h .rx-count{font-weight:500}
+.rx-an .an-h-row{display:flex;align-items:center;justify-content:space-between;gap:10px;min-width:0}
+.rx-an .an-muted{color:var(--rx-text-3);font-family:var(--rx-ui);font-weight:400}
+
+/* flat card (same as the sidebar's .disc-box) */
+.rx-an .an-card{min-width:0;border:1px solid var(--rx-line);border-radius:14px;background:var(--rx-surface-1);overflow:hidden}
+.rx-an .an-card__head{display:flex;align-items:center;justify-content:space-between;gap:10px;min-height:40px;padding:10px 14px;border-bottom:1px solid var(--rx-line)}
+.rx-an .an-card__foot{padding:12px}
+
+/* two blocks side by side when the report is wide enough */
+.rx-an .an-duo{display:grid;grid-template-columns:minmax(0,1fr);gap:22px;align-items:start}
+.rx-an .an-stack{display:flex;flex-direction:column;gap:12px;min-width:0}
+@container rx-an (min-width:640px){
+  .rx-an .an-duo{grid-template-columns:repeat(2,minmax(0,1fr));gap:16px}
+  .rx-an .an-duo > :only-child{grid-column:1 / -1}
+}
+
+/* ---------- stat tiles (prototype .stats/.stat in an rx-well) ---------- */
+.rx-an .an-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}
+.rx-an .an-stats > .an-stat:last-child:nth-child(odd){grid-column:1 / -1}
+.rx-an .an-stat{display:flex;flex-direction:column;gap:6px;min-width:0;padding:14px 16px}
+.rx-an .an-stat__label{display:flex;align-items:center;gap:7px;min-width:0;font-size:12px;line-height:1.4;color:var(--rx-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rx-an .an-stat__value{min-width:0;font-family:var(--rx-mono);font-size:18px;font-weight:600;line-height:1.3;color:var(--rx-text);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rx-an .an-stat .rx-badge{align-self:flex-start}
+.rx-an .an-stat .an-bar{margin-top:4px}
+/* coloured edge for graded tiles (tax, liquidity pool) */
+.rx-an .an-stat--up{border-color:var(--rx-up-line)}
+.rx-an .an-stat--gold{border-color:var(--rx-gold-line)}
+.rx-an .an-stat--ember{border-color:var(--rx-ember-line)}
+.rx-an .an-stat--down{border-color:var(--rx-down-line)}
+@container rx-an (min-width:440px){
+  .rx-an .an-stats--3{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+  .rx-an .an-stats--3 > .an-stat:last-child:nth-child(odd){grid-column:auto}
+}
+@container rx-an (min-width:560px){
+  .rx-an .an-stats--4{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
+  .rx-an .an-stats--4 > .an-stat:last-child:nth-child(odd){grid-column:auto}
+}
+
+/* small colour keys */
+.rx-an .an-dot{display:inline-block;width:6px;height:6px;border-radius:2px;flex-shrink:0;background:var(--rx-text-3)}
+.rx-an .an-dot.is-up{background:var(--rx-up)}
+.rx-an .an-dot.is-gold{background:var(--rx-gold)}
+.rx-an .an-dot.is-ember{background:var(--rx-ember)}
+.rx-an .an-dot.is-down{background:var(--rx-down)}
+
+/* ---------- metric rows with a bar ---------- */
+.rx-an .an-rows{margin:0;padding:0;list-style:none;display:flex;flex-direction:column}
+.rx-an .an-row{display:flex;flex-direction:column;gap:8px;padding:12px 14px;border-bottom:1px solid var(--rx-line)}
+.rx-an .an-row:last-child{border-bottom:0}
+.rx-an .an-row__top{display:flex;align-items:baseline;justify-content:space-between;gap:12px;min-width:0}
+.rx-an .an-row__label{min-width:0;font-size:13px;line-height:1.4;color:var(--rx-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rx-an .an-row__label .an-dot{margin:0 8px 1px 0;vertical-align:middle}
+.rx-an .an-row__val{flex-shrink:0;font-family:var(--rx-mono);font-size:13px;font-weight:600;color:var(--rx-text);font-variant-numeric:tabular-nums;white-space:nowrap}
+
+.rx-an .an-bar{position:relative;height:4px;border-radius:999px;background:rgba(var(--rx-hair),.08);overflow:hidden}
+.rx-an .an-bar--l{height:8px}
+.rx-an .an-bar > span{display:block;height:100%;border-radius:inherit;background:var(--rx-gold);transition:width .6s var(--rx-ease)}
+.rx-an .an-bar > .is-up{background:var(--rx-up)}
+.rx-an .an-bar > .is-gold{background:var(--rx-gold)}
+.rx-an .an-bar > .is-ember{background:var(--rx-ember)}
+.rx-an .an-bar > .is-down{background:var(--rx-down)}
+
+/* ---------- pair head (Coin-O-Metry) ---------- */
+.rx-an .an-pair{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px 16px;padding:12px 14px}
+.rx-an .an-pair__id,.rx-an .an-pair__addr{display:flex;flex-wrap:wrap;align-items:center;gap:8px 10px;min-width:0}
+.rx-an .an-pair__sym{font-family:var(--rx-mono);font-size:15px;font-weight:600;color:var(--rx-text);letter-spacing:-.01em}
+.rx-an .an-cap{text-transform:capitalize}
+.rx-an .an-link{display:inline-flex;align-items:center;gap:4px;font-size:12px;font-weight:600;color:var(--rx-gold-hi);text-decoration:none;border-radius:4px}
+.rx-an .an-link:hover{text-decoration:underline;text-underline-offset:3px}
+.rx-an .an-link svg{width:12px;height:12px;flex-shrink:0}
+.rx-an .an-addr{padding:0;background:none;font-family:var(--rx-mono);font-size:12.5px;font-weight:500;color:var(--rx-text-2);white-space:nowrap}
+
+/* copy buttons: 28px look, 40px+ tap area */
+.rx-an .an-copy{position:relative;flex-shrink:0;width:28px;height:28px;border-radius:8px}
+.rx-an .an-copy::before{content:"";position:absolute;inset:-7px}
+.rx-an .an-copy svg{width:13px;height:13px}
+.rx-an .an-copy.is-done{color:var(--rx-up);border-color:var(--rx-up-line)}
+
+/* ---------- tables (prototype .article .report table / .lb-table) ---------- */
+.rx-an .an-scroll{overflow-x:auto;-webkit-overflow-scrolling:touch;scrollbar-width:thin;scrollbar-color:var(--rx-line-strong) transparent}
+.rx-an .an-table{width:100%;border-collapse:collapse;font-size:13px;line-height:1.45}
+.rx-an .an-table th{padding:10px 12px;font-family:var(--rx-mono);font-size:11px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--rx-text-3);text-align:left;white-space:nowrap;border-bottom:1px solid var(--rx-line)}
+.rx-an .an-table td{padding:9px 12px;border-bottom:1px solid rgba(36,36,36,.6);color:var(--rx-text);vertical-align:middle}
+.rx-an .an-table th:first-child,.rx-an .an-table td:first-child{padding-left:14px}
+.rx-an .an-table th:last-child,.rx-an .an-table td:last-child{padding-right:14px}
+.rx-an .an-table tbody tr:last-child td{border-bottom:0}
+.rx-an .an-table tbody tr{transition:background .12s}
+.rx-an .an-table tbody tr:hover{background:rgba(255,184,0,.035)}
+.rx-an .an-table .n{text-align:right;font-family:var(--rx-mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+.rx-an .an-table td.n{font-weight:600}
+.rx-an .an-table .an-col-rank{width:44px}
+.rx-an .an-holder{display:inline-flex;align-items:center;gap:8px;min-width:0}
+.rx-an .an-rank{display:inline-flex;align-items:center;justify-content:center;width:24px;height:24px;border-radius:7px;background:var(--rx-surface-3);border:1px solid var(--rx-line);
+  font-family:var(--rx-mono);font-size:12px;font-weight:600;color:var(--rx-text-2);font-variant-numeric:tabular-nums}
+.rx-an .an-rank.is-1{background:var(--rx-gold-tint);border-color:var(--rx-gold-line);color:var(--rx-gold-hi)}
+.rx-an .an-rank.is-2{background:#1C1D20;border-color:#3A3D44;color:#D5D9E0}
+.rx-an .an-rank.is-3{background:var(--rx-ember-tint);border-color:var(--rx-ember-line);color:#FFB089}
+
+/* ---------- key facts (prototype .facts) ---------- */
+.rx-an .an-facts{margin:0;display:flex;flex-direction:column}
+.rx-an .an-facts > div{display:flex;align-items:center;justify-content:space-between;gap:12px;min-height:40px;padding:8px 14px;border-bottom:1px solid var(--rx-line);font-size:13px;line-height:1.4}
+.rx-an .an-facts > div:last-child{border-bottom:0}
+.rx-an .an-facts dt{flex-shrink:0;color:var(--rx-text-2)}
+.rx-an .an-facts dd{margin:0;display:inline-flex;align-items:center;justify-content:flex-end;flex-wrap:wrap;gap:6px;min-width:0;font-family:var(--rx-mono);font-weight:600;color:var(--rx-text);text-align:right;font-variant-numeric:tabular-nums;overflow-wrap:anywhere}
+.rx-an .an-facts dd .rx-badge{font-family:var(--rx-ui)}
+.rx-an .an-facts .an-soc{display:inline-flex;align-items:center;justify-content:center;width:28px;height:28px;border-radius:8px;background:var(--rx-surface-2);border:1px solid var(--rx-line);position:relative}
+.rx-an .an-facts .an-soc::before{content:"";position:absolute;inset:-6px}
+.rx-an .an-facts .an-soc:hover{border-color:var(--rx-gold-line)}
+.rx-an .an-facts .an-soc img{width:16px;height:16px;object-fit:contain}
+
+/* ---------- risk score ---------- */
+.rx-an .an-score{display:flex;flex-direction:column;gap:12px;padding:16px}
+.rx-an .an-score__top{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
+.rx-an .an-score__label{font-size:13px;color:var(--rx-text-2)}
+.rx-an .an-score__val{font-family:var(--rx-mono);font-size:28px;font-weight:600;line-height:1;letter-spacing:-.02em;font-variant-numeric:tabular-nums}
+.rx-an .an-legend{display:flex;justify-content:space-between;gap:12px;font-size:11px;color:var(--rx-text-3)}
+.rx-an .an-legend span{display:inline-flex;align-items:center;gap:6px}
+
+/* ---------- takeaway (prototype .report-takeaway) ---------- */
+.rx-an .an-takeaway{display:flex;flex-direction:column;gap:6px;padding:12px 14px;border-radius:12px;background:var(--rx-gold-tint);border:1px solid var(--rx-gold-line);color:#FFE7B3;font-size:13px;line-height:1.5}
+.rx-an .an-takeaway__head{display:flex;align-items:center;justify-content:space-between;gap:10px;font-weight:600}
+.rx-an .an-takeaway p{margin:0;color:#FFE7B3;opacity:.86}
+
+/* ---------- check / cross rows (prototype What's New checks) ---------- */
+.rx-an .an-checks{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;gap:6px}
+.rx-an .an-checks--scroll{max-height:256px;overflow-y:auto;padding-right:2px;overscroll-behavior:contain;scrollbar-width:thin;scrollbar-color:var(--rx-line-strong) transparent}
+.rx-an .an-check{display:grid;grid-template-columns:18px minmax(0,1fr);align-items:start;gap:10px;padding:10px 12px;border-radius:12px;background:rgba(0,0,0,.25);border:1px solid rgba(255,255,255,.05);
+  font-size:13.5px;line-height:1.45;color:var(--rx-text);animation:rx-an-in .3s var(--rx-ease) both}
+.rx-an .an-check img{width:18px;height:18px;object-fit:contain;margin-top:1px}
+@keyframes rx-an-in{from{opacity:0;transform:translateY(4px)}}
+
+/* ---------- empty state ---------- */
+.rx-an .an-empty{display:flex;flex-direction:column;align-items:center;gap:8px;padding:28px 12px;text-align:center;font-size:13px;color:var(--rx-text-3)}
+.rx-an .an-empty svg{width:22px;height:22px;color:var(--rx-gold)}
+.rx-an .an-empty p{margin:0}
+
+/* ---------- project links (prototype .rep-head__links) ---------- */
+.rx-an--links{display:flex;flex-wrap:wrap;align-items:center;gap:4px 12px;font-size:12px;line-height:1.4}
+.rx-an--links .an-soc-link{display:inline-flex;align-items:center;gap:4px;min-height:24px;color:var(--rx-text-2);font-size:12px;font-weight:500;text-decoration:none;border-radius:6px;transition:color .15s}
+.rx-an--links .an-soc-link:hover{color:var(--rx-gold-hi)}
+.rx-an--links .an-soc-link:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:2px}
+.rx-an--links .an-soc-link svg{width:12px;height:12px;flex-shrink:0}
+
+/* ---------- "Jump to a section" (prototype .sec-nav + .menu) ---------- */
+.rx-an .an-nav__btn{width:40px;height:40px;border-radius:50%;background:var(--rx-gold-tint);border-color:var(--rx-gold-line);color:var(--rx-gold-hi);
+  box-shadow:0 8px 22px rgba(0,0,0,.45);transition:background .15s,border-color .15s}
+.rx-an .an-nav__btn:hover,.rx-an .an-nav__btn[aria-expanded="true"]{background:rgba(255,184,0,.16);border-color:var(--rx-gold);color:var(--rx-gold-hi)}
+.rx-an .an-nav__btn svg{width:16px;height:16px}
+.rx-an.an-nav__menu{z-index:200;width:min(90vw,280px);display:flex;flex-direction:column;min-height:0;overflow:hidden;padding:6px;border-radius:16px;
+  background:linear-gradient(180deg,#1F1E1D,var(--rx-pop-a));border:1px solid var(--rx-line-strong);box-shadow:var(--rx-depth-3);
+  transform-origin:100% 100%;opacity:0;transform:translateY(8px) scale(.985);transition:opacity .18s var(--rx-ease),transform .18s var(--rx-ease)}
+.rx-an.an-nav__menu.is-in{opacity:1;transform:none}
+.rx-an .an-nav__head{display:block;flex-shrink:0;padding:10px 10px 6px}
+.rx-an .an-nav__list{flex:1 1 auto;min-height:0;margin:0;padding:0;list-style:none;overflow-x:hidden;overflow-y:auto;overscroll-behavior:contain;
+  scrollbar-width:thin;scrollbar-color:var(--rx-line-strong) transparent}
+.rx-an .an-nav__item{display:flex;align-items:center;gap:10px;width:100%;min-height:38px;padding:8px 10px;border:0;border-radius:10px;background:transparent;
+  color:var(--rx-text-2);font-family:var(--rx-ui);font-size:13px;font-weight:500;line-height:1.35;text-align:left;cursor:pointer}
+.rx-an .an-nav__item:hover,.rx-an .an-nav__item:focus-visible{background:var(--rx-surface-3);color:var(--rx-text);outline:none}
+.rx-an .an-nav__item:focus-visible{box-shadow:inset 0 0 0 1px var(--rx-gold-line)}
+.rx-an .an-nav__item[aria-selected="true"]{color:var(--rx-gold-hi);font-weight:600}
+.rx-an .an-nav__item[aria-selected="true"]::before{content:"";width:6px;height:6px;border-radius:2px;background:var(--rx-gold);flex-shrink:0;margin-left:-2px}
+
+/* ---------- tones (thresholds stay in the components; these only paint them).
+   Last so they win over the base colours of headings, values and facts. ---------- */
+.rx-an .t-up{color:var(--rx-up)}
+.rx-an .t-down{color:var(--rx-down)}
+.rx-an .t-gold{color:var(--rx-gold-hi)}
+.rx-an .t-ember{color:#FF8A4C}
+.rx-an .t-muted{color:var(--rx-text-3)}
+.rx-an .an-badge--ember{background:var(--rx-ember-tint);color:#FF8A4C}
+
+/* ---------- phones ---------- */
+@media (max-width:767px){
+  .rx-an--links .an-soc-link{min-height:32px}
+  .rx-an .an-nav__item{min-height:44px}
+}
+@media (prefers-reduced-motion:reduce){
+  .rx-an .an-check{animation:none}
+  .rx-an .an-bar > span,.rx-an .an-table tbody tr{transition:none}
+  .rx-an.an-nav__menu{transition:none}
+}

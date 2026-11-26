@@ -9,7 +9,13 @@ import { usePrivy } from "@privy-io/react-auth";
 import { PaywallModal } from "@/components/ui/modal/PaywallModal";
 import { useRexMarketsGenerateReportOptional } from "@/app/rexmarkets/_components/RexMarketsGenerateReportContext";
 import TradingHeader from "../PolymarketTradingInterface/components/Header/TradingHeader";
-import LimitlessPriceChart from "../LimitlessTradingInterface/components/Chart/PriceChart";
+import {
+  FeedTabs,
+  MarketPageLoading,
+  MarketPageMessage,
+  RangeSeg,
+} from "../shared/marketUi";
+import MarketLineChart from "./components/MarketLineChart";
 import MyriadOrderBook from "./components/MyriadOrderBook";
 import MyriadBuySellWidget from "./components/MyriadBuySellWidget";
 import MyriadTopHolders from "./components/MyriadTopHolders";
@@ -33,6 +39,11 @@ export type MyriadTradingInterfaceProps = {
   onReportGenerated?: (report: MarketReport) => void;
   userId?: string | null;
   sessionSavedReportId?: string | null;
+  /** Claw AI 5.0 button in the market head: opens / closes the Rex Pilot sidebar */
+  onPilotToggle?: () => void;
+  pilotOpen?: boolean;
+  /** id of the Rex Pilot sidebar element (aria-controls) */
+  pilotControlsId?: string;
 };
 
 /** Chart / selector row; `ethMarketId` when outcome maps to a distinct on-chain OB market (e.g. NegRisk). */
@@ -51,6 +62,9 @@ export default function MyriadTradingInterface({
   onReportGenerated,
   userId,
   sessionSavedReportId,
+  onPilotToggle,
+  pilotOpen,
+  pilotControlsId,
 }: MyriadTradingInterfaceProps) {
   const { marketDetails, isLoading: isLoadingDetails } = useMarketDetails(
     marketSlug || null,
@@ -239,16 +253,16 @@ export default function MyriadTradingInterface({
 
   if (isLoadingDetails) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-white text-lg">Loading market data...</div>
+      <div className="rx-mk">
+        <MarketPageLoading />
       </div>
     );
   }
 
   if (!marketDetails || !marketSlug) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-white text-lg">No market data available</div>
+      <div className="rx-mk">
+        <MarketPageMessage title="No market data available" />
       </div>
     );
   }
@@ -258,101 +272,75 @@ export default function MyriadTradingInterface({
       ? marketDetails.symbol_image_url
       : undefined;
 
+  // Breadcrumb category: the market's first topic ("Myriad" is the mapper's fallback, not a topic)
+  const category =
+    typeof marketDetails.category === "string" &&
+    marketDetails.category.trim() &&
+    marketDetails.category !== "Myriad"
+      ? marketDetails.category
+      : null;
+
+  const chartRangeLabel =
+    MYRIAD_CHART_INTERVALS.find((i) => i.api === chartTf)?.label ?? chartTf;
+
+  const orderBookProps = {
+    marketId: resolvedTradeMarketId || null,
+    networkId: myriadNet || null,
+    orderBookEnabled: true,
+    outcomeOptions,
+    selectedOutcomeIndex,
+    onSelectOutcome: setSelectedOutcomeIndex,
+  };
+
   return (
-    <div className="flex flex-col h-full w-full bg-black text-white overflow-hidden">
-      <TradingHeader
-        marketTitle={marketTitle || marketDetails.title}
-        symbolImageUrl={imageUrl}
-        currentYesPrice={Number.isFinite(headlinePrice) ? headlinePrice : 0}
-        totalVolume={displayVol}
-        volumeLabel="vol"
-        onBack={onBack}
-        onGenerateClick={handleGenerateClick}
-        isGenerating={isGenerating}
-        countdown={countdown}
-        hasGenerated={hasGenerated}
-        ready={ready}
-        canGenerate={!!marketForGeneration}
-      />
+    <div className="rx-mk">
+      <div className="mk-frame">
+        <TradingHeader
+          marketTitle={marketTitle || marketDetails.title}
+          symbolImageUrl={imageUrl}
+          currentYesPrice={Number.isFinite(headlinePrice) ? headlinePrice : 0}
+          totalVolume={displayVol}
+          volumeLabel={collateralSymbol ?? "vol"}
+          category={category}
+          venue="myriad"
+          onBack={onBack}
+          onGenerateClick={handleGenerateClick}
+          isGenerating={isGenerating}
+          countdown={countdown}
+          hasGenerated={hasGenerated}
+          ready={ready}
+          canGenerate={!!marketForGeneration}
+          onPilotToggle={onPilotToggle}
+          pilotOpen={pilotOpen}
+          pilotControlsId={pilotControlsId}
+        />
 
-      <div
-        className="flex-1 overflow-y-auto rexmarkets-scroll-pane-y min-h-0 pb-2"
-        style={{ WebkitOverflowScrolling: "touch" }}
-      >
-        <div className="flex flex-col">
-          <div className="flex shrink-0 flex-col border-b border-white/10 lg:flex-row lg:items-start">
-            <div className="flex min-w-0 w-full flex-1 flex-col lg:w-auto">
-              <div className="flex shrink-0 items-center justify-start border-b border-white/10 px-4 py-2">
-                <div className="flex items-center gap-2 overflow-x-auto">
-                  {MYRIAD_CHART_INTERVALS.map(({ label, api }) => (
-                    <button
-                      key={api}
-                      type="button"
-                      onClick={() => setChartTf(api)}
-                      className={`px-2 py-0.5 rounded text-xs transition-colors whitespace-nowrap ${
-                        chartTf === api
-                          ? "bg-[#ffc000] text-black font-semibold"
-                          : "bg-white/10 text-white/60 hover:bg-white/20"
-                      }`}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="relative h-[min(22rem,55vh)] min-h-[280px] w-full shrink-0 bg-[#0a0a0a] sm:h-[24rem] lg:h-[26rem]">
-                {chartData.length > 0 && marketKeys.length > 0 ? (
-                  <LimitlessPriceChart
-                    chartData={chartData}
-                    marketKeys={marketKeys}
-                    accentColor="#ffc000"
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-white/50 text-sm px-4 text-center">
-                    No price history for this range yet.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="lg:hidden w-full shrink-0 border-t border-white/10 flex flex-col">
-              <div className="w-full self-start">
-                <MyriadBuySellWidget
-                  isOrderBook={isOrderBookMarket}
-                  tradeMarketId={resolvedTradeMarketId}
-                  networkId={myriadNet}
-                  rootMyriadMarketId={myriadId > 0 ? myriadId : undefined}
-                  collateralTokenAddress={collateralTokenAddress}
-                  collateralDecimals={collateralDecimals}
-                  collateralSymbol={collateralSymbol}
-                  outcomeOptions={outcomeOptions}
-                  selectedOutcomeIndex={selectedOutcomeIndex}
-                  onOutcomeIndexChange={setSelectedOutcomeIndex}
-                  marketTitle={marketTitle || marketDetails.title}
-                  marketSlug={marketSlug}
-                  symbolImageUrl={imageUrl}
+        {/* Everything under the market head scrolls */}
+        <div className="mk-scroll">
+          {/* Chart + trade ticket: side by side on wide screens (filling the view), stacked on narrow ones */}
+          <div className="mk-main">
+            <section className="mk-chart" aria-label="Odds over time">
+              <div className="mk-chart__head">
+                <span className="rx-eyebrow">Odds over time</span>
+                <RangeSeg
+                  ranges={MYRIAD_CHART_INTERVALS.map((i) => i.label)}
+                  value={chartRangeLabel}
+                  onChange={(label) => {
+                    const next = MYRIAD_CHART_INTERVALS.find((i) => i.label === label);
+                    if (next) setChartTf(next.api);
+                  }}
                 />
               </div>
-              {isOrderBookMarket ? (
-                <div
-                  className={`overflow-hidden border-t border-white/10 ${
-                    mobileOrderBookDepthExpanded ? "min-h-80" : ""
-                  }`}
-                >
-                  <MyriadOrderBook
-                    marketId={resolvedTradeMarketId || null}
-                    networkId={myriadNet || null}
-                    orderBookEnabled
-                    outcomeOptions={outcomeOptions}
-                    selectedOutcomeIndex={selectedOutcomeIndex}
-                    onSelectOutcome={setSelectedOutcomeIndex}
-                    onDepthExpandedChange={setMobileOrderBookDepthExpanded}
-                  />
+              {chartData.length > 0 && marketKeys.length > 0 ? (
+                <MarketLineChart chartData={chartData} marketKeys={marketKeys} />
+              ) : (
+                <div className="mk-chart__plot mk-chart__empty">
+                  No price history for this range yet.
                 </div>
-              ) : null}
-            </div>
+              )}
+            </section>
 
-            <div className="hidden lg:flex w-87.5 shrink-0 self-start max-h-full flex-col border-l border-white/10 bg-[#0a0a0a] overflow-y-auto rexmarkets-scroll-pane-y">
+            <section className="mk-side" aria-label="Trade">
               <MyriadBuySellWidget
                 isOrderBook={isOrderBookMarket}
                 tradeMarketId={resolvedTradeMarketId}
@@ -368,60 +356,56 @@ export default function MyriadTradingInterface({
                 marketSlug={marketSlug}
                 symbolImageUrl={imageUrl}
               />
-            </div>
+            </section>
           </div>
 
-          <div className="flex min-h-0 flex-col shrink-0 border-t border-white/10">
-            <div
-              className="flex flex-col lg:flex-row items-stretch gap-4 p-4 shrink-0"
-              style={{ maxHeight: "750px" }}
-            >
-              <div className="flex-1 flex flex-col min-w-0 w-full lg:w-auto">
-                <div className="flex items-center gap-1 border-b border-white/10 pb-2 mb-4">
-                  {(
-                    [
-                      { id: "holders" as const, label: "Top holders" },
-                      { id: "activity" as const, label: "Activity" },
-                    ] as const
-                  ).map(({ id, label }) => (
-                    <button
-                      key={id}
-                      type="button"
-                      onClick={() => setBottomTab(id)}
-                      className={`px-4 py-2 text-sm font-semibold transition-colors rounded-t ${
-                        bottomTab === id ? "text-white border-b-2" : "text-white/60 hover:text-white/80"
-                      }`}
-                      style={bottomTab === id ? { borderBottomColor: "#ffc000" } : undefined}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex-1 min-h-0 overflow-y-auto rexmarkets-scroll-pane-y">
-                  {bottomTab === "holders" ? (
-                    <MyriadTopHolders slug={marketSlug} />
-                  ) : (
-                    <MyriadActivity slug={marketSlug} />
-                  )}
-                </div>
+          {/* Phones and tablets: order book under the ticket (order-book markets only) */}
+          {isOrderBookMarket ? (
+            <section className="mk-book mk-book--stack" aria-label="Order book">
+              <div className="mk-sec-head">
+                <span className="rx-eyebrow">Order book</span>
               </div>
+              <div
+                className={
+                  mobileOrderBookDepthExpanded ? "mk-book__fill is-open" : "mk-book__fill"
+                }
+              >
+                <MyriadOrderBook
+                  {...orderBookProps}
+                  onDepthExpandedChange={setMobileOrderBookDepthExpanded}
+                />
+              </div>
+            </section>
+          ) : null}
 
-              {isOrderBookMarket ? (
-                <div className="hidden lg:flex w-100 shrink-0 border-l border-white/10 flex-col min-h-0">
-                  <div className="flex-1 min-h-0 overflow-hidden">
-                    <MyriadOrderBook
-                      marketId={resolvedTradeMarketId || null}
-                      networkId={myriadNet || null}
-                      orderBookEnabled
-                      outcomeOptions={outcomeOptions}
-                      selectedOutcomeIndex={selectedOutcomeIndex}
-                      onSelectOutcome={setSelectedOutcomeIndex}
-                      showDepthToggle={false}
-                    />
-                  </div>
+          {/* Top holders / activity, and the order book beside them on desktop */}
+          <div className="mk-lower">
+            <section className="mk-feed" aria-label="Top holders and activity">
+              <FeedTabs
+                tabs={[
+                  { key: "holders" as const, label: "Top holders" },
+                  { key: "activity" as const, label: "Activity" },
+                ]}
+                active={bottomTab}
+                onChange={setBottomTab}
+              />
+              <div className="mk-feed__body" role="tabpanel">
+                {bottomTab === "holders" ? (
+                  <MyriadTopHolders slug={marketSlug} />
+                ) : (
+                  <MyriadActivity slug={marketSlug} />
+                )}
+              </div>
+            </section>
+
+            {isOrderBookMarket ? (
+              <section className="mk-book mk-book--side" aria-label="Order book">
+                <div className="mk-sec-head">
+                  <span className="rx-eyebrow">Order book</span>
                 </div>
-              ) : null}
-            </div>
+                <MyriadOrderBook {...orderBookProps} showDepthToggle={false} />
+              </section>
+            ) : null}
           </div>
         </div>
       </div>

@@ -1,0 +1,206 @@
+/* Swap card — the Li.Fi widget dressed as the prototype's swap card (design/js/swap.js,
+   components.css "swap widget"). Rendered by src/components/swap/SwapWidget.tsx; the
+   palette / radii / font / primary button live in its RX_SWAP_THEME, this file covers
+   what the widget's theme API can't reach.
+   Plain unlayered CSS, every rule under .rx-swap. Widget internals have no stable class
+   names beyond MUI's `Mui*` classes and the `widget-*` element ids, so selectors lean on
+   those. The widget's own dark-mode rules are `.dark .css-hash` (two classes), hence the
+   `.rx-swap .rx-swap__scroll [id^=…]` prefix (three) to win without !important. */
+
+.rx-swap { width: 100%; height: 100%; background: transparent; }
+.rx-swap__scroll { height: 100%; overflow-x: hidden; overflow-y: auto; }
+.rx-swap__fallback { display: flex; align-items: center; justify-content: center; height: 100%; }
+
+/* ---------- ground: sit on the host panel, no black box ---------- */
+.rx-swap .rx-swap__scroll [id^="widget-relative-container"],
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"],
+.rx-swap .rx-swap__scroll [id^="widget-header"] { background: transparent; }
+/* Token / chain pickers scroll inside the widget under a sticky header + search,
+   so those pages keep a solid ground. */
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"]:has(.full-page-container),
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"]:has(.full-page-container) [id^="widget-header"] {
+  background-color: var(--lifi-palette-background-default, #121211);
+}
+
+/* ---------- header: one row — "SWAP" eyebrow, controls, wallet ---------- */
+.rx-swap .rx-swap__scroll [id^="widget-header"] {
+  flex-direction: row-reverse;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 24px 12px;
+}
+.rx-swap .rx-swap__scroll [id^="widget-header"] > .MuiAppBar-root { width: auto; min-height: 0; padding: 0; gap: 6px; }
+.rx-swap .rx-swap__scroll [id^="widget-header"] > .MuiAppBar-root:last-child { flex: 1 1 0; min-width: 0; }
+.rx-swap .rx-swap__scroll [id^="widget-header"] > .MuiAppBar-root:first-child:not(:last-child) { flex: 0 0 auto; }
+
+/* home title → .rx-eyebrow */
+.rx-swap .rx-swap__scroll [id^="widget-header"] .MuiTypography-alignLeft {
+  font-family: var(--rx-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--rx-text-3);
+}
+/* sub-page titles (Exchange from, Settings …) → panel title */
+.rx-swap .rx-swap__scroll [id^="widget-header"] .MuiTypography-alignCenter {
+  font-family: var(--rx-ui);
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--rx-text);
+}
+
+/* header icon buttons (settings, history, back) → .rx-icon-btn--s */
+.rx-swap .rx-swap__scroll [id^="widget-header"] .MuiIconButton-root {
+  width: 28px;
+  height: 28px;
+  margin: 0;
+  padding: 0;
+  border-radius: 8px;
+  border: 1px solid var(--rx-line);
+  background: var(--rx-surface-2);
+  color: var(--rx-text-2);
+  transition: background .12s var(--rx-ease), color .12s var(--rx-ease);
+}
+.rx-swap .rx-swap__scroll [id^="widget-header"] .MuiIconButton-root:hover { background: var(--rx-surface-3); color: var(--rx-text); }
+.rx-swap .rx-swap__scroll [id^="widget-header"] .MuiIconButton-root .MuiSvgIcon-root { font-size: 16px; }
+
+/* wallet menu button (Connect wallet / connected address) → .rx-btn--secondary.rx-btn--s */
+.rx-swap .rx-swap__scroll [id^="widget-header"] > .MuiAppBar-root:first-child:not(:last-child) .MuiButton-root {
+  height: 32px;
+  max-height: none;
+  margin: 0;
+  padding: 0 10px;
+  border-radius: 9px;
+  border: 1px solid var(--rx-line);
+  background: var(--rx-surface-2);
+  color: var(--rx-text-2);
+  font-family: var(--rx-ui);
+  font-size: 13px;
+  font-weight: 600;
+  transition: background .12s var(--rx-ease), color .12s var(--rx-ease);
+}
+.rx-swap .rx-swap__scroll [id^="widget-header"] > .MuiAppBar-root:first-child:not(:last-child) .MuiButton-root:hover { background: var(--rx-surface-3); color: var(--rx-text); }
+.rx-swap .rx-swap__scroll [id^="widget-header"] > .MuiAppBar-root:first-child:not(:last-child) .MuiButton-root .MuiButton-endIcon,
+.rx-swap .rx-swap__scroll [id^="widget-header"] > .MuiAppBar-root:first-child:not(:last-child) .MuiButton-root .MuiButton-startIcon { margin-top: 0; margin-bottom: 0; }
+.rx-swap .rx-swap__scroll [id^="widget-header"] > .MuiAppBar-root:first-child:not(:last-child) .MuiButton-root .MuiButton-endIcon > :first-child { font-size: 16px; }
+
+/* ---------- wells: card titles as eyebrows, token labels ---------- */
+/* "From" / "To" (token pickers), "You send" (amount), "Receive" (route) */
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root > .MuiCardContent-root > p.MuiTypography-root:first-child,
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root > p.MuiTypography-root:first-child,
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root:has(.MuiInputBase-input) > .MuiBox-root:first-child > p.MuiTypography-root {
+  font-family: var(--rx-mono);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1.2;
+  letter-spacing: .14em;
+  text-transform: uppercase;
+  color: var(--rx-text-3);
+}
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCardHeader-title { font-size: 16px; font-weight: 700; color: var(--rx-text); }
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCardHeader-subheader { font-size: 11px; font-weight: 500; color: var(--rx-text-3); }
+
+/* clickable wells: a touch of lift on hover, gold edge on keyboard focus */
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] button.MuiCard-root { transition: border-color .12s var(--rx-ease), background-color .12s var(--rx-ease); }
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] button.MuiCard-root:hover { border-color: var(--rx-line-strong); }
+
+/* amount: mono numerals like .swap__amount input */
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root:has(.MuiFormHelperText-root) .MuiInputBase-root,
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root:has(.MuiFormHelperText-root) .MuiInputBase-input {
+  font-family: var(--rx-mono);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -.01em;
+}
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiInputBase-input::placeholder { color: var(--rx-text-3); opacity: 1; }
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiFormHelperText-root,
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiFormHelperText-root p {
+  font-family: var(--rx-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- flip button → .swap__flip ---------- */
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root:has(> svg[data-testid="ArrowForwardIcon"]),
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root:has(> svg[data-testid="ArrowDownwardIcon"]) {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  border: 1px solid var(--rx-line-strong);
+  background: var(--rx-surface-2);
+  color: var(--rx-text-2);
+  transition: background-color .12s var(--rx-ease), color .12s var(--rx-ease);
+}
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root:has(> svg[data-testid="ArrowForwardIcon"]):hover,
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root:has(> svg[data-testid="ArrowDownwardIcon"]):hover { background: var(--rx-surface-3); color: var(--rx-text); }
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root > svg[data-testid="ArrowForwardIcon"],
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root > svg[data-testid="ArrowDownwardIcon"] { display: none; }
+/* the design's ⇄ glyph (design #i-swap) */
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root:has(> svg[data-testid="ArrowForwardIcon"])::before,
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root:has(> svg[data-testid="ArrowDownwardIcon"])::before {
+  content: "";
+  width: 14px;
+  height: 14px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 7h12l-3-3M17 17H5l3 3' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M7 7h12l-3-3M17 17H5l3 3' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root:has(> svg[data-testid="ArrowDownwardIcon"])::before { transform: rotate(90deg); }
+
+/* ---------- action row: primary (theme) + wallet icon button → .rx-icon-btn 48px ---------- */
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiButton-contained + .MuiButton-text {
+  flex: 0 0 auto;
+  width: 48px;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0;
+  border-radius: 13px;
+  border: 1px solid var(--rx-line);
+  background: var(--rx-surface-2);
+  color: var(--rx-text-2);
+  transition: background-color .12s var(--rx-ease), color .12s var(--rx-ease);
+}
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiButton-contained + .MuiButton-text:hover { background: var(--rx-surface-3); color: var(--rx-text); }
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiButton-contained + .MuiButton-text > svg[data-testid="WalletIcon"] { display: none; }
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiButton-contained + .MuiButton-text:has(> svg[data-testid="WalletIcon"])::before {
+  content: "";
+  width: 18px;
+  height: 18px;
+  background: currentColor;
+  -webkit-mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 7h16a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2zM3 7l12-4v4M16 13.5h2' fill='none' stroke='black' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M3 7h16a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2zM3 7l12-4v4M16 13.5h2' fill='none' stroke='black' stroke-width='2' stroke-linejoin='round' stroke-linecap='round'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+/* ---------- segmented tabs (settings) → .rx-seg ---------- */
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiTabs-root {
+  background: rgba(0, 0, 0, .4);
+  border: 1px solid var(--rx-line);
+  border-radius: 12px;
+}
+.rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiTabs-root .MuiTabs-indicator {
+  background: var(--rx-surface-3);
+  border-radius: 9px;
+  box-shadow: inset 0 1px 0 rgba(var(--rx-hair), .08), 0 2px 6px rgba(0, 0, 0, .4);
+}
+
+/* ---------- focus: the design's gold ring ---------- */
+.rx-swap .rx-swap__scroll [id^="widget-relative-container"] .MuiButtonBase-root.Mui-focusVisible,
+.rx-swap .rx-swap__scroll [id^="widget-relative-container"] .MuiButtonBase-root:focus-visible,
+.rx-swap .rx-swap__scroll [id^="widget-relative-container"] button.MuiCard-root:focus-visible,
+.rx-swap .rx-swap__scroll [id^="widget-relative-container"] .MuiCard-root[tabindex]:focus-visible {
+  outline: 2px solid var(--rx-gold-hi);
+  outline-offset: 2px;
+}
+
+/* ---------- phones: 40px tap targets ---------- */
+@media (max-width: 767px) {
+  .rx-swap .rx-swap__scroll [id^="widget-header"] .MuiIconButton-root { width: 40px; height: 40px; border-radius: 10px; }
+  .rx-swap .rx-swap__scroll [id^="widget-header"] > .MuiAppBar-root:first-child:not(:last-child) .MuiButton-root { height: 40px; border-radius: 10px; }
+  .rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root:has(> svg[data-testid="ArrowForwardIcon"]),
+  .rx-swap .rx-swap__scroll [id^="widget-scrollable-container"] .MuiCard-root:has(> svg[data-testid="ArrowDownwardIcon"]) { width: 40px; height: 40px; border-radius: 12px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rx-swap .rx-swap__scroll [id^="widget-relative-container"] * { transition: none !important; }
+}

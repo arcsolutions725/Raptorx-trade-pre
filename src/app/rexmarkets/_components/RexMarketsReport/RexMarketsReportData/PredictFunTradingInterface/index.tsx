@@ -9,7 +9,14 @@ import { usePrivy } from "@privy-io/react-auth";
 import { PaywallModal } from "@/components/ui/modal/PaywallModal";
 import { useRexMarketsGenerateReportOptional } from "@/app/rexmarkets/_components/RexMarketsGenerateReportContext";
 import TradingHeader from "../PolymarketTradingInterface/components/Header/TradingHeader";
-import LimitlessPriceChart from "../LimitlessTradingInterface/components/Chart/PriceChart";
+import {
+  FeedTabs,
+  MarketPageLoading,
+  MarketPageMessage,
+  RangeSeg,
+} from "../shared/marketUi";
+// Same odds chart as the Myriad page (both venues share one chart contract)
+import MarketLineChart from "../MyriadTradingInterface/components/MarketLineChart";
 import PredictFunOrderBook from "./components/PredictFunOrderBook";
 import PredictFunBuySellWidget from "./components/PredictFunBuySellWidget";
 import PredictFunActivity from "./components/PredictFunActivity";
@@ -30,8 +37,6 @@ import {
 import { predictFunDisplayVolumeUsd } from "@/lib/predictfun/mapPredictFunMarketRow";
 import { predictFunOutcomePrice01 } from "@/lib/predictfun/predictFunOutcomePrices";
 import PredictFunCryptoUpDownChart from "./components/PredictFunCryptoUpDownChart";
-
-const POLYMARKET_ACCENT = "#ffc000";
 import type { PredictFunApiMarket } from "@/lib/predictfun/mapPredictFunMarketRow";
 import { extractPredictFunCategoryChildMarkets } from "@/lib/predictfun/extractCategoryChildMarkets";
 
@@ -43,6 +48,11 @@ export type PredictFunTradingInterfaceProps = {
   onReportGenerated?: (report: MarketReport) => void;
   userId?: string | null;
   sessionSavedReportId?: string | null;
+  /** Claw AI 5.0 button in the market head: opens / closes the Rex Pilot sidebar */
+  onPilotToggle?: () => void;
+  pilotOpen?: boolean;
+  /** id of the Rex Pilot sidebar element (aria-controls) */
+  pilotControlsId?: string;
 };
 
 type OutcomeOption = { index: number; title: string; price: number };
@@ -55,6 +65,9 @@ export default function PredictFunTradingInterface({
   onReportGenerated,
   userId,
   sessionSavedReportId,
+  onPilotToggle,
+  pilotOpen,
+  pilotControlsId,
 }: PredictFunTradingInterfaceProps) {
   const { marketDetails, isLoading: isLoadingDetails } = useMarketDetails(
     marketId || null,
@@ -366,16 +379,16 @@ export default function PredictFunTradingInterface({
 
   if (isLoadingDetails) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-white text-lg">Loading market data...</div>
+      <div className="rx-mk">
+        <MarketPageLoading />
       </div>
     );
   }
 
   if (!marketDetails || !marketId) {
     return (
-      <div className="flex items-center justify-center h-full">
-        <div className="text-white text-lg">No market data available</div>
+      <div className="rx-mk">
+        <MarketPageMessage title="No market data available" />
       </div>
     );
   }
@@ -384,124 +397,92 @@ export default function PredictFunTradingInterface({
     typeof marketDetails.symbol_image_url === "string" && marketDetails.symbol_image_url
       ? marketDetails.symbol_image_url
       : undefined;
+  const activeImageUrl =
+    (typeof activeMarketRaw?.imageUrl === "string" && activeMarketRaw.imageUrl) || imageUrl;
+  const tradeMarketId = String(activeMarketRaw?.id ?? marketId);
+
+  const chartRangeLabel =
+    PREDICT_FUN_CHART_INTERVALS.find((i) => i.key === chartTf)?.label ?? chartTf;
+
+  const orderBookProps = {
+    marketId: tradeMarketId,
+    yesPrice: yesOutcome?.price,
+    noPrice: noOutcome?.price,
+    firstOutcomeLabel,
+    secondOutcomeLabel,
+  };
 
   return (
-    <div className="flex flex-col h-full w-full bg-black text-white overflow-hidden">
-      <TradingHeader
-        marketTitle={
-          isCategoryMultiChart
-            ? displayEventTitle
-            : activeSubMarketTitle || displayEventTitle
-        }
-        symbolImageUrl={
-          (typeof activeMarketRaw?.imageUrl === "string" && activeMarketRaw.imageUrl) ||
-          imageUrl
-        }
-        currentYesPrice={yesOutcome?.price ?? 0}
-        totalVolume={displayVol}
-        volumeLabel="vol"
-        onBack={onBack}
-        onGenerateClick={handleGenerateClick}
-        isGenerating={isGenerating}
-        countdown={countdown}
-        hasGenerated={hasGenerated}
-        ready={ready}
-        canGenerate={!!marketForGeneration}
-      />
+    <div className="rx-mk">
+      <div className="mk-frame">
+        <TradingHeader
+          marketTitle={
+            isCategoryMultiChart
+              ? displayEventTitle
+              : activeSubMarketTitle || displayEventTitle
+          }
+          symbolImageUrl={activeImageUrl}
+          currentYesPrice={yesOutcome?.price ?? 0}
+          totalVolume={displayVol}
+          volumePrefix="$"
+          venue="predictfun"
+          onBack={onBack}
+          onGenerateClick={handleGenerateClick}
+          isGenerating={isGenerating}
+          countdown={countdown}
+          hasGenerated={hasGenerated}
+          ready={ready}
+          canGenerate={!!marketForGeneration}
+          onPilotToggle={onPilotToggle}
+          pilotOpen={pilotOpen}
+          pilotControlsId={pilotControlsId}
+        />
 
-      <div
-        className="flex-1 overflow-y-auto rexmarkets-scroll-pane-y min-h-0 pb-2"
-        style={{ WebkitOverflowScrolling: "touch" }}
-      >
-        <div className="flex flex-col">
-          <div className="flex shrink-0 flex-col border-b border-white/10 lg:flex-row lg:items-stretch">
-            <div className="flex min-w-0 w-full flex-1 flex-col lg:w-auto">
-              {!isCryptoUpDownMarket ? (
-                <div className="flex shrink-0 items-center justify-start border-b border-white/10 px-4 py-2">
-                  <div className="flex items-center gap-2 overflow-x-auto">
-                    {PREDICT_FUN_CHART_INTERVALS.map(({ key, label }) => (
-                      <button
-                        key={key}
-                        type="button"
-                        onClick={() => setChartTf(key)}
-                        className={`px-2 py-0.5 rounded text-xs transition-colors whitespace-nowrap ${
-                          chartTf === key
-                            ? "bg-[#ffc000] text-black font-semibold"
-                            : "bg-white/10 text-white/60 hover:bg-white/20"
-                        }`}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
+        {/* Everything under the market head scrolls */}
+        <div className="mk-scroll">
+          {/* Chart + trade ticket: side by side on wide screens (filling the view), stacked on narrow ones */}
+          <div className="mk-main">
+            <section
+              className="mk-chart"
+              aria-label={isCryptoUpDownMarket ? "Price over time" : "Odds over time"}
+            >
+              <div className="mk-chart__head">
+                <span className="rx-eyebrow">
+                  {isCryptoUpDownMarket ? "Price over time" : "Odds over time"}
+                </span>
+                {!isCryptoUpDownMarket ? (
+                  <RangeSeg
+                    ranges={PREDICT_FUN_CHART_INTERVALS.map((i) => i.label)}
+                    value={chartRangeLabel}
+                    onChange={(label) => {
+                      const next = PREDICT_FUN_CHART_INTERVALS.find((i) => i.label === label);
+                      if (next) setChartTf(next.key);
+                    }}
+                  />
+                ) : null}
+              </div>
+              {isCryptoUpDownMarket && cryptoChartContext ? (
+                <PredictFunCryptoUpDownChart context={cryptoChartContext} />
+              ) : chartLoading ? (
+                <div className="mk-chart__plot mk-chart__empty" role="status">
+                  Loading chart…
                 </div>
-              ) : null}
-              <div className="relative h-[min(22rem,55vh)] min-h-[280px] w-full shrink-0 bg-[#0a0a0a] sm:h-[24rem] lg:h-[26rem] lg:min-h-[450px]">
-                {isCryptoUpDownMarket && cryptoChartContext ? (
-                  <PredictFunCryptoUpDownChart
-                    context={cryptoChartContext}
-                    className="h-full"
-                  />
-                ) : chartLoading ? (
-                  <div className="absolute inset-0 flex items-center justify-center text-white/50 text-sm">
-                    Loading chart…
-                  </div>
-                ) : chartData.length > 0 && marketKeys.length > 0 ? (
-                  <LimitlessPriceChart
-                    key={`chart-${isCategoryMultiChart ? topChartMarkets.map((m) => m.id).join("-") : activeMarketRaw?.id}-${chartTf}`}
-                    chartData={chartData}
-                    marketKeys={marketKeys}
-                    accentColor={POLYMARKET_ACCENT}
-                  />
-                ) : (
-                  <div className="absolute inset-0 flex items-center justify-center text-white/50 text-sm px-4 text-center">
-                    No price history for this range yet.
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <div className="lg:hidden w-full shrink-0 border-t border-white/10 flex flex-col">
-              <PredictFunBuySellWidget
-                marketId={String(activeMarketRaw?.id ?? marketId)}
-                marketRaw={activeMarketRaw}
-                categorySlug={categorySlug}
-                relatedMarketIds={[
-                  marketId,
-                  categorySlug,
-                  String(rawAny?.parentCategory?.id ?? ""),
-                ].filter(Boolean)}
-                outcomeOptions={outcomeOptions}
-                selectedOutcomeIndex={selectedOutcomeIndex}
-                onOutcomeIndexChange={setSelectedOutcomeIndex}
-                marketTitle={activeSubMarketTitle || marketTitle || marketDetails.title}
-                symbolImageUrl={
-                  (typeof activeMarketRaw?.imageUrl === "string" && activeMarketRaw.imageUrl) ||
-                  imageUrl
-                }
-                subMarketOptions={subMarketOptions}
-                selectedSubMarketId={activeSubMarketId}
-                onSubMarketIdChange={setSelectedSubMarketId}
-              />
-              <div
-                className={`overflow-hidden border-t border-white/10 ${
-                  mobileOrderBookDepthExpanded ? "min-h-80" : ""
-                }`}
-              >
-                <PredictFunOrderBook
-                  marketId={String(activeMarketRaw?.id ?? marketId)}
-                  yesPrice={yesOutcome?.price}
-                  noPrice={noOutcome?.price}
-                  firstOutcomeLabel={firstOutcomeLabel}
-                  secondOutcomeLabel={secondOutcomeLabel}
-                  onDepthExpandedChange={setMobileOrderBookDepthExpanded}
+              ) : chartData.length > 0 && marketKeys.length > 0 ? (
+                <MarketLineChart
+                  key={`chart-${isCategoryMultiChart ? topChartMarkets.map((m) => m.id).join("-") : activeMarketRaw?.id}-${chartTf}`}
+                  chartData={chartData}
+                  marketKeys={marketKeys}
                 />
-              </div>
-            </div>
+              ) : (
+                <div className="mk-chart__plot mk-chart__empty">
+                  No price history for this range yet.
+                </div>
+              )}
+            </section>
 
-            <div className="hidden lg:flex w-[350px] shrink-0 flex-col min-h-0 border-l border-white/10 bg-[#0a0a0a]">
+            <section className="mk-side" aria-label="Trade">
               <PredictFunBuySellWidget
-                marketId={String(activeMarketRaw?.id ?? marketId)}
+                marketId={tradeMarketId}
                 marketRaw={activeMarketRaw}
                 categorySlug={categorySlug}
                 relatedMarketIds={[
@@ -513,49 +494,53 @@ export default function PredictFunTradingInterface({
                 selectedOutcomeIndex={selectedOutcomeIndex}
                 onOutcomeIndexChange={setSelectedOutcomeIndex}
                 marketTitle={activeSubMarketTitle || marketTitle || marketDetails.title}
-                symbolImageUrl={
-                  (typeof activeMarketRaw?.imageUrl === "string" && activeMarketRaw.imageUrl) ||
-                  imageUrl
-                }
+                symbolImageUrl={activeImageUrl}
                 subMarketOptions={subMarketOptions}
                 selectedSubMarketId={activeSubMarketId}
                 onSubMarketIdChange={setSelectedSubMarketId}
               />
-            </div>
+            </section>
           </div>
 
-          <div className="flex min-h-0 flex-col shrink-0 border-t border-white/10">
-            <div
-              className="flex flex-col lg:flex-row items-stretch gap-4 p-4 shrink-0"
-              style={{ maxHeight: "750px" }}
-            >
-              <div className="flex-1 flex flex-col min-w-0 w-full lg:w-auto">
-                <div className="flex items-center gap-1 border-b border-white/10 pb-2 mb-4">
-                  <span className="px-4 py-2 text-sm font-semibold text-white border-b-2" style={{ borderBottomColor: POLYMARKET_ACCENT }}>
-                    Activity
-                  </span>
-                </div>
-                <div className="flex-1 min-h-0 overflow-y-auto rexmarkets-scroll-pane-y">
-                  <PredictFunActivity
-                    marketId={String(activeMarketRaw?.id ?? "") || null}
-                    categorySlug={childMarkets.length > 0 ? categorySlug || null : null}
-                  />
-                </div>
-              </div>
-
-              <div className="hidden lg:flex w-100 shrink-0 border-l border-white/10 flex-col min-h-0">
-                <div className="flex-1 min-h-0 overflow-hidden">
-                  <PredictFunOrderBook
-                    marketId={String(activeMarketRaw?.id ?? marketId)}
-                    yesPrice={yesOutcome?.price}
-                    noPrice={noOutcome?.price}
-                    firstOutcomeLabel={firstOutcomeLabel}
-                    secondOutcomeLabel={secondOutcomeLabel}
-                    showDepthToggle={false}
-                  />
-                </div>
-              </div>
+          {/* Phones and tablets: order book under the ticket */}
+          <section className="mk-book mk-book--stack" aria-label="Order book">
+            <div className="mk-sec-head">
+              <span className="rx-eyebrow">Order book</span>
             </div>
+            <div
+              className={
+                mobileOrderBookDepthExpanded ? "mk-book__fill is-open" : "mk-book__fill"
+              }
+            >
+              <PredictFunOrderBook
+                {...orderBookProps}
+                onDepthExpandedChange={setMobileOrderBookDepthExpanded}
+              />
+            </div>
+          </section>
+
+          {/* Activity, and the order book beside it on desktop */}
+          <div className="mk-lower">
+            <section className="mk-feed" aria-label="Activity">
+              <FeedTabs
+                tabs={[{ key: "activity" as const, label: "Activity" }]}
+                active="activity"
+                onChange={() => {}}
+              />
+              <div className="mk-feed__body" role="tabpanel">
+                <PredictFunActivity
+                  marketId={String(activeMarketRaw?.id ?? "") || null}
+                  categorySlug={childMarkets.length > 0 ? categorySlug || null : null}
+                />
+              </div>
+            </section>
+
+            <section className="mk-book mk-book--side" aria-label="Order book">
+              <div className="mk-sec-head">
+                <span className="rx-eyebrow">Order book</span>
+              </div>
+              <PredictFunOrderBook {...orderBookProps} showDepthToggle={false} />
+            </section>
           </div>
         </div>
       </div>

@@ -7,7 +7,8 @@ import { REX_SCREENER_ALL_HREF } from "@/lib/rexscreenerRoutes";
  */
 export const RX_SHELL_ACTION_EVENT = "rx:shell-action";
 
-export type RxShellAction = "account" | "exchange";
+/** "pilot": open/close the page's Rex Pilot sidebar (the Header's Claw AI 5.0 handler), e.g. from the token bar. */
+export type RxShellAction = "account" | "exchange" | "pilot";
 
 export type RxShellActionDetail = {
   action: RxShellAction;

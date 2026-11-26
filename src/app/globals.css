@@ -751,10 +751,25 @@ a.chakra-link.custom-fcnbia {
   animation-play-state: paused;
 }
 
-/* Main content panel width animation for Rex Pilot sidebar - desktop only */
+/* Main content panel width animation for Rex Pilot sidebar - desktop only.
+   Sidebar width (design/js/market.js): 700px, but the page keeps at least 560px (min sidebar 420px).
+   Sidebar containers: #rex-pilot-sidebar (market pages) or [data-rx-sidebar] (Rex Predictions list, RexScreener). */
 @media (min-width: 1024px) {
+  :root {
+    --rx-sb-w: min(700px, max(420px, calc(100vw - 560px)));
+  }
   .main-content-shrink {
-    width: calc(100% - 700px) !important;
+    width: calc(100% - var(--rx-sb-w)) !important;
+  }
+  #rex-pilot-sidebar,
+  [data-rx-sidebar] {
+    width: var(--rx-sb-w) !important;
+  }
+}
+/* While the sidebar is docked the header keeps to nav + actions (design/css/predictions.css: no Exchange button up to 1599px) */
+@media (min-width: 1024px) and (max-width: 1599px) {
+  .main-content-shrink .rx-header .rx-btn--exchange {
+    display: none !important;
   }
 }
 

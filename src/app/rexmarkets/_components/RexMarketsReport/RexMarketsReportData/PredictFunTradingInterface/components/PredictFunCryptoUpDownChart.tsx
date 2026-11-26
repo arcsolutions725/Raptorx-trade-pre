@@ -17,9 +17,11 @@ import {
   formatPredictFunUsdPrice,
 } from "@/lib/predictfun/predictFunCryptoMarket";
 import { usePredictFunCryptoPriceChart } from "@/hooks/usePredictFunCryptoPriceChart";
+import "@/styles/pages/market-venues-b.css";
 
-const CHART_LINE_COLOR = "#8B5CF6";
-const BEAT_LINE_COLOR = "#94a3b8";
+/** Price line (gold, like the first series of the odds charts) and the dashed "price to beat" line. */
+const CHART_LINE_COLOR = "#ffc000";
+const BEAT_LINE_COLOR = "#9E9D9C";
 
 type ChartRow = { time: number; timestamp: number; price: number };
 
@@ -57,9 +59,15 @@ function CryptoTooltip({
   const row = payload[0]?.payload;
   if (!row) return null;
   return (
-    <div className="rounded-md border border-white/10 bg-[#0a0a0a] px-3 py-2 text-xs shadow-lg">
-      <div className="text-white/60">{formatAxisTime(row.time)}</div>
-      <div className="text-white font-semibold">{formatPredictFunUsdPrice(row.price)}</div>
+    <div className="mk-tip">
+      <div className="mk-tip__time">{formatAxisTime(row.time)}</div>
+      <div className="mk-tip__row">
+        <span className="mk-tip__name">
+          <i style={{ backgroundColor: CHART_LINE_COLOR }} />
+          <span>Price</span>
+        </span>
+        <span className="mk-tip__val">{formatPredictFunUsdPrice(row.price)}</span>
+      </div>
     </div>
   );
 }
@@ -100,77 +108,61 @@ export default function PredictFunCryptoUpDownChart({
     priceDeltaPct == null
       ? null
       : `${priceDeltaPct >= 0 ? "+" : ""}${priceDeltaPct.toFixed(2)}%`;
+  const tone = priceDeltaPct == null ? "" : priceDeltaPct >= 0 ? "is-up" : "is-down";
 
   return (
-    <div className={`flex h-full min-h-0 flex-col ${className}`}>
-      <div className="grid shrink-0 grid-cols-1 gap-3 border-b border-white/10 px-4 py-3 sm:grid-cols-3">
+    <div className={`mkb-cu${className ? ` ${className}` : ""}`}>
+      {/* Price to beat · current price (+ move) · time left */}
+      <dl className="mkb-cu__stats">
         <div>
-          <div className="text-xs text-white/50">Price to Beat</div>
-          <div className="text-lg font-semibold text-white">
-            {formatPredictFunUsdPrice(context.startPrice)}
-          </div>
+          <dt>Price to beat</dt>
+          <dd>{formatPredictFunUsdPrice(context.startPrice)}</dd>
         </div>
         <div>
-          <div className="text-xs text-white/50">Current Price</div>
-          <div className="flex items-baseline gap-2">
-            <span
-              className={`text-lg font-semibold ${
-                priceDeltaPct == null
-                  ? "text-white"
-                  : priceDeltaPct >= 0
-                    ? "text-emerald-400"
-                    : "text-red-400"
-              }`}
-            >
-              {formatPredictFunUsdPrice(currentPrice)}
-            </span>
-            {deltaLabel ? (
-              <span
-                className={`text-xs font-medium ${
-                  priceDeltaPct! >= 0 ? "text-emerald-400" : "text-red-400"
-                }`}
-              >
-                {deltaLabel}
-              </span>
-            ) : null}
-          </div>
+          <dt>Current price</dt>
+          <dd className={tone || undefined}>
+            {formatPredictFunUsdPrice(currentPrice)}
+            {deltaLabel ? <span className={`mkb-cu__delta ${tone}`}>{deltaLabel}</span> : null}
+          </dd>
         </div>
         <div>
-          <div className="text-xs text-white/50">Time Left</div>
-          <div className="text-lg font-semibold text-white">{formatTimeLeft(timeLeftMs)}</div>
+          <dt>Time left</dt>
+          <dd>{formatTimeLeft(timeLeftMs)}</dd>
         </div>
-      </div>
+      </dl>
 
-      <div className="relative min-h-0 flex-1 bg-[#0a0a0a]">
-        {(isLoading || isFetching) && chartData.length === 0 ? (
-          <div className="absolute inset-0 flex items-center justify-center text-white/50 text-sm">
-            Loading chart…
-          </div>
-        ) : chartData.length > 0 ? (
+      {(isLoading || isFetching) && chartData.length === 0 ? (
+        <div className="mk-chart__plot mk-chart__empty" role="status">
+          Loading chart…
+        </div>
+      ) : chartData.length > 0 ? (
+        <div className="mk-chart__plot">
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={chartData} margin={{ top: 16, right: 16, left: 8, bottom: 8 }}>
-              <CartesianGrid stroke="rgba(255,255,255,0.06)" vertical={false} />
+            <LineChart data={chartData} margin={{ top: 16, right: 0, left: 8, bottom: 8 }}>
+              <CartesianGrid vertical={false} />
               <XAxis
                 dataKey="time"
                 type="number"
                 domain={xDomain}
                 tickFormatter={formatAxisTime}
-                stroke="rgba(255,255,255,0.35)"
-                tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
+                tickMargin={8}
                 minTickGap={24}
               />
               <YAxis
+                orientation="right"
                 domain={yDomain}
                 tickFormatter={formatPredictFunCompactUsd}
-                stroke="rgba(255,255,255,0.35)"
-                tick={{ fill: "rgba(255,255,255,0.45)", fontSize: 11 }}
                 axisLine={false}
                 tickLine={false}
+                tickMargin={6}
                 width={72}
               />
-              <Tooltip content={<CryptoTooltip />} />
+              <Tooltip
+                content={<CryptoTooltip />}
+                cursor={{ stroke: "rgba(255,236,205,.22)", strokeWidth: 1 }}
+              />
               {context.startPrice != null && Number.isFinite(context.startPrice) ? (
                 <ReferenceLine
                   y={context.startPrice}
@@ -193,7 +185,7 @@ export default function PredictFunCryptoUpDownChart({
                       cy={cy}
                       r={4}
                       fill={CHART_LINE_COLOR}
-                      stroke="#0a0a0a"
+                      stroke="#0B0806"
                       strokeWidth={1.5}
                     />
                   );
@@ -202,12 +194,10 @@ export default function PredictFunCryptoUpDownChart({
               />
             </LineChart>
           </ResponsiveContainer>
-        ) : (
-          <div className="absolute inset-0 flex items-center justify-center px-4 text-center text-sm text-white/50">
-            No price history for this range yet.
-          </div>
-        )}
-      </div>
+        </div>
+      ) : (
+        <div className="mk-chart__plot mk-chart__empty">No price history for this range yet.</div>
+      )}
     </div>
   );
 }

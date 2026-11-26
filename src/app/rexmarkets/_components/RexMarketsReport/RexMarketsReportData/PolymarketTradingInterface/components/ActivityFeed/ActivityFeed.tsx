@@ -26,9 +26,11 @@ export default function ActivityFeed({
   });
 
   return (
-    <div className="space-y-0">
+    <div className="mk-acts-list">
       {isLoadingActivity ? (
-        <div className="text-xs text-white/60 py-2">Loading...</div>
+        <div className="mk-msg" role="status">
+          Loading...
+        </div>
       ) : activityData?.trades && activityData.trades.length > 0 ? (
         activityData.trades.map((trade: TradeActivity, idx: number) => {
           const isBuy = trade.side === "BUY";
@@ -50,45 +52,51 @@ export default function ActivityFeed({
           return (
             <div
               key={`activity-${trade.transactionHash}-${idx}`}
-              className="flex items-center gap-3 py-3 px-2 border-b border-white/5 last:border-b-0 hover:bg-white/5 rounded"
+              className="mk-act"
             >
               <HolderAvatar
                 profileImage={trade.profileImage || trade.profileImageOptimized}
                 name={name}
+                tone="gold"
               />
-              <div className="flex-1 min-w-0">
-                <div className="text-sm text-white/90">
-                  <span className="font-medium">{name}</span>{" "}
-                  <span className={isBuy ? "text-green-400" : "text-red-400"}>
-                    {isBuy ? "bought" : "sold"}
-                  </span>{" "}
-                  <span className="font-semibold text-red-400">
-                    {size.toLocaleString(undefined, {
-                      maximumFractionDigits: 0,
-                    })}{" "}
-                    {outcome}
-                  </span>{" "}
-                  {trade.title && (
-                    <>
-                      for <span className="text-white/70">{trade.title}</span>{" "}
-                    </>
-                  )}
-                  at <span className="font-medium">{priceDisplay}¢</span>{" "}
-                  <span className="text-white/60">
-                    ($
-                    {usdcSize.toLocaleString(undefined, {
-                      maximumFractionDigits: 2,
-                    })}
-                    )
-                  </span>{" "}
-                  <span className="text-white/50 text-xs">{timeAgo}</span>
-                </div>
+              <div className="mk-act__line">
+                <b>{name}</b>{" "}
+                <span className={isBuy ? "is-buy" : "is-sell"}>
+                  {isBuy ? "bought" : "sold"}
+                </span>{" "}
+                <span
+                  className={`rx-num ${
+                    trade.outcomeIndex === 1 ||
+                    String(outcome).toLowerCase() === "no"
+                      ? "is-no"
+                      : "is-yes"
+                  }`}
+                >
+                  {size.toLocaleString(undefined, {
+                    maximumFractionDigits: 0,
+                  })}{" "}
+                  {outcome}
+                </span>{" "}
+                {trade.title && (
+                  <>
+                    for <span className="mk-act__tk">{trade.title}</span>{" "}
+                  </>
+                )}
+                at <span className="rx-num">{priceDisplay}¢</span>{" "}
+                <span className="rx-num">
+                  ($
+                  {usdcSize.toLocaleString(undefined, {
+                    maximumFractionDigits: 2,
+                  })}
+                  )
+                </span>{" "}
+                <span className="mk-act__time">{timeAgo}</span>
               </div>
             </div>
           );
         })
       ) : (
-        <div className="text-xs text-white/60 py-2">No activity found</div>
+        <div className="mk-msg">No activity found</div>
       )}
     </div>
   );

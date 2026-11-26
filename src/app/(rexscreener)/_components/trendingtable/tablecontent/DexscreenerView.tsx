@@ -2,16 +2,10 @@
 "use client";
 
 import { useState, useEffect, useRef, useMemo } from "react";
+import Image from "next/image";
+import clsx from "clsx";
 import { useQuery } from "@tanstack/react-query";
 import copy from "copy-to-clipboard";
-import {
-  Copy,
-  Check,
-  ExternalLink,
-  ArrowLeft,
-  Maximize2,
-  Minimize2,
-} from "lucide-react";
 import { usePrivy } from "@privy-io/react-auth";
 import type { TrendingToken } from "@/hooks/useTrendingTokens";
 import {
@@ -25,9 +19,25 @@ import {
   type WhatsNewResult,
 } from "@/components/ui/modal/WhatsNewModal";
 import { GlossyReportButton } from "./GlossyReportButton";
-import { toDexChainSlug, type DexScreenerPair } from "@/lib/api/dexscreener";
+import {
+  dexScreenerTokenImageUrl,
+  toDexChainSlug,
+  type DexScreenerPair,
+} from "@/lib/api/dexscreener";
 import { resolveSwapChain } from "@/lib/swapChain";
 import { requestShellAction } from "@/components/ui/layout/shellActions";
+import { formatUsd } from "@/utils/format";
+import {
+  chainBadgeFor,
+  fromEpochSeconds,
+  monogramBackground,
+  monogramOf,
+  pct24h,
+  pickVolume24h,
+  shortAddress,
+  timeSince,
+} from "./tokenMeta";
+import "@/styles/pages/token.css";
 
 type DexscreenerViewProps = {
   token: TrendingToken;
@@ -42,9 +52,37 @@ type DexscreenerViewProps = {
 /** DexScreener embed default interval (15m), matching previous default selection. */
 const EMBED_CHART_INTERVAL = "15";
 
-/** Same box as the table Generate control so the header does not jump. */
-const REPORT_BTN_SLOT_CLASS =
-  "flex h-7.5 w-17.5 shrink-0 items-center justify-center overflow-hidden";
+/** Small inline icons (RaptorX design sprite: i-chevr, i-copy, i-check, i-scan, i-expand, i-min). */
+function Ico({ d, size = 13, w = 2 }: { d: string; size?: number; w?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d={d}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth={w}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+const ICO_CHEVR = "M9 6l6 6-6 6";
+const ICO_COPY = "M9 9h11v11H9zM5 15H4V4h11v1";
+const ICO_CHECK = "M5 12l5 5 9-10";
+const ICO_SCAN = "M14 4h6v6M20 4l-9 9M18 14v6H4V6h6";
+const ICO_EXPAND = "M14 4h6v6M10 20H4v-6M20 4l-7 7M4 20l7-7";
+const ICO_MIN = "M4 14h6v6M20 10h-6V4M14 10l7-7M3 21l7-7";
+
+/** ▲ 7.74% / ▼ 7.74% for the stat strip (plain coloured text, like the design). */
+function formatChange(pct: number): string {
+  const abs = Math.abs(pct);
+  const n =
+    abs >= 1000
+      ? Math.round(abs).toLocaleString("en-US")
+      : abs.toFixed(2);
+  return `${pct > 0 ? "▲" : pct < 0 ? "▼" : ""} ${n}%`.trim();
+}
 
 export default function DexscreenerView({
   token,
@@ -157,6 +195,43 @@ export default function DexscreenerView({
             : chain === "robinhood"
               ? "RobinhoodScan"
               : "SolScan";
+
+  // Token bar: logo (DexScreener icon as fallback, then a monogram), name, quote, stats.
+  const constructedLogo = dexScreenerTokenImageUrl(token?.chainId, tokenAddress);
+  const [logoSrc, setLogoSrc] = useState<string | undefined>(
+    token?.logo || constructedLogo,
+  );
+  const [logoFailed, setLogoFailed] = useState(false);
+  useEffect(() => {
+    setLogoFailed(false);
+    setLogoSrc(token?.logo || constructedLogo);
+  }, [token?.logo, constructedLogo]);
+  const showLogo = Boolean(logoSrc) && !logoFailed;
+
+  const chainBadge = chainBadgeFor(token?.chainId);
+  const displayName = token?.name ?? token?.symbol ?? "Token";
+  const displaySymbol = token?.symbol || displayName;
+  /** `title` is "Name / QUOTE" (buildChartTitle); the quote is what the pair trades against. */
+  const quoteSymbol =
+    title && title.includes(" / ") ? title.split(" / ").pop() : undefined;
+  const priceChange24h = pct24h(token?.pricePercentChange);
+  const stats: { label: string; value: string; tone?: "up" | "down" }[] = [
+    { label: "Price", value: formatUsd(token?.usdPrice) },
+    {
+      label: "24h",
+      value: priceChange24h == null ? "—" : formatChange(priceChange24h),
+      tone:
+        priceChange24h == null || priceChange24h === 0
+          ? undefined
+          : priceChange24h > 0
+            ? "up"
+            : "down",
+    },
+    { label: "Mcap", value: formatUsd(token?.marketCap) },
+    { label: "Volume", value: formatUsd(pickVolume24h(token?.totalVolume)) },
+    { label: "Liquidity", value: formatUsd(token?.liquidityUsd) },
+    { label: "Age", value: timeSince(fromEpochSeconds(token?.createdAt)) },
+  ];
 
   // Auth + generate (generation hook lives in TrendingTableContent)
   const { authenticated, ready, login } = usePrivy();
@@ -314,156 +389,216 @@ export default function DexscreenerView({
   };
 
   return (
-    <div
-      className={
-        isChartExpanded
-          ? // `fixed inset-0` rather than a 100vh height: iOS Safari's 100vh
-            // overshoots the visible viewport under the browser chrome.
-            // z-[70] clears the report sidebar (z-[60]) and its overlay (z-50).
-            "fixed inset-0 z-[70] flex flex-col w-full overflow-hidden bg-black"
-          : "flex flex-col w-full h-[calc(100vh-195px)] overflow-hidden"
-      }
-    >
-      {/* Header */}
-      <div className="flex flex-col md:flex-row items-center gap-5 min-[1340px]:gap-0 justify-between p-3 bg-black/50 border-b border-white/10">
-        <div className="flex items-center gap-2 flex-wrap justify-between sm:justify-center w-full sm:w-auto">
-          <div className="flex items-center gap-2 flex-wrap">
-            <button
-              type="button"
-              onClick={onBack}
-              className="flex items-center justify-center gap-1 rounded-lg cursor-pointer text-[14px]"
-            >
-              <ArrowLeft className="w-4 h-4" color="white" />
-            </button>
+    <>
+      {/* RaptorX token view (design/token.html): breadcrumbs, token bar, then the chart edge to
+          edge. Full screen pins the chart panel to the viewport and drops the bar. */}
+      <div className={clsx("rx-tk", isChartExpanded && "is-expanded")}>
+        <nav className="rx-tk__crumbs" aria-label="Breadcrumb">
+          <button type="button" onClick={onBack} title="Back to the token list">
+            RexScreener
+          </button>
+          <Ico d={ICO_CHEVR} size={12} w={2.2} />
+          <button type="button" onClick={onBack} title="Back to the token list">
+            {chainBadge.label}
+          </button>
+          <Ico d={ICO_CHEVR} size={12} w={2.2} />
+          <span aria-current="page">{displaySymbol}</span>
+        </nav>
 
-            <div className="text-white/90 font-semibold">
-              {title ?? "Rexscreener Chart"}
+        <div className="rx-tk__bar">
+          <div className="rx-tk__id">
+            <span className="rx-tk__avatar">
+              <span
+                className="rx-avatar rx-avatar--token"
+                style={{
+                  background: showLogo
+                    ? "var(--rx-surface-3)"
+                    : monogramBackground(tokenAddress || displaySymbol),
+                }}
+              >
+                {showLogo ? (
+                  <Image
+                    src={logoSrc as string}
+                    alt=""
+                    width={44}
+                    height={44}
+                    onError={() => {
+                      if (logoSrc && constructedLogo && logoSrc !== constructedLogo) {
+                        setLogoSrc(constructedLogo);
+                        return;
+                      }
+                      setLogoFailed(true);
+                    }}
+                  />
+                ) : (
+                  <span aria-hidden="true">{monogramOf(displaySymbol)}</span>
+                )}
+              </span>
+              <span className="rx-avatar__chain" title={chainBadge.label}>
+                <Image src={chainBadge.src} alt={chainBadge.label} width={16} height={16} />
+              </span>
+            </span>
+            <div className="rx-tk__title">
+              <h1 title={quoteSymbol ? `${displayName} / ${quoteSymbol}` : displayName}>
+                {displayName}
+                {quoteSymbol ? <span> / {quoteSymbol}</span> : null}
+              </h1>
+              {tokenAddress ? (
+                <span className="rx-tk__addr rx-num">
+                  {shortAddress(tokenAddress)}
+                  <button
+                    type="button"
+                    onClick={handleCopy}
+                    className={clsx("rx-tk__copy", copied && "is-done")}
+                    aria-label={
+                      copied ? "Contract address copied" : `Copy address ${tokenAddress}`
+                    }
+                    title="Copy contract address"
+                  >
+                    <Ico d={copied ? ICO_CHECK : ICO_COPY} w={copied ? 2.6 : 2} />
+                  </button>
+                </span>
+              ) : null}
             </div>
-
-            <button
-              type="button"
-              onClick={handleCopy}
-              className="inline-flex items-center justify-center rounded px-1.5 py-1 hover:bg-white/10 active:scale-95 focus:outline-none focus:ring-2 focus:ring-white/30"
-              aria-label={`Copy address ${tokenAddress}`}
-              title="Copy contract address"
-            >
-              {copied ? (
-                <Check className="w-4 h-4" color="white" />
-              ) : (
-                <Copy className="w-4 h-4" color="white" />
-              )}
-            </button>
           </div>
 
-          <div className="flex items-center gap-2 flex-wrap">
+          <dl className="rx-tk__stats">
+            {stats.map((s) => (
+              <div key={s.label}>
+                <dt>{s.label}</dt>
+                <dd className={s.tone ? `is-${s.tone}` : undefined} title={s.value}>
+                  {s.value}
+                </dd>
+              </div>
+            ))}
+          </dl>
+
+          <div className="rx-tk__tools">
             {isGenerating && countdown !== null ? (
-              <div className="flex items-center gap-1">
-                <div className={REPORT_BTN_SLOT_CLASS}>
-                  <div className="text-[#FFD700] font-bold text-sm animate-pulse">
-                    {countdown}s
-                  </div>
-                </div>
-                <GlossyReportButton
-                  label="What's New"
-                  variant="whats-new"
-                  onClick={!authenticated ? handleSignIn : onWhatsNewClick}
-                  disabled={!ready || whatsNewLoading}
-                  ariaLabel={`What's New for ${token?.symbol || title || "token"}`}
-                />
-              </div>
+              <span
+                role="status"
+                aria-live="polite"
+                aria-label={`Generating report, ${countdown} seconds left`}
+                className="rx-btn rx-btn--report rx-btn--s pointer-events-none min-w-[112px] font-bold tabular-nums"
+              >
+                <span className="rx-spin size-3 border-[1.5px]" aria-hidden />
+                {countdown}s
+              </span>
             ) : (
-              <div className="flex items-center gap-1">
-                <GlossyReportButton
-                  label="Full Report"
-                  variant="full-report"
-                  onClick={!authenticated ? handleSignIn : onGenerateClick}
-                  disabled={isGenerating || !ready || whatsNewLoading}
-                  ariaLabel="Full Report"
-                />
-                <GlossyReportButton
-                  label="What's New"
-                  variant="whats-new"
-                  onClick={!authenticated ? handleSignIn : onWhatsNewClick}
-                  disabled={!ready || whatsNewLoading}
-                  ariaLabel={`What's New for ${token?.symbol || title || "token"}`}
-                />
-              </div>
+              <GlossyReportButton
+                label="Full Report"
+                variant="full-report"
+                onClick={!authenticated ? handleSignIn : onGenerateClick}
+                disabled={isGenerating || !ready || whatsNewLoading}
+                ariaLabel="Full Report"
+              />
             )}
+            <GlossyReportButton
+              label="What's New"
+              variant="whats-new"
+              onClick={!authenticated ? handleSignIn : onWhatsNewClick}
+              disabled={!ready || whatsNewLoading}
+              loading={whatsNewLoading}
+              ariaLabel={`What's New for ${token?.symbol || title || "token"}`}
+            />
             <a
               href={explorerUrl}
               target="_blank"
               rel="noopener noreferrer"
-              className="h-6 w-6 shrink-0 border-[0.5px] flex items-center justify-center gap-1.5 font-medium! text-[14px]! rounded-lg text-[#F9B80C] transition-colors cursor-pointer hover:text-[#6D4F03]"
+              className="rx-icon-btn rx-tk__ctl"
               aria-label={`View on ${explorerName}`}
               title={`View token on ${explorerName}`}
             >
-              <ExternalLink className="w-3.5 h-3.5" />
+              <Ico d={ICO_SCAN} size={14} />
             </a>
+            {/* Opens/closes Rex Pilot (the page title with its Claw AI 5.0 button is hidden on token pages) */}
+            <button
+              type="button"
+              className="rx-btn rx-btn--claw rx-btn--s"
+              onClick={() => requestShellAction("pilot")}
+              aria-label="Claw AI 5.0: open Rex Pilot"
+            >
+              <Image
+                src="/images/claw-logo-96.webp"
+                alt=""
+                width={20}
+                height={20}
+                className="claw-ico"
+              />
+              Claw AI 5.0
+            </button>
+          </div>
+        </div>
+
+        <section className="rx-tk__chart" aria-label="Price chart">
+          <div className="rx-tk__head">
+            <b>
+              {displaySymbol}
+              {quoteSymbol ? ` / ${quoteSymbol}` : ""}
+            </b>
+            <span className="rx-small rx-tk__sub">Price chart and trades</span>
+            <span className="rx-eyebrow">Chart by DexScreener</span>
             {/* `group` + `relative` anchor the tooltip; no native `title` here or
                 the browser would draw its own tooltip on top of ours. */}
-            <div className="relative group shrink-0">
+            <div className="group relative shrink-0">
               <button
                 type="button"
                 onClick={() => setIsChartExpanded((v) => !v)}
-                className="h-6 w-6 shrink-0 border-[0.5px] flex items-center justify-center gap-1.5 font-medium! text-[14px]! rounded-lg text-[#F9B80C] transition-colors cursor-pointer hover:text-[#6D4F03]"
+                className="rx-icon-btn rx-tk__ctl"
                 aria-label={
                   isChartExpanded ? "Exit full screen chart" : "Expand chart"
                 }
                 aria-pressed={isChartExpanded}
               >
-                {isChartExpanded ? (
-                  <Minimize2 className="w-3.5 h-3.5" />
-                ) : (
-                  <Maximize2 className="w-3.5 h-3.5" />
-                )}
+                <Ico d={isChartExpanded ? ICO_MIN : ICO_EXPAND} />
               </button>
 
               {/* Opens downward: the button sits at the top of the panel, so an
                   upward tooltip would clip against the header's edge. */}
               <div
                 role="tooltip"
-                className="pointer-events-none absolute right-0 top-full z-[80] mt-2 translate-y-1 scale-95 opacity-0 transition-all duration-150 ease-out group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:scale-100 group-focus-within:opacity-100"
+                className="pointer-events-none absolute right-0 top-full z-[80] mt-2 translate-y-1 scale-95 opacity-0 transition-all duration-150 ease-out group-hover:translate-y-0 group-hover:scale-100 group-hover:opacity-100 group-focus-within:translate-y-0 group-focus-within:scale-100 group-focus-within:opacity-100 motion-reduce:transition-none"
               >
-                <div className="relative whitespace-nowrap rounded-lg border border-[#F9B80C]/40 bg-[#141414] px-2.5 py-1.5 text-[11px] font-medium text-[#F9B80C] shadow-lg shadow-black/60">
+                <div className="relative whitespace-nowrap rounded-[10px] border border-rx-line-strong bg-[#1D1C1B] px-2.5 py-1.5 text-xs font-medium text-rx-text shadow-[var(--rx-depth-3)]">
                   {isChartExpanded ? (
                     <>
                       Exit full screen
-                      <span className="ml-1.5 rounded border border-white/15 bg-white/10 px-1 py-px text-[10px] text-white/70">
+                      <span className="ml-1.5 rounded border border-rx-line-strong bg-white/[0.06] px-1 py-px font-mono text-[10px] text-rx-text-2">
                         Esc
                       </span>
                     </>
                   ) : (
-                    "Expand chart"
+                    "Full screen"
                   )}
                   {/* Arrow: a rotated square, masked to look like a notch. */}
                   <span
                     aria-hidden="true"
-                    className="absolute -top-1 right-2.5 h-2 w-2 rotate-45 border-l border-t border-[#F9B80C]/40 bg-[#141414]"
+                    className="absolute -top-1 right-3 h-2 w-2 rotate-45 border-l border-t border-rx-line-strong bg-[#1D1C1B]"
                   />
                 </div>
               </div>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* DexScreener expects the liquidity pair address in the path, not the token contract. */}
-      <div className="relative flex-1 overflow-hidden bg-neutral-900">
-        {awaitingDexPair ? (
-          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 text-white/80 text-sm">
-            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#FFD700]" />
-            <span>Loading chart…</span>
+          {/* DexScreener expects the liquidity pair address in the path, not the token contract. */}
+          <div className="rx-tk__body">
+            {awaitingDexPair ? (
+              <div className="rx-tk__loading" role="status">
+                <span className="rx-spin text-rx-gold" aria-hidden />
+                <span>Loading chart…</span>
+              </div>
+            ) : (
+              <iframe
+                key={src}
+                src={src}
+                title="Dexscreener Chart"
+                style={{ width: "100%", height: "100%", border: 0 }}
+                loading="eager"
+                allow="clipboard-write"
+              />
+            )}
           </div>
-        ) : (
-          <iframe
-            key={src}
-            src={src}
-            title="Dexscreener Chart"
-            style={{ width: "100%", height: "100%", border: 0 }}
-            loading="eager"
-            allow="clipboard-write"
-          />
-        )}
+        </section>
       </div>
 
       {/* Explorer Modal */}
@@ -491,6 +626,15 @@ export default function DexscreenerView({
         result={whatsNewResult}
         imageUrl={token.logo}
         symbol={token.symbol}
+        facts={{
+          priceUsd: token?.usdPrice ?? null,
+          change24h: priceChange24h ?? null,
+          marketCap: token?.marketCap ?? null,
+          volume24h: pickVolume24h(token?.totalVolume) ?? null,
+          liquidityUsd: token?.liquidityUsd ?? null,
+          createdAt: fromEpochSeconds(token?.createdAt)?.getTime() ?? null,
+          contract: tokenAddress || token?.tokenAddress || null,
+        }}
         trade={
           token.symbol && (tokenAddress || token.tokenAddress)
             ? {
@@ -509,6 +653,6 @@ export default function DexscreenerView({
             : null
         }
       />
-    </div>
+    </>
   );
 }
