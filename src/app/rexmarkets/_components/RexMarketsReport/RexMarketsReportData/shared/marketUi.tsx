@@ -9,8 +9,10 @@
  */
 
 import "@/styles/pages/market.css";
-import type { CSSProperties, MouseEvent, ReactNode } from "react";
+import { useCallback, useLayoutEffect, useRef } from "react";
+import type { CSSProperties, KeyboardEvent, MouseEvent, PointerEvent, ReactNode } from "react";
 import { MarketThumb } from "@/app/rexmarkets/_components/RexMarketsTable/MarketDataTable/listUi";
+import { loadSize, resizeKey, saveSize, startResizeDrag } from "../../shared/dragResize";
 
 type IconProps = { size?: number };
 
@@ -89,8 +91,9 @@ export function IconClose({ size = 16 }: IconProps) {
 /* ---------------- head ---------------- */
 
 /**
- * Breadcrumbs: Rex Predictions › category › market. "Rex Predictions" is a real link to the list;
- * a plain click runs `onBack` (the page's own back handler) when one is given.
+ * Breadcrumbs: Rex Predictions › category › market. "Rex Predictions" and the category are real links
+ * back to the list (the list has no URL for a category, so both open it on all markets); a plain click
+ * runs `onBack` (the page's own back handler) when one is given.
  */
 export function MarketCrumbs({
   title,
@@ -117,9 +120,14 @@ export function MarketCrumbs({
       <IconChevR />
       {category ? (
         <>
-          <span className="mk-crumbs__cat" title={category}>
+          <a
+            href={href}
+            onClick={handleClick}
+            className="mk-crumbs__cat"
+            title={category}
+          >
             {category}
-          </span>
+          </a>
           <IconChevR />
         </>
       ) : null}
@@ -219,6 +227,117 @@ export function ChartLegend({
         </button>
       ))}
     </div>
+  );
+}
+
+/* ---------------- chart / ticket split ---------------- */
+
+const TICKET_KEY = "ticket-w";
+const TICKET_MIN = 280;
+/** Ticket width with nothing saved (market.css: 340px, 360px in a container of 1600px+). */
+const TICKET_DEF = 340;
+
+/**
+ * The 1px line between the chart and the trade ticket, also a drag handle (prototype design/market.html
+ * #gTicket): drag or use the arrow keys (Shift = bigger steps) to change the ticket width, Home or
+ * double-click to reset. Sets --ticket-w on its parent .mk-main; saved per viewer. Place it between
+ * section.mk-chart and section.mk-side. Only shown while they sit side by side (market.css).
+ */
+export function TicketGutter() {
+  const ref = useRef<HTMLDivElement>(null);
+
+  const parts = useCallback(() => {
+    const handle = ref.current;
+    const main = handle?.parentElement ?? null;
+    const side = handle?.nextElementSibling as HTMLElement | null | undefined;
+    return { handle, main, side: side ?? null };
+  }, []);
+
+  const clamp = useCallback(
+    (v: number) => {
+      const { main } = parts();
+      const max = Math.max(300, (main?.clientWidth ?? 0) - 380);
+      return Math.round(Math.max(TICKET_MIN, Math.min(max, v)));
+    },
+    [parts],
+  );
+
+  const syncValue = useCallback(() => {
+    const { handle, main, side } = parts();
+    if (handle && side) {
+      handle.setAttribute("aria-valuenow", String(Math.round(side.getBoundingClientRect().width)));
+      handle.setAttribute("aria-valuemax", String(Math.max(300, (main?.clientWidth ?? 0) - 380)));
+    }
+  }, [parts]);
+
+  /** px, or null for the default width */
+  const apply = useCallback(
+    (w: number | null) => {
+      const { main } = parts();
+      if (!main) return;
+      if (w == null) main.style.removeProperty("--ticket-w");
+      else main.style.setProperty("--ticket-w", `${w}px`);
+      syncValue();
+    },
+    [parts, syncValue],
+  );
+
+  // Saved width applies before the first paint
+  useLayoutEffect(() => {
+    apply(loadSize(TICKET_KEY));
+  }, [apply]);
+
+  const current = () => parts().side?.getBoundingClientRect().width ?? TICKET_DEF;
+
+  const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
+    const base = current();
+    let last = base;
+    startResizeDrag(
+      e,
+      "x",
+      (d) => {
+        last = clamp(base - d);
+        apply(last);
+      },
+      (moved) => {
+        if (moved) saveSize(TICKET_KEY, last);
+      },
+    );
+  };
+
+  const reset = () => {
+    apply(null);
+    saveSize(TICKET_KEY, null);
+  };
+
+  const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+    const r = resizeKey(e, "ArrowLeft", "ArrowRight");
+    if (r == null) return;
+    e.preventDefault();
+    if (r === "reset") {
+      reset();
+      return;
+    }
+    const w = clamp(current() + r);
+    apply(w);
+    saveSize(TICKET_KEY, w);
+  };
+
+  return (
+    <div
+      ref={ref}
+      className="mk-gutter"
+      role="separator"
+      tabIndex={0}
+      aria-orientation="vertical"
+      aria-label="Resize chart and trade panel"
+      aria-valuemin={TICKET_MIN}
+      title="Drag to resize · double-click to reset"
+      onPointerDown={onPointerDown}
+      onKeyDown={onKeyDown}
+      onDoubleClick={reset}
+      onFocus={syncValue}
+    />
   );
 }
 

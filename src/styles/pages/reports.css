@@ -1,7 +1,10 @@
-/* Report history (Rex Pilot drawer) and the What's New popup.
-   Ported from design/css/pages.css (.h-table, .h-list, .rc-*, .h-ico, .h-ico--venue, .rail-trade)
-   and design/css/components.css (.modal, .modal--wn, .wn*).
-   Imported by rexchat/ChatSidebar.tsx and components/ui/modal/WhatsNewModal.tsx.
+/* Report history (Rex Pilot drawer), the What's New popup and the Full Report extras in the
+   RexScreener panel (In short, Key facts / Actions / Recently generated cards).
+   Ported from design/css/pages.css (.h-table, .h-list, .rc-*, .h-ico, .h-ico--venue, .rail-trade,
+   .rail-card, .facts, .rail-actions, .chips, .feed__foot) and design/css/components.css (.modal,
+   .modal--wn, .wn*, .report-takeaway, .hist).
+   Imported by rexchat/ReportHistoryView.tsx, rexchat/fullReportUi.tsx and
+   components/ui/modal/WhatsNewModal.tsx.
    Unlayered and scoped (.rx-rh, .rx-wn) for the same reason as claw.css: globals.css styles bare
    h2/h3/h4/h6 outside any layer, and those rules would beat anything in @layer components.
    Keep Tailwind display utilities off elements whose rx-rh / rx-wn class sets display. */
@@ -222,10 +225,39 @@ a.rx-wn__check:hover { border-color: var(--rx-gold-line); color: var(--rx-text);
 .rx-wn-facts__copy:hover { color: var(--rx-gold-hi); background: rgba(255, 184, 0, .06); }
 .rx-wn-facts__copy:focus-visible { outline: 2px solid var(--rx-gold-hi); outline-offset: 1px; }
 
+/* Actions card (design .rail-card .rail-actions): Ask Claw about SYM · Open chart · What's New / Full Report */
+.rx-wn-actions { display: flex; flex-direction: column; gap: 8px; padding: 16px; }
+.rx-wn-actions .rx-btn { width: 100%; justify-content: center; }
+.rx-wn-actions .rx-btn > span { min-width: 0; overflow: hidden; text-overflow: ellipsis; }
+.rx-wn-actions .rx-btn--claw .claw-ico { width: 18px; height: 18px; }
+.rx-wn-actions .rx-btn--secondary svg { flex-shrink: 0; }
+.rx-wn-actions .rx-btn:disabled { cursor: wait; opacity: .7; }
+
+/* Recently generated (design .rail-card .hist) */
+.rx-wn-recent { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+.rx-wn-recent h3 { margin: 0; font-family: var(--rx-ui); font-size: 13px; font-weight: 600; line-height: 1.3; letter-spacing: 0; color: var(--rx-text); }
+.rx-wn-recent ul { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 6px; }
+.rx-wn-recent li button { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; width: 100%; min-height: 40px; padding: 12px 14px; border-radius: 12px; background: var(--rx-surface-1); border: 1px solid var(--rx-line); color: var(--rx-text); font: inherit; text-align: left; cursor: pointer; transition: border-color .12s; }
+.rx-wn-recent li button:hover { border-color: var(--rx-gold-line); }
+.rx-wn-recent li button:focus-visible { outline: 2px solid var(--rx-gold-hi); outline-offset: 2px; }
+.rx-wn-recent li b { max-width: 100%; font-family: var(--rx-mono); font-size: 14px; font-weight: 600; line-height: 1.25; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rx-wn-recent li span { max-width: 100%; font-size: 12px; line-height: 1.35; color: var(--rx-text-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rx-wn-recent > .rx-btn { align-self: center; }
+
+/* kind filter (design whats-new.html .chips #newsChips) and per-update Copy (.feed__foot) */
+.rx-wn__chips { display: flex; gap: 6px; margin: 2px 0 -2px; overflow-x: auto; scrollbar-width: none; }
+.rx-wn__chips::-webkit-scrollbar { display: none; }
+.rx-wn__item--point { grid-template-columns: 22px minmax(0, 1fr) auto; }
+.rx-wn__copy { height: 28px; margin: -3px -4px 0 0; padding: 0 8px; gap: 5px; color: var(--rx-text-3); }
+.rx-wn__copy svg { flex-shrink: 0; }
+.rx-wn__copy.is-done, .rx-wn__copy.is-done:hover { color: var(--rx-up); }
+.rx-wn__meta .rx-wn__copy { margin: -4px -6px -4px auto; }
+
 @media (min-width: 1024px) {
   .rx-wn__modal--rail { width: min(880px, 100%); }
   .rx-wn__modal--rail .rx-wn__body { display: grid; grid-template-columns: minmax(0, 1fr) 296px; align-items: start; gap: 20px; }
-  .rx-wn__rail { display: flex; flex-direction: column; gap: 14px; position: sticky; top: 0; }
+  /* not sticky: with Key facts, Actions and Recently generated the rail is taller than the popup */
+  .rx-wn__rail { display: flex; flex-direction: column; gap: 14px; }
   .rx-wn__trade-inline, .rx-wn__modal--rail .rx-wn__facts-inline { display: none; }
 }
 
@@ -239,9 +271,25 @@ a.rx-wn__check:hover { border-color: var(--rx-gold-line); color: var(--rx-text);
   .rx-wn__open { min-width: 40px; min-height: 40px; margin: -10px -8px -6px 0; }
   .rx-wn__check, .rx-wn-trade__ex { min-height: 40px; }
   .rx-wn-facts__copy { width: 40px; height: 40px; margin: -8px -10px -8px 0; }
+  .rx-wn__chips .rx-chip { height: 40px; }
+  .rx-wn__copy { height: 40px; margin: -8px -8px -6px 0; }
+  .rx-wn__meta .rx-wn__copy { margin: -10px -8px -8px auto; }
+  .rx-wn-recent > .rx-btn { height: 40px; }
 }
+
+/* =====================================================================
+   FULL REPORT in the RexScreener panel (design report.html, its tablet/phone
+   layout: the panel is narrower than the 3-column reader). "In short" opens the
+   report; the rail cards follow it, two across once the panel has the room.
+   Rendered inside .rx-ss (styles/pages/screener-side.css).
+   ===================================================================== */
+.rx-fr-short { padding: 14px 16px; border-radius: 14px; background: var(--rx-gold-tint); border: 1px solid var(--rx-gold-line); color: #FFE7B3; font-family: var(--rx-ui); font-size: 14px; line-height: 1.55; overflow-wrap: anywhere; scroll-margin-top: 12px; }
+.rx-fr-short b { font-weight: 700; color: #FFE7B3; }
+
+.rx-fr-rail { display: grid; grid-template-columns: repeat(auto-fit, minmax(260px, 1fr)); align-items: start; gap: 14px; margin-top: 28px; padding-top: 22px; border-top: 1px solid var(--rx-line); }
+.rx-fr-rail > * { min-width: 0; }
 
 @media (prefers-reduced-motion: reduce) {
   .rx-wn__modal { animation: none; }
-  .rx-rh__row, .rx-rh__label b { transition: none; }
+  .rx-rh__row, .rx-rh__label b, .rx-wn-recent li button { transition: none; }
 }

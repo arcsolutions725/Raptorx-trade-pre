@@ -7,8 +7,19 @@ import { REX_SCREENER_ALL_HREF } from "@/lib/rexscreenerRoutes";
  */
 export const RX_SHELL_ACTION_EVENT = "rx:shell-action";
 
-/** "pilot": open/close the page's Rex Pilot sidebar (the Header's Claw AI 5.0 handler), e.g. from the token bar. */
-export type RxShellAction = "account" | "exchange" | "pilot";
+/** "pilot": open/close the page's Rex Pilot sidebar (the Header's Claw AI 5.0 handler), e.g. from the token bar.
+ *  "deposit": the Header's Deposit popup (log in first when signed out), e.g. from the Portfolio page.
+ *  "missions" / "leaderboard": the Header's Daily missions / Leaderboard popups (log in first when signed out),
+ *  e.g. from the Footer's dock.
+ *  "referrals": the account popup opened on its Referrals tab (e.g. the missions popup's "Get link"). */
+export type RxShellAction =
+  | "account"
+  | "referrals"
+  | "exchange"
+  | "pilot"
+  | "deposit"
+  | "missions"
+  | "leaderboard";
 
 export type RxShellActionDetail = {
   action: RxShellAction;
@@ -28,4 +39,53 @@ export function requestShellAction(action: RxShellAction): boolean {
     new CustomEvent<RxShellActionDetail>(RX_SHELL_ACTION_EVENT, { detail }),
   );
   return detail.handled;
+}
+
+/* ---------- Rewards dock (Daily missions + Leaderboard) ----------
+ * The Header owns the signed-in user, the missions count and both popups ("missions" / "leaderboard"
+ * shell actions). It publishes what the dock buttons need here so the Footer's dock (desktop) can show
+ * them on every page. Plain module store (no React), read with useSyncExternalStore. */
+
+export type RxShellRewards = {
+  /** Database user id (from /api/user). The dock only shows once it is known. */
+  userId: string;
+  /** Daily missions completed today and how many there are. null until /api/daily-tasks answers. */
+  missionsDone: number | null;
+  missionsTotal: number | null;
+};
+
+let shellRewards: RxShellRewards | null = null;
+let shellRewardsOwner: symbol | null = null;
+const shellRewardsListeners = new Set<() => void>();
+
+/** Publish (or clear with null) the rewards state. `owner` keeps a second, unmounting Header from
+ *  clearing what the mounted one published. */
+export function setShellRewards(owner: symbol, next: RxShellRewards | null): void {
+  if (next === null && shellRewardsOwner !== null && shellRewardsOwner !== owner) return;
+  const prev = shellRewards;
+  if (
+    prev === next ||
+    (prev &&
+      next &&
+      prev.userId === next.userId &&
+      prev.missionsDone === next.missionsDone &&
+      prev.missionsTotal === next.missionsTotal)
+  ) {
+    shellRewardsOwner = next ? owner : null;
+    return;
+  }
+  shellRewards = next;
+  shellRewardsOwner = next ? owner : null;
+  shellRewardsListeners.forEach((l) => l());
+}
+
+export function getShellRewards(): RxShellRewards | null {
+  return shellRewards;
+}
+
+export function subscribeShellRewards(listener: () => void): () => void {
+  shellRewardsListeners.add(listener);
+  return () => {
+    shellRewardsListeners.delete(listener);
+  };
 }

@@ -20,6 +20,11 @@ import {
 } from "@/lib/rexmarkets/pendingGeneratedReport";
 import { useOpenPilotSidebarOnMobileReportGen } from "@/hooks/useOpenPilotSidebarOnMobileReportGen";
 import { RexMarketsGenerateReportProvider } from "../../_components/RexMarketsGenerateReportContext";
+import {
+  PILOT_SIDEBAR_ID,
+  PilotSidebarLayout,
+  usePilotSidebar,
+} from "../../_components/RexMarketsReport/shared/PilotSidebarLayout";
 
 function LimitlessEventPageContent() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
@@ -28,7 +33,13 @@ function LimitlessEventPageContent() {
   const [totalVolume, setTotalVolume] = useState<number>(0);
   const [eventId, setEventId] = useState<string | null>(null);
   const [eventTicker, setEventTicker] = useState<string | null>(null);
-  const [showReportSidebar, setShowReportSidebar] = useState(true);
+  // Rex Pilot sidebar: open on desktop, closed on phones / tablets (decided before the first paint)
+  const pilotSidebar = usePilotSidebar();
+  const {
+    open: showReportSidebar,
+    setOpen: setShowReportSidebar,
+    toggle: togglePilot,
+  } = pilotSidebar;
   const [generatedReport, setGeneratedReport] = useState<MarketReport | null>(null);
 
   const params = useParams();
@@ -150,94 +161,48 @@ function LimitlessEventPageContent() {
 
   return (
     <RexMarketsGenerateReportProvider>
-    <div
-      className="relative w-full h-screen flex flex-col overflow-hidden"
-      aria-busy={loadingUser}
-      data-loading-user={loadingUser || undefined}
-    >
-      <div className="flex-1 flex overflow-hidden">
-        {/* Main content - same layout as Kalshi/Polymarket */}
-        <div
-          className={`h-full flex flex-col w-full transition-[width] duration-500 ease-in-out ${
-            showReportSidebar ? "main-content-shrink" : ""
-          }`}
-        >
+      <PilotSidebarLayout
+        sidebar={pilotSidebar}
+        busy={loadingUser}
+        header={
           <RexHeader
-            onHistoryClick={() => setShowReportSidebar((v) => !v)}
+            onHistoryClick={togglePilot}
             showExchangeButton={false}
             onLogout={() => {
               setCurrentUserId("");
             }}
           />
-
-          <div className="flex-1 overflow-hidden">
-            <LimitlessTradingInterface
-              eventTicker={eventTicker}
-              marketTitle={marketTitle}
-              totalVolume={totalVolume}
-              eventId={eventId}
-              onBack={handleBack}
-              onReportGenerated={handleReportGenerated}
-              userId={currentUserId}
-              sessionSavedReportId={generatedReport?.id ?? null}
-              onPilotToggle={() => setShowReportSidebar((v) => !v)}
-              pilotOpen={showReportSidebar}
-              pilotControlsId="rex-pilot-sidebar"
-            />
-          </div>
-          <Footer />
-        </div>
-
-        {/* Rex Pilot - Right side on desktop, overlay on mobile (same as Kalshi/Polymarket) */}
-        <div
-          className={`fixed top-0 right-0 h-screen lg:h-full w-full sm:w-[500px] lg:w-[700px] bg-black z-[60] lg:z-auto transform transition-transform duration-500 ease-in-out ${
-            showReportSidebar
-              ? "translate-x-0 lg:relative lg:flex-shrink-0 pointer-events-auto"
-              : "translate-x-full lg:absolute pointer-events-none"
-          }`}
-          role="dialog"
-          id="rex-pilot-sidebar"
-          aria-modal="true"
-          aria-hidden={!showReportSidebar}
-          style={{
-            WebkitOverflowScrolling: "touch",
-            touchAction: "pan-y",
-            maxHeight: "100dvh",
-          }}
-        >
-          <div
-            className="h-full min-h-0 overflow-y-auto overflow-x-hidden bg-[#141414] custom-sidebar-scrollbar"
-            style={{
-              WebkitOverflowScrolling: "touch",
-              touchAction: "pan-y",
-              overscrollBehavior: "contain",
-              maxHeight: "100dvh",
-            }}
-          >
-            <RexMarketsReport
-              generatedReport={generatedReport}
-              userId={currentUserId}
-              selectedMarketTicker={eventTicker}
-              selectedMarketTitle={marketTitle}
-              selectedMarketVolume={totalVolume}
-              selectedMarketEventId={eventId}
-              onClose={() => setShowReportSidebar(false)}
-              onClearSessionReport={() => setGeneratedReport(null)}
-            />
-          </div>
-        </div>
-
-        {/* Overlay - only on mobile */}
-        {showReportSidebar && (
-          <div
-            className="lg:hidden fixed inset-0 bg-black/50 z-50"
-            onClick={() => setShowReportSidebar(false)}
-            aria-hidden="true"
-            style={{ touchAction: "none" }}
+        }
+        footer={<Footer />}
+        report={
+          <RexMarketsReport
+            generatedReport={generatedReport}
+            userId={currentUserId}
+            selectedMarketTicker={eventTicker}
+            selectedMarketTitle={marketTitle}
+            selectedMarketVolume={totalVolume}
+            selectedMarketEventId={eventId}
+            onClose={pilotSidebar.close}
+            onClearSessionReport={() => setGeneratedReport(null)}
+            onParkBoth={pilotSidebar.park}
+            paneRequest={pilotSidebar.paneRequest}
           />
-        )}
-      </div>
-    </div>
+        }
+      >
+        <LimitlessTradingInterface
+          eventTicker={eventTicker}
+          marketTitle={marketTitle}
+          totalVolume={totalVolume}
+          eventId={eventId}
+          onBack={handleBack}
+          onReportGenerated={handleReportGenerated}
+          userId={currentUserId}
+          sessionSavedReportId={generatedReport?.id ?? null}
+          onPilotToggle={togglePilot}
+          pilotOpen={showReportSidebar}
+          pilotControlsId={PILOT_SIDEBAR_ID}
+        />
+      </PilotSidebarLayout>
     </RexMarketsGenerateReportProvider>
   );
 }

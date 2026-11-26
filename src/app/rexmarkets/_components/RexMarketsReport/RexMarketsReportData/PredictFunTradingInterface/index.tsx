@@ -14,6 +14,7 @@ import {
   MarketPageLoading,
   MarketPageMessage,
   RangeSeg,
+  TicketGutter,
 } from "../shared/marketUi";
 // Same odds chart as the Myriad page (both venues share one chart contract)
 import MarketLineChart from "../MyriadTradingInterface/components/MarketLineChart";
@@ -479,6 +480,9 @@ export default function PredictFunTradingInterface({
                 </div>
               )}
             </section>
+
+            {/* line between chart and ticket: drag (or arrow keys) to resize the ticket */}
+            <TicketGutter />
 
             <section className="mk-side" aria-label="Trade">
               <PredictFunBuySellWidget

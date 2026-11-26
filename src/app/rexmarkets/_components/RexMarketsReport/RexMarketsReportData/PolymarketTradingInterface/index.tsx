@@ -10,6 +10,7 @@ import {
   MarketPageMessage,
   OutcomeTabs,
   RangeSeg,
+  TicketGutter,
 } from "../shared/marketUi";
 import "@/styles/pages/market-venues-a.css";
 import PriceChart from "./components/Chart/PriceChart";
@@ -462,6 +463,9 @@ export default function PolymarketTradingInterface({
                 interval={selectedInterval}
               />
             </section>
+
+            {/* line between chart and ticket: drag (or arrow keys) to resize the ticket */}
+            <TicketGutter />
 
             <section className="mk-side" aria-label="Trade">
               <BuySellWidget

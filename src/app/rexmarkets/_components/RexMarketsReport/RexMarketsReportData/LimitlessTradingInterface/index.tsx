@@ -8,6 +8,7 @@ import {
   MarketPageLoading,
   MarketPageMessage,
   RangeSeg,
+  TicketGutter,
 } from "../shared/marketUi";
 import "@/styles/pages/market-venues-a.css";
 
@@ -589,6 +590,9 @@ export default function LimitlessTradingInterface({
                 <LimitlessPriceChart history={chartHistory} lineName="Yes" variant="market" />
               )}
             </section>
+
+            {/* line between chart and ticket: drag (or arrow keys) to resize the ticket */}
+            <TicketGutter />
 
             <section className="mk-side" aria-label="Trade">
               <BuySellWidget

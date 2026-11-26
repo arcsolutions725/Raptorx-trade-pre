@@ -13,6 +13,16 @@ export type LeaderboardEntry = {
   };
 };
 
+/** The signed-in user's own place (`?userId=`), even when it is not on the requested page. */
+export type LeaderboardMe = {
+  id: string;
+  username: string;
+  points: number;
+  rank: number;
+  /** The trader one place above, for "N points behind X". */
+  above: { username: string; points: number } | null;
+};
+
 // NEW: points-based badge rules
 function getBadgeForPoints(points: number) {
   if (points >= 500) {
@@ -83,6 +93,37 @@ export async function GET(request: NextRequest) {
       };
     });
 
+    // Optional: the requesting user's own rank (same order as above; usernames are unique).
+    const userId = searchParams.get("userId");
+    let me: LeaderboardMe | null = null;
+    if (userId) {
+      const u = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { id: true, username: true, points: true },
+      });
+      if (u && u.points > 0) {
+        const ahead = await prisma.user.count({
+          where: {
+            OR: [
+              { points: { gt: u.points } },
+              { points: u.points, username: { lt: u.username } },
+            ],
+          },
+        });
+        const rank = ahead + 1;
+        const above =
+          rank > 1
+            ? await prisma.user.findFirst({
+                select: { username: true, points: true },
+                where: { points: { gt: 0 } },
+                orderBy: [{ points: "desc" }, { username: "asc" }, { id: "asc" }],
+                skip: rank - 2,
+              })
+            : null;
+        me = { ...u, rank, above };
+      }
+    }
+
     const totalPages = Math.max(1, Math.ceil(totalUsers / pageSize));
     const hasNext = page < totalPages;
     const hasPrev = page > 1;
@@ -90,6 +131,7 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({
       success: true,
       leaderboard,
+      me,
       pagination: {
         page,
         pageSize,

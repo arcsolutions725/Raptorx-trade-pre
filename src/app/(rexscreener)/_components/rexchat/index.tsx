@@ -79,6 +79,8 @@ export function RexChat({
             onCloseSidebar={onCloseSidebar}
             onOpenExchange={onOpenExchange}
             onMinimize={onMinimize}
+            recentReports={reports}
+            onOpenReport={handleSelectReport}
           />
         ) : (
           <div className="sb-body">

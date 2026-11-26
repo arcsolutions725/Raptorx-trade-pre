@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, type ReactNode } from "react";
+import { useState, useEffect, useSyncExternalStore, type ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
@@ -11,9 +11,14 @@ import {
 } from "@/lib/rexscreenerRoutes";
 import { markClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
 import {
+  getShellRewards,
   requestShellAction,
+  subscribeShellRewards,
   REX_SCREENER_EXCHANGE_HREF,
+  type RxShellRewards,
 } from "@/components/ui/layout/shellActions";
+// Daily missions + Leaderboard dock (desktop) and the Header's phone icons
+import "@/styles/pages/shell-dock.css";
 
 interface CryptoToken {
   id: string;
@@ -58,6 +63,73 @@ function TabIcon({ kind }: { kind: "list" | "clock" | "swap" | "user" }) {
   );
 }
 
+const noRewards = (): RxShellRewards | null => null;
+
+/**
+ * Daily missions (with today's count) + Leaderboard, the footer's left slot on desktop
+ * (design: `.dock`, rewards.css). Without handlers they ask the Header for its popups.
+ */
+export function FooterRewardsDock({
+  missionsDone = null,
+  missionsTotal = null,
+  onMissions = () => requestShellAction("missions"),
+  onLeaderboard = () => requestShellAction("leaderboard"),
+}: {
+  missionsDone?: number | null;
+  missionsTotal?: number | null;
+  onMissions?: () => void;
+  onLeaderboard?: () => void;
+}) {
+  const hasCount = missionsDone != null && missionsTotal != null;
+  return (
+    <>
+      <button
+        type="button"
+        className="rx-btn rx-dock__missions"
+        onClick={onMissions}
+        aria-label={
+          hasCount
+            ? `Daily missions, ${missionsDone} of ${missionsTotal} done`
+            : "Daily missions"
+        }
+      >
+        <span className="rx-dock__shine" aria-hidden="true" />
+        <span className="rx-dock__ico" aria-hidden="true">
+          <Image
+            src="/images/claw-logo-96.webp"
+            alt=""
+            width={16}
+            height={16}
+            className="claw-ico"
+          />
+        </span>
+        Daily missions
+        {hasCount ? (
+          <span className="rx-dock__count rx-num" aria-hidden="true">
+            {missionsDone}/{missionsTotal}
+          </span>
+        ) : null}
+      </button>
+      <button
+        type="button"
+        className="rx-btn rx-dock__board"
+        onClick={onLeaderboard}
+      >
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinejoin="round"
+          />
+        </svg>
+        Leaderboard
+      </button>
+    </>
+  );
+}
+
 /**
  * App footer (RaptorX design: `.app-foot`).
  * Desktop: one line · [dock] | live crypto prices | legal links.
@@ -67,15 +139,32 @@ function TabIcon({ kind }: { kind: "list" | "clock" | "swap" | "user" }) {
 export default function Footer({
   dock,
 }: {
-  /** Optional left slot on desktop (RexScreener: Daily missions + Leaderboard). */
+  /** Optional left slot on desktop (RexScreener: its own Daily missions + Leaderboard).
+   *  Without it, signed-in users get the default dock, which opens the Header's popups. */
   dock?: ReactNode;
 } = {}) {
+  // Published by the mounted Header once the signed-in user is known (null when signed out)
+  const rewards = useSyncExternalStore(
+    subscribeShellRewards,
+    getShellRewards,
+    noRewards,
+  );
+  const dockContent =
+    dock ??
+    (rewards?.userId ? (
+      <FooterRewardsDock
+        missionsDone={rewards.missionsDone}
+        missionsTotal={rewards.missionsTotal}
+      />
+    ) : null);
   const pathname = usePathname() ?? "";
   const router = useRouter();
   const isScreener = isRexScreenerPathname(pathname);
   const isPredictions =
     pathname === "/rexmarkets" || pathname.startsWith("/rexmarkets/");
   const isClaw = pathname === "/claw-v5" || pathname.startsWith("/claw-v5/");
+  /** design/portfolio.html marks the Account tab as the current page */
+  const isPortfolio = pathname === "/portfolio";
 
   const [cryptoTokens, setCryptoTokens] = useState<CryptoToken[]>([]);
   const [showTerms, setShowTerms] = useState(false);
@@ -114,7 +203,9 @@ export default function Footer({
   return (
     <footer className="rx-footer">
       <div className="rx-footer__bar">
-        {dock ? <div className="rx-footer__dock">{dock}</div> : null}
+        {dockContent ? (
+          <div className="rx-footer__dock">{dockContent}</div>
+        ) : null}
 
         <div className="rx-ticker" role="region" aria-label="Live token prices">
           <span className="rx-badge rx-badge--live shrink-0">Live</span>
@@ -232,6 +323,7 @@ export default function Footer({
           type="button"
           className="rx-tabbar__item"
           onClick={() => requestShellAction("account")}
+          aria-current={isPortfolio ? "page" : undefined}
         >
           <TabIcon kind="user" />
           Account

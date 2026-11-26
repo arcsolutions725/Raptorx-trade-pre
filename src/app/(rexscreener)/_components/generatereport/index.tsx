@@ -41,6 +41,9 @@ import {
   ReportPaneHead,
   SwapMark,
 } from "@/app/(rexscreener)/_components/rexchat/screenerSideUi";
+import { requestShellAction } from "@/components/ui/layout/shellActions";
+import { matchesMedia } from "@/app/(rexscreener)/_components/tokenside/useMediaQuery";
+import type { SheetPane } from "@/app/(rexscreener)/_components/tokenside/TokenPhoneBar";
 import "@/styles/pages/pilot.css";
 import "@/styles/pages/screener-side.css";
 
@@ -85,7 +88,19 @@ interface Props {
   onDismissGeneratedReport?: () => void;
   /** Shell prisma user id (`/api/user`); avoids waiting on sidebar's own user fetch before RexChat can load. */
   shellUserId?: string | null;
+  /**
+   * Desktop token view: minimizing the second pane parks both as tabs on the right edge — the shell
+   * closes the sidebar and shows the tabs (prototype design/js/token.js .side-rail).
+   */
+  onParkBoth?: () => void;
+  /** Show one pane from outside (a parked tab): that pane expanded, the other minimized. `seq` makes every request new. */
+  paneRequest?: { pane: SheetPane; seq: number } | null;
+  /** Phones: the sidebar is a bottom sheet that shows only this pane (prototype .tk-side[data-sheet]). */
+  sheetPane?: SheetPane | null;
 }
+
+/** The sidebar docks beside the page (>=1024px) instead of covering it. */
+const DESKTOP_MQ = "(min-width: 1024px)";
 
 /** One analysis result (MACD, RSI, …): a Rex Pilot disclosure with a Refresh action (pilot.css .disc-box). */
 function CollapsiblePanel({
@@ -154,6 +169,9 @@ export function GenerateRexscreenerReport({
   forceShowExchange = false,
   onDismissGeneratedReport,
   shellUserId = null,
+  onParkBoth,
+  paneRequest = null,
+  sheetPane = null,
 }: Props) {
   const [swapMinimized, setSwapMinimized] = useState(!forceShowExchange);
   const [contentMinimized, setContentMinimized] = useState(false);
@@ -190,7 +208,11 @@ export function GenerateRexscreenerReport({
 
   const sanitizeAnalysis = (text?: string) => (text ?? "").replace(/[#*]/g, "");
 
-  const showLandingFallback = contentMinimized && swapMinimized;
+  /** What the panes show: a phone sheet always shows its own pane expanded (the other one is hidden). */
+  const swapHidden = sheetPane === "exchange" ? false : swapMinimized;
+  const contentHidden = sheetPane === "report" ? false : contentMinimized;
+
+  const showLandingFallback = contentHidden && swapHidden;
 
   const {
     generateMACD,
@@ -296,11 +318,21 @@ export function GenerateRexscreenerReport({
   }, [forceShowExchange]);
 
   // Prevent both content and swap being minimized simultaneously. If both true, show content.
+  // (Desktop token view never gets here from the minimize buttons: they park both panes instead.)
   useEffect(() => {
     if (swapMinimized && contentMinimized && !forceShowExchange) {
       setContentMinimized(false);
     }
   }, [swapMinimized, contentMinimized, forceShowExchange]);
+
+  // A pane asked for from outside (a parked tab on the right edge): that pane expanded, the other minimized.
+  useEffect(() => {
+    if (!paneRequest) return;
+    const ex = paneRequest.pane === "exchange";
+    setSwapMinimized(!ex);
+    setContentMinimized(ex);
+    setShowHistory(false);
+  }, [paneRequest]);
 
   // When a token is selected from the list, auto-show the DexSwapper
   useEffect(() => {
@@ -663,16 +695,16 @@ export function GenerateRexscreenerReport({
   }, [saveExH]);
 
   /** both · ex (report minimized) · rep (Exchange minimized) · none */
-  const paneState = swapMinimized
-    ? contentMinimized
+  const paneState = swapHidden
+    ? contentHidden
       ? "none"
       : "rep"
-    : contentMinimized
+    : contentHidden
       ? "ex"
       : "both";
 
   const splitStyle =
-    exH != null && paneState === "both"
+    exH != null && paneState === "both" && !sheetPane
       ? ({ "--ex-h": `${clampExH(exH)}px` } as CSSProperties)
       : undefined;
 
@@ -690,10 +722,33 @@ export function GenerateRexscreenerReport({
 
   const historyCount = serverReports.length;
   const openHistory = () => setShowHistory(true);
+
+  /**
+   * Desktop token view (prototype design/js/token.js): minimizing a pane while the other one is already
+   * minimized parks both as tabs on the right edge and closes the sidebar. They are reset here so any
+   * other way back in (Claw AI 5.0, Enter the Exchange) finds open panes; a parked tab asks for its pane.
+   */
+  const parkIfOtherMinimized = (otherMinimized: boolean) => {
+    if (!onParkBoth || !otherMinimized || sheetPane || !matchesMedia(DESKTOP_MQ)) return false;
+    setSwapMinimized(false);
+    setContentMinimized(false);
+    setShowHistory(false);
+    onParkBoth();
+    return true;
+  };
+  const minimizeSwap = () => {
+    if (parkIfOtherMinimized(contentMinimized)) return;
+    setSwapMinimized(true);
+  };
   const minimizeReport = () => {
+    if (parkIfOtherMinimized(swapMinimized)) return;
     setContentMinimized(true);
     setSwapMinimized(false);
   };
+  /** Phone sheets have no minimize: each sheet shows one pane and closes instead. */
+  const reportMinimize = sheetPane ? undefined : minimizeReport;
+  /** Phone sheets: the report pane head carries the sheet's close. */
+  const reportClose = sheetPane ? onClose : undefined;
 
   /** Rex Pilot intro (no chart / no report): claw mark, the pitch and Report history. */
   const pilotIntro = (
@@ -718,8 +773,9 @@ export function GenerateRexscreenerReport({
 
   return (
     // .rx-pilot (styles/pages/pilot.css) + .rx-ss (styles/pages/screener-side.css):
-    // the token page's side column — Exchange on top, Intelligence report below (design/token.html)
-    <div className="rx-pilot rx-ss">
+    // the token page's side column — Exchange on top, Intelligence report below (design/token.html).
+    // data-sheet (phones): a bottom sheet that shows only that pane.
+    <div className="rx-pilot rx-ss" data-sheet={sheetPane ?? undefined}>
       {!hideHeader && (
         <RexHeader
           onHistoryClick={() => setShowHistory((v) => !v)}
@@ -755,7 +811,7 @@ export function GenerateRexscreenerReport({
                 onClose={() => setShowHistory(false)}
                 reportType="crypto"
               />
-              {!swapMinimized && (
+              {!swapMinimized && !sheetPane && (
                 <button
                   onClick={() => {
                     setContentMinimized(true);
@@ -802,7 +858,7 @@ export function GenerateRexscreenerReport({
         >
           {/* ---------- Exchange ---------- */}
           <section className="ss-pane ss-pane--ex" aria-label="Exchange" ref={exPaneRef}>
-            {swapMinimized ? (
+            {swapHidden ? (
               <div className="sb-min">
                 {closeButton}
                 <button
@@ -823,7 +879,8 @@ export function GenerateRexscreenerReport({
               </div>
             ) : (
               <div className="sb-head">
-                {closeButton}
+                {/* docked / overlay: close on the left; phone sheet: close on the right, no minimize */}
+                {sheetPane ? null : closeButton}
                 <SwapMark />
                 <div className="panel__title">
                   <b>
@@ -833,22 +890,26 @@ export function GenerateRexscreenerReport({
                     Swap tokens instantly · powered by RaptorX
                   </span>
                 </div>
-                <button
-                  type="button"
-                  className="rx-icon-btn panel-ctl"
-                  onClick={() => setSwapMinimized(true)}
-                  aria-expanded="true"
-                  aria-label="Minimize Swap"
-                  title="Minimize"
-                >
-                  <IconMin />
-                </button>
+                {sheetPane ? (
+                  closeButton
+                ) : (
+                  <button
+                    type="button"
+                    className="rx-icon-btn panel-ctl"
+                    onClick={minimizeSwap}
+                    aria-expanded="true"
+                    aria-label="Minimize Swap"
+                    title="Minimize"
+                  >
+                    <IconMin />
+                  </button>
+                )}
               </div>
             )}
             {/* The swap stays mounted while minimized (its widget events + in-flight routes) */}
             <div
-              className={`ss-ex__body${swapMinimized ? " is-hidden" : ""}`}
-              aria-hidden={swapMinimized}
+              className={`ss-ex__body${swapHidden ? " is-hidden" : ""}`}
+              aria-hidden={swapHidden}
               style={{
                 WebkitOverflowScrolling: "touch",
                 touchAction: "pan-y",
@@ -884,7 +945,7 @@ export function GenerateRexscreenerReport({
 
           {/* ---------- Intelligence report (Rex Pilot) ---------- */}
           <section className="ss-pane ss-pane--rep" aria-label="Intelligence report">
-            {contentMinimized ? (
+            {contentHidden ? (
               <div className="sb-min">
                 <button
                   type="button"
@@ -905,9 +966,9 @@ export function GenerateRexscreenerReport({
             {/* Minimized, the report stays mounted (an answer that is streaming keeps going) */}
             <div
               className={`ss-pane__main${
-                contentMinimized && !showLandingFallback ? " is-hidden" : ""
+                contentHidden && !showLandingFallback ? " is-hidden" : ""
               }`}
-              aria-hidden={contentMinimized && !showLandingFallback ? true : undefined}
+              aria-hidden={contentHidden && !showLandingFallback ? true : undefined}
             >
               {showLandingFallback ? (
                 pilotIntro
@@ -927,14 +988,20 @@ export function GenerateRexscreenerReport({
                   }}
                   reportType="crypto"
                   onViewHistory={openHistory}
-                  onMinimize={minimizeReport}
+                  onMinimize={reportMinimize}
+                  onCloseSidebar={reportClose}
                   onOpenExchange={
                     // What's New "Trade" card: bring the swap up next to this report; its
                     // "Full Exchange" link shows the Exchange on its own. Only when the
                     // swap targets this report's token (the chart can be another token).
+                    // Phone sheet: switch to the Exchange sheet.
                     swapMatchesPilotReport
                       ? (opts) => {
                           setShowHistory(false);
+                          if (sheetPane) {
+                            requestShellAction("exchange");
+                            return;
+                          }
                           setSwapMinimized(false);
                           if (opts?.full) setContentMinimized(true);
                         }
@@ -944,7 +1011,7 @@ export function GenerateRexscreenerReport({
               ) : !currentIsViewingChart ? (
                 <>
                   {/* Report history sits in the intro itself (like the market sidebar's empty state) */}
-                  <ReportPaneHead onMinimize={minimizeReport} />
+                  <ReportPaneHead onMinimize={reportMinimize} onClose={reportClose} />
                   {pilotIntro}
                 </>
               ) : (
@@ -953,7 +1020,8 @@ export function GenerateRexscreenerReport({
                   <ReportPaneHead
                     onHistory={!reportGenActive ? openHistory : undefined}
                     historyCount={historyCount}
-                    onMinimize={minimizeReport}
+                    onMinimize={reportMinimize}
+                    onClose={reportClose}
                   />
                   <div
                     className="sb-body"
@@ -1114,7 +1182,7 @@ export function GenerateRexscreenerReport({
         /* Unauthenticated landing */
         <>
           <div className="sb-head">
-            {closeButton}
+            {sheetPane ? null : closeButton}
             <ClawMark size={17} />
             <div className="panel__title">
               <b>
@@ -1124,6 +1192,7 @@ export function GenerateRexscreenerReport({
                 Rex Pilot · your AI pilot for everything crypto
               </span>
             </div>
+            {sheetPane ? closeButton : null}
           </div>
           <div className="sb-body">
             <div className="empty">

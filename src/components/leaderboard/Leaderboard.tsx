@@ -4,16 +4,18 @@
  * Leaderboard (prototype design/js/shell.js `leaderboard:` view, design/css/rewards.css):
  * "The apex three" podium, the full ranked list with pages, and the "You" card.
  * Renders the popup body and footer for LeaderboardModal (AcctModal shell, reward family).
- * Data and behaviour are unchanged (useLeaderboard: pages, page size, current user's rank).
- * Main's badge names stand in for the prototype's raptor tiers; the tier legend is left out.
+ * Data: useLeaderboard (pages, page size) plus `me`, the user's own rank from the API, so the
+ * "You" card shows wherever they are in the list. Raptor tiers (badges, tier names, the tier
+ * strip under the podium) are worked out from points (components/rewards/tiers).
  */
 
 import "@/styles/pages/rewards.css";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import Image from "next/image";
 import clsx from "clsx";
 import { ChevronDown, ChevronLeft, ChevronRight, CircleAlert, Crown, Users } from "lucide-react";
 import { useLeaderboard } from "@/hooks/useLeaderboard";
+import { TIERS, TierBadge, tierOf } from "@/components/rewards/tiers";
 import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
 import {
   AcctEmpty,
@@ -32,11 +34,31 @@ interface LeaderboardProps {
 
 const fmt = (n: number) => n.toLocaleString("en-US");
 
+/** Avatar with the tier badge on its corner (design `av()`). */
+function TierAvatar({
+  username,
+  points,
+  size,
+  decorative,
+}: {
+  username: string;
+  points: number;
+  size: number;
+  decorative?: boolean;
+}) {
+  return (
+    <span className="rw-av" style={{ width: size, height: size }}>
+      <Image src={animalAvatarSrc(username)} alt="" width={size} height={size} />
+      <TierBadge tier={tierOf(points)} size={Math.round(size * 0.42)} decorative={decorative} />
+    </span>
+  );
+}
+
 /* ============================ Podium ============================ */
 
 type PodiumUser = Pick<
   LeaderboardEntry,
-  "id" | "username" | "points" | "rank" | "badge"
+  "id" | "username" | "points" | "rank"
 >;
 
 function PodiumSpot({
@@ -56,12 +78,15 @@ function PodiumSpot({
       ) : null}
       <span className="pd__av">
         {user ? (
-          <Image
-            src={animalAvatarSrc(user.username)}
-            alt=""
-            width={size}
-            height={size}
-          />
+          <>
+            <Image
+              src={animalAvatarSrc(user.username)}
+              alt=""
+              width={size}
+              height={size}
+            />
+            <TierBadge tier={tierOf(user.points)} size={position === 1 ? 34 : 26} />
+          </>
         ) : null}
       </span>
       <span className="pd__name" title={user?.username}>
@@ -100,17 +125,13 @@ function LeaderboardRow({
     >
       <span className="lb-row__r">{user.rank}</span>
       <span className="lb-row__u">
-        <Image
-          className="rw-av"
-          src={animalAvatarSrc(user.username)}
-          alt=""
-          width={34}
-          height={34}
-        />
+        <TierAvatar username={user.username} points={user.points} size={34} />
         <span title={user.username}>{user.username}</span>
         {isCurrentUser && <span className="rx-badge rx-badge--gold">You</span>}
       </span>
-      <span className="lb-row__tier">{user.badge?.name}</span>
+      <span className="lb-row__tier" aria-hidden="true">
+        {tierOf(user.points).name}
+      </span>
       <span className="lb-row__p">{fmt(user.points)}</span>
     </li>
   );
@@ -238,8 +259,8 @@ export function Leaderboard({
     prevPage,
     setPageIndex,
     setPageSize,
-  } = useLeaderboard();
-  const [currentUserRank, setCurrentUserRank] = useState<number | null>(null);
+    me,
+  } = useLeaderboard(currentUserId);
   const [innerView, setInnerView] = useState<LeaderboardView>("podium");
   const view = viewProp ?? innerView;
   const setView = (next: LeaderboardView) => {
@@ -254,17 +275,7 @@ export function Leaderboard({
     return sorted.slice(0, 3);
   }, [leaderboard]);
 
-  useEffect(() => {
-    if (leaderboard && currentUserId) {
-      const userEntry = leaderboard.find((user) => user.id === currentUserId);
-      setCurrentUserRank(userEntry ? userEntry.rank : null);
-    }
-  }, [leaderboard, currentUserId]);
-
-  const me = currentUserId
-    ? leaderboard?.find((u) => u.id === currentUserId)
-    : undefined;
-  const above = me ? leaderboard?.find((u) => u.rank === me.rank - 1) : undefined;
+  const myTier = me ? tierOf(me.points) : null;
 
   if (loading) {
     return (
@@ -319,6 +330,26 @@ export function Leaderboard({
             <PodiumSpot user={topThree[0]} position={1} />
             <PodiumSpot user={topThree[2]} position={3} />
           </div>
+        ) : null}
+
+        {view === "podium" ? (
+          <ol
+            className="lb-tiers rw-in"
+            style={{ animationDelay: ".3s" }}
+            aria-label="Tiers by season points"
+          >
+            {TIERS.map((t) => (
+              <li
+                key={t.k}
+                className={myTier === t ? "is-you" : undefined}
+                aria-current={myTier === t ? "true" : undefined}
+              >
+                <TierBadge tier={t} size={22} decorative />
+                <b>{t.name}</b>
+                <span className="rx-num">{t.min ? `${fmt(t.min / 1000)}K+` : "Start"}</span>
+              </li>
+            ))}
+          </ol>
         ) : (
           <>
             <ol className="lb-list" aria-label="Leaderboard">
@@ -346,35 +377,24 @@ export function Leaderboard({
           </>
         )}
 
-        {currentUserRank && (
+        {me && myTier && (
           <div className="lb-you rw-in" style={{ animationDelay: ".2s" }}>
-            <span className="lb-you__rank">#{currentUserRank}</span>
-            {me ? (
-              <Image
-                className="rw-av"
-                src={animalAvatarSrc(me.username)}
-                alt=""
-                width={40}
-                height={40}
-              />
-            ) : null}
+            <span className="lb-you__rank">#{fmt(me.rank)}</span>
+            <TierAvatar username={me.username} points={me.points} size={40} decorative />
             <div className="lb-you__t">
-              <b>
-                You
-                {me?.badge?.name ? ` · ${me.badge.name}` : ""}
-              </b>
-              {me && me.rank === 1 ? (
+              <b>You · {myTier.name}</b>
+              {me.rank === 1 ? (
                 <span>Top of the leaderboard</span>
-              ) : me && above ? (
+              ) : me.above ? (
                 <span>
-                  <b>{fmt(Math.max(0, above.points - me.points))}</b> points
-                  behind {above.username}
+                  <b>{fmt(Math.max(0, me.above.points - me.points))}</b> points
+                  behind {me.above.username}
                 </span>
               ) : (
                 <span>Your current rank</span>
               )}
             </div>
-            {me ? <span className="lb-you__pts">{fmt(me.points)}</span> : null}
+            <span className="lb-you__pts">{fmt(me.points)}</span>
           </div>
         )}
       </div>

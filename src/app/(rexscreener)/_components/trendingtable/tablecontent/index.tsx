@@ -48,6 +48,9 @@ import {
   applyScreenerRowRichCache,
   mergeScreenerTokenMarket,
 } from "@/utils/screenerRowMerge";
+import { hrefForScreenerChain } from "@/lib/rexscreenerRoutes";
+import { requestShellAction } from "@/components/ui/layout/shellActions";
+import { pct24h } from "./tokenMeta";
 
 /* ============================ Pager ============================ */
 
@@ -495,11 +498,62 @@ type ReportsLayout = "list" | "cards";
 
 const REPORTS_LAYOUT_KEY = "rx-rp-view";
 
-const REPORTS_SORTS: { field: SortField; label: string }[] = [
-  { field: "marketCap", label: "Market cap" },
-  { field: "volume", label: "Volume" },
-  { field: "liquidity", label: "Liquidity" },
+/** Golden / Pump sort: the table's fields plus "newest" (latest added to the list) and "move"
+ *  (biggest 24h price move, either way). */
+type ReportsSortKey = SortField | "move" | "newest";
+type ReportsSort = { key: ReportsSortKey; dir: "asc" | "desc" };
+/** The report lists arrive sorted by market cap (largest first), so that is the starting sort. */
+const REPORTS_DEFAULT_SORT: ReportsSort = { key: "marketCap", dir: "desc" };
+
+/* Design order first (Newest, Volume, Biggest move). Newest uses `reportCreatedAt` (when the project
+   joined the list, from src/lib/reportScreenerRows.ts). Market cap stays from the old control: it is
+   the cards' headline number and the default order. */
+const REPORTS_SORTS: { key: ReportsSortKey; label: string }[] = [
+  { key: "newest", label: "Newest" },
+  { key: "volume", label: "Volume" },
+  { key: "move", label: "Biggest move" },
+  { key: "marketCap", label: "Market cap" },
 ];
+
+/** Size of the 24h price move, or null when the row has no change figure (those sort last). */
+function moveSize(t: TrendingToken): number | null {
+  const v = pct24h(t.pricePercentChange);
+  return v == null ? null : Math.abs(v);
+}
+
+/** When the project joined the report list (ms), or null on rows without it */
+function reportAddedAt(t: TrendingToken): number | null {
+  const v = (t as TrendingToken & { reportCreatedAt?: unknown }).reportCreatedAt;
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+function sortReportRows(rows: TrendingToken[], sort: ReportsSort): TrendingToken[] {
+  if (sort.key !== "move" && sort.key !== "newest") {
+    return sortTokens(rows, sort.key, sort.dir) as TrendingToken[];
+  }
+  const metric = sort.key === "move" ? moveSize : reportAddedAt;
+  return [...rows].sort((a, b) => {
+    const A = metric(a);
+    const B = metric(b);
+    if (A == null && B == null) return 0;
+    if (A == null) return 1;
+    if (B == null) return -1;
+    return sort.dir === "asc" ? A - B : B - A;
+  });
+}
+
+/** In-view report filter: ticker or name contains the text, or a pasted contract address matches. */
+function normalizeReportsQuery(raw: string): string {
+  return raw.trim().replace(/^\$/, "").trim().toLowerCase();
+}
+function reportMatches(t: TrendingToken, q: string): boolean {
+  if (!q) return true;
+  if ((t.symbol ?? "").toLowerCase().includes(q)) return true;
+  if ((t.name ?? "").toLowerCase().includes(q)) return true;
+  const addr = (t.tokenAddress ?? "").toLowerCase();
+  // Addresses: whole or a long fragment, so a short ticker doesn't match random hex.
+  return addr.length > 0 && (addr === q || (q.length >= 6 && addr.includes(q)));
+}
 
 function HeadIco({ d, size = 14 }: { d: string; size?: number }) {
   return (
@@ -533,8 +587,7 @@ function ReportsViewHead({
   layout,
   onLayout,
   countLabel,
-  sortField,
-  sortDirection,
+  sort,
   onSort,
   panelId,
 }: {
@@ -545,9 +598,8 @@ function ReportsViewHead({
   layout: ReportsLayout;
   onLayout: (l: ReportsLayout) => void;
   countLabel: string | null;
-  sortField: SortField | null;
-  sortDirection: "asc" | "desc" | null;
-  onSort: (field: SortField) => void;
+  sort: ReportsSort;
+  onSort: (key: ReportsSortKey) => void;
   panelId: string;
 }) {
   const tabs: { key: ReportsType; label: string; icon: string; count: number | null }[] = [
@@ -643,27 +695,28 @@ function ReportsViewHead({
           ) : null}
           <div className="rx-seg rx-rp-sort" role="group" aria-label="Sort">
             {REPORTS_SORTS.map((s) => {
-              const active = sortField === s.field && sortDirection !== null;
+              const active = sort.key === s.key;
+              const asc = active && sort.dir === "asc";
               return (
                 <button
-                  key={s.field}
+                  key={s.key}
                   type="button"
                   className={clsx("rx-seg__item", active && "is-active")}
                   aria-pressed={active}
-                  title={`Sort by ${s.label}`}
-                  aria-label={`Sort by ${s.label}${
+                  title={
                     active
-                      ? sortDirection === "asc"
-                        ? ", low to high"
-                        : ", high to low"
-                      : ""
+                      ? `Sorted by ${s.label}, ${asc ? "smallest" : "largest"} first. Click to reverse`
+                      : `Sort by ${s.label}`
+                  }
+                  aria-label={`Sort by ${s.label}${
+                    active ? (asc ? ", smallest first" : ", largest first") : ""
                   }`}
-                  onClick={() => onSort(s.field)}
+                  onClick={() => onSort(s.key)}
                 >
                   {s.label}
                   {active ? (
                     <HeadIco
-                      d={sortDirection === "asc" ? "M8 14l4-4 4 4" : "M8 10l4 4 4-4"}
+                      d={asc ? "M8 14l4-4 4 4" : "M8 10l4 4 4-4"}
                       size={12}
                     />
                   ) : null}
@@ -673,6 +726,83 @@ function ReportsViewHead({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Page head of the Golden / Pump Reports view (design/reports.html): breadcrumb, eyebrow and the
+ * report type as H1. Sits where the Header's "Market overview" head is; screener.css hides that one
+ * while this is mounted. Keeps the Header head's Claw AI 5.0 button (Rex Pilot) on the right.
+ */
+function ReportsPageHead({
+  type,
+  listHref,
+  onBackToList,
+}: {
+  type: ReportsType;
+  listHref: string;
+  onBackToList: () => void;
+}) {
+  return (
+    <div className="rx-page-head rx-rp-pagehead">
+      <div className="rx-page-head__title">
+        <nav className="rx-rp-crumbs" aria-label="Breadcrumb">
+          <a
+            href={listHref}
+            onClick={(e) => {
+              // Same page underneath: just leave the Reports view (new-tab clicks keep the link).
+              if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+              e.preventDefault();
+              onBackToList();
+            }}
+          >
+            RexScreener
+          </a>
+          <HeadIco d="M9 6l6 6-6 6" size={12} />
+          <span aria-current="page">AI reports</span>
+        </nav>
+        <span className="rx-eyebrow">RexScreener · All chains</span>
+        <h1>{type === "golden" ? "Golden Reports" : "Pump Reports"}</h1>
+      </div>
+      <div className="rx-page-head__actions">
+        <button
+          type="button"
+          className="rx-btn rx-btn--claw rx-btn--s shrink-0"
+          onClick={() => requestShellAction("pilot")}
+          aria-label="Claw AI 5.0: report history"
+        >
+          <Image
+            src="/images/claw-logo-96.webp"
+            alt=""
+            width={20}
+            height={20}
+            className="claw-ico"
+          />
+          Claw AI 5.0
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/** Golden / Pump: the search filtered every report out (design/reports.html #rpEmpty). */
+function ReportsNoMatch({ onClear }: { onClear: () => void }) {
+  return (
+    <div className="rx-raised rx-rp-empty">
+      <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+        <circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" strokeWidth="2" />
+        <path d="M20 20l-3.5-3.5" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+      </svg>
+      <b>No reports match</b>
+      <p>Try another name or ticker, or paste the token&apos;s contract address.</p>
+      <button
+        type="button"
+        className="rx-btn rx-btn--secondary rx-btn--s"
+        onClick={onClear}
+      >
+        Clear search
+      </button>
     </div>
   );
 }
@@ -789,6 +919,25 @@ export function TrendingTableContent({
   const [pumpReportsOnly, setPumpReportsOnly] = useState(false);
   const [reportListsPrefetchReady, setReportListsPrefetchReady] =
     useState(false);
+
+  /** Golden / Pump Reports: the toolbar search filters the open list in place (design/reports.html). */
+  const [reportsFilter, setReportsFilter] = useState("");
+  /** Bumped to empty the toolbar search box (it keeps its own text) when the filter is reset. */
+  const [searchBarKey, setSearchBarKey] = useState(0);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const resetReportsFilter = useCallback(() => {
+    setReportsFilter("");
+    setSearchBarKey((k) => k + 1);
+  }, []);
+  /** Golden / Pump sort (cards' sort control and the list's column headers). */
+  const [reportsSort, setReportsSort] = useState<ReportsSort>(REPORTS_DEFAULT_SORT);
+  const onReportsSort = useCallback((key: ReportsSortKey) => {
+    setReportsSort((prev) =>
+      prev.key === key
+        ? { key, dir: prev.dir === "desc" ? "asc" : "desc" }
+        : { key, dir: "desc" },
+    );
+  }, []);
 
   /** Golden / Pump Reports: List (screener rows) or Cards, remembered per browser like the design. */
   const [reportsLayout, setReportsLayout] = useState<ReportsLayout>("cards");
@@ -1129,31 +1278,34 @@ export function TrendingTableContent({
     pumpRegistryCount > 0 &&
     pumpBaseItems.length === 0;
 
-  const goldenRowsWithRank = useMemo(() => {
-    if (!goldenReportsOnly) return [];
-    const sorted = sortTokens(
-      goldenRawItems,
-      sortField,
-      sortDirection,
-    ) as TrendingToken[];
-    return sorted.map((row, i) => ({
-      ...row,
-      _rank: i + 1,
-    }));
-  }, [goldenReportsOnly, goldenRawItems, sortField, sortDirection]);
+  /** Sorted, before the search filter: drives the sparkline request so typing doesn't refetch it. */
+  const goldenSortedRows = useMemo(
+    () => (goldenReportsOnly ? sortReportRows(goldenRawItems, reportsSort) : []),
+    [goldenReportsOnly, goldenRawItems, reportsSort],
+  );
 
-  const pumpRowsWithRank = useMemo(() => {
-    if (!pumpReportsOnly) return [];
-    const sorted = sortTokens(
-      pumpRawItems,
-      sortField,
-      sortDirection,
-    ) as TrendingToken[];
-    return sorted.map((row, i) => ({
-      ...row,
-      _rank: i + 1,
-    }));
-  }, [pumpReportsOnly, pumpRawItems, sortField, sortDirection]);
+  const pumpSortedRows = useMemo(
+    () => (pumpReportsOnly ? sortReportRows(pumpRawItems, reportsSort) : []),
+    [pumpReportsOnly, pumpRawItems, reportsSort],
+  );
+
+  const reportsQuery = normalizeReportsQuery(reportsFilter);
+
+  const goldenRowsWithRank = useMemo(
+    () =>
+      goldenSortedRows
+        .filter((row) => reportMatches(row, reportsQuery))
+        .map((row, i) => ({ ...row, _rank: i + 1 })),
+    [goldenSortedRows, reportsQuery],
+  );
+
+  const pumpRowsWithRank = useMemo(
+    () =>
+      pumpSortedRows
+        .filter((row) => reportMatches(row, reportsQuery))
+        .map((row, i) => ({ ...row, _rank: i + 1 })),
+    [pumpSortedRows, reportsQuery],
+  );
 
   useEffect(() => {
     if (prevScreenerChainRef.current === screenerChain) return;
@@ -1266,7 +1418,28 @@ export function TrendingTableContent({
       : rowsWithAges;
 
   const { series: sparklineSeries, isFetching: sparklinesFetching } =
-    useTrendingSparklines(displayRows);
+    useTrendingSparklines(
+      goldenReportsOnly
+        ? goldenSortedRows
+        : pumpReportsOnly
+          ? pumpSortedRows
+          : displayRows,
+    );
+
+  /* The Reports filter starts empty on the way in and doesn't outlive the view (it would sit in the
+     box as an unsent screener search). Switching Golden <-> Pump keeps it, like the design. */
+  const reportsOpen = goldenReportsOnly || pumpReportsOnly;
+  const prevReportsOpenRef = useRef(reportsOpen);
+  useEffect(() => {
+    if (prevReportsOpenRef.current === reportsOpen) return;
+    prevReportsOpenRef.current = reportsOpen;
+    resetReportsFilter();
+  }, [reportsOpen, resetReportsFilter]);
+
+  const leaveReports = useCallback(() => {
+    setGoldenReportsOnly(false);
+    setPumpReportsOnly(false);
+  }, []);
 
   const handleScreenerChainNavigate = useCallback(
     (chain: Chain) => {
@@ -1725,6 +1898,24 @@ export function TrendingTableContent({
       ? pumpRegistryCount
       : null;
 
+  /** Golden / Pump: the search left nothing to show (the list itself has reports). */
+  const reportsBaseCount = goldenReportsOnly
+    ? goldenSortedRows.length
+    : pumpReportsOnly
+      ? pumpSortedRows.length
+      : 0;
+  const reportsNoMatch =
+    reportsMode &&
+    reportsQuery.length > 0 &&
+    reportsBaseCount > 0 &&
+    displayRows.length === 0;
+
+  const clearReportsSearch = () => {
+    resetReportsFilter();
+    // The box remounts empty on the next commit: put the caret back in it.
+    requestAnimationFrame(() => searchInputRef.current?.focus());
+  };
+
   const selectReportsType = (t: ReportsType) => {
     if (t === "golden" && !goldenReportsOnly) toggleGoldenReports();
     if (t === "pump" && !pumpReportsOnly) togglePumpReports();
@@ -1761,12 +1952,37 @@ export function TrendingTableContent({
         desktopPlacement="right"
       />
 
+      {reportsMode ? (
+        <ReportsPageHead
+          type={goldenReportsOnly ? "golden" : "pump"}
+          listHref={hrefForScreenerChain(screenerChain)}
+          onBackToList={leaveReports}
+        />
+      ) : null}
+
       {/* Toolbar: search + Golden/Pump on the left, count + chain switcher on the right */}
       <div className="mx-[var(--rx-gutter)] flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-b border-rx-line-strong pb-3 pt-4 md:pt-[22px]">
         <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 md:w-auto">
+          {/* Golden / Pump Reports: the same box filters the open list in place instead of
+              running a screener search (which would leave the view). */}
           <TokenSearchBar
+            key={`${reportsMode ? "reports" : "screener"}-${searchBarKey}`}
+            mode={reportsMode ? "filter" : "search"}
             onSearch={handleSearch}
-            onClear={handleClearSearch}
+            onClear={reportsMode ? () => setReportsFilter("") : handleClearSearch}
+            onValueChange={reportsMode ? setReportsFilter : undefined}
+            defaultValue={reportsMode ? reportsFilter : ""}
+            placeholder={
+              reportsMode
+                ? "Search by name, ticker or CA"
+                : "Filter by name, ticker or CA"
+            }
+            label={
+              reportsMode
+                ? `Search ${goldenReportsOnly ? "Golden" : "Pump"} Reports by name, ticker or contract address`
+                : "Search tokens by name, ticker or contract address"
+            }
+            inputRef={searchInputRef}
             className="md:w-[270px] md:flex-none min-[1536px]:w-[300px]"
           />
           <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto">
@@ -1974,17 +2190,16 @@ export function TrendingTableContent({
               layout={reportsLayout}
               onLayout={chooseReportsLayout}
               countLabel={reportsCountLabel}
-              sortField={sortField}
-              sortDirection={sortDirection}
-              onSort={onSort}
+              sort={reportsSort}
+              onSort={onReportsSort}
               panelId={reportsPanelId}
             />
           ) : null}
 
-          {/* Column header: the list only (cards carry their own labels) */}
+          {/* Column header: the list only (cards carry their own labels; hidden with no matches) */}
           <div
             className="sticky top-0 z-40 overflow-hidden bg-[rgba(9,9,9,0.86)] backdrop-blur-md"
-            hidden={showReportCards}
+            hidden={showReportCards || reportsNoMatch}
           >
             <div
               ref={headerContentRef}
@@ -1994,10 +2209,17 @@ export function TrendingTableContent({
                 transform: "translateX(0px)",
               }}
             >
+              {/* Golden / Pump: the headers drive the view's own sort (same state as its sort control) */}
               <TableHeader
-                sortField={sortField}
-                sortDirection={sortDirection}
-                onSort={onSort}
+                sortField={
+                  reportsMode
+                    ? reportsSort.key === "move" || reportsSort.key === "newest"
+                      ? null
+                      : reportsSort.key
+                    : sortField
+                }
+                sortDirection={reportsMode ? reportsSort.dir : sortDirection}
+                onSort={reportsMode ? onReportsSort : onSort}
               />
             </div>
           </div>
@@ -2080,6 +2302,13 @@ export function TrendingTableContent({
                 </TableEmptyState>
               )}
 
+              {reportsNoMatch &&
+              (goldenReportsOnly
+                ? !goldenTableStillLoading && !goldenScreenerError
+                : !pumpTableStillLoading && !pumpScreenerError) ? (
+                <ReportsNoMatch onClear={clearReportsSearch} />
+              ) : null}
+
               {(goldenReportsOnly
                 ? !goldenTableStillLoading && !goldenScreenerError
                 : pumpReportsOnly
@@ -2114,6 +2343,7 @@ export function TrendingTableContent({
                           sparklinesFetching={sparklinesFetching}
                           useGoldenGenerateArt={goldenReportsOnly}
                           usePumpGenerateArt={pumpReportsOnly}
+                          showTrade={pumpReportsOnly}
                           ageLoading={
                             (goldenAgesLoading || pumpAgesLoading) &&
                             !hasUsableTokenCreatedAt(t.createdAt)
@@ -2171,6 +2401,7 @@ export function TrendingTableContent({
                         sparklinesFetching={sparklinesFetching}
                         useGoldenGenerateArt={useGoldenGenerateArt}
                         usePumpGenerateArt={usePumpGenerateArt}
+                        showTrade={pumpReportsOnly}
                         ageLoading={
                           (goldenAgesLoading || pumpAgesLoading) &&
                           !hasUsableTokenCreatedAt(t.createdAt)

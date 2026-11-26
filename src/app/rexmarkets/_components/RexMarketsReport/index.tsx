@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import type { MarketReport } from "@/hooks/useGenerateMarketReport";
 
 import RexMarketsReportData from "./RexMarketsReportData";
+import type { PilotPaneRequest } from "./shared/usePilotSidebar";
 import "@/styles/pages/pilot.css";
 
 type RexMarketsReportProps = {
@@ -17,6 +18,10 @@ type RexMarketsReportProps = {
   onClose?: () => void;
   /** Clears in-session report on the parent so the sidebar can show the Generate empty state and the main header can reset. */
   onClearSessionReport?: () => void;
+  /** Market pages (desktop): minimizing the second pane parks both as tabs on the right edge instead. */
+  onParkBoth?: () => void;
+  /** Market pages: pane state asked for from outside (a parked tab, the Claw AI 5.0 toggle). */
+  paneRequest?: PilotPaneRequest | null;
 };
 
 export default function RexMarketsReport({
@@ -29,6 +34,8 @@ export default function RexMarketsReport({
   selectedMarketSource,
   onClose,
   onClearSessionReport,
+  onParkBoth,
+  paneRequest,
 }: RexMarketsReportProps) {
   const [selectedReportId, setSelectedReportId] = useState<string | null>(
     generatedReport?.id || null
@@ -75,6 +82,8 @@ export default function RexMarketsReport({
         selectedMarketSource={selectedMarketSource}
         onClose={onClose}
         onClearSessionReport={onClearSessionReport}
+        onParkBoth={onParkBoth}
+        paneRequest={paneRequest}
       />
     </div>
   );

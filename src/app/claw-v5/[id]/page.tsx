@@ -208,6 +208,16 @@ export default function ChatDetailPage() {
       hadStreamingRef.current = false;
       return;
     }
+    // A shared answer link (#answer-<id>): open on that answer instead of the end of the chat
+    const hash = typeof window !== "undefined" ? window.location.hash : "";
+    if (hash.startsWith("#answer-")) {
+      const target = document.getElementById(decodeURIComponent(hash.slice(1)));
+      if (target) {
+        skipInitialScrollRef.current = true;
+        target.scrollIntoView({ block: "start" });
+        return;
+      }
+    }
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages, isSending, chatId]);
 
@@ -1069,6 +1079,20 @@ export default function ChatDetailPage() {
     showSuccessNotification("Link Copied", "Share link copied to clipboard!");
   }, [chatId]);
 
+  /** One answer's Share: the same chat link, pointing at that answer (#answer-<id>). */
+  const handleShareMessage = useCallback(
+    (message: MessageData) => {
+      const chatUrl = `${window.location.origin}/claw-v5/${chatId}`;
+      const shareUrl =
+        message.id && !message.id.startsWith("temp-")
+          ? `${chatUrl}#answer-${message.id}`
+          : chatUrl;
+      copy(shareUrl);
+      showSuccessNotification("Link Copied", "Answer link copied to clipboard!");
+    },
+    [chatId],
+  );
+
   const handleExchange = useCallback(() => {
     setActiveCryptoPayload(
       (prev: any) => prev ?? findLatestCryptoPayload(messages),
@@ -1433,6 +1457,7 @@ export default function ChatDetailPage() {
                       onEdit={handleEditMessage}
                       onCopy={handleCopyMessage}
                       onQuote={handleQuote}
+                      onShare={handleShareMessage}
                       onDeepAnalysisMarket={handleDeepAnalysisMarket}
                       isStreaming={
                         message.role === "assistant" &&

@@ -23,6 +23,7 @@ import {
 } from "./pilotUi";
 import { useReportGenStatus } from "@/lib/storage/reportGenStore";
 import { useDataSource } from "@/contexts/DataSourceContext";
+import { isPilotDesktop, type PilotPaneRequest } from "../shared/usePilotSidebar";
 
 /** Rex Pilot / News split height, saved per viewer (same key as the prototype's drag gutter). */
 const PILOT_H_KEY = "rx-size-pilot-h";
@@ -60,6 +61,11 @@ type RexMarketsReportDataProps = {
   selectedMarketSource?: string | null;
   onClose?: () => void;
   onClearSessionReport?: () => void;
+  /** Desktop market pages: minimizing the second pane parks both as tabs on the right edge (prototype
+   *  design/js/market.js). Without it, minimizing one pane expands the other. */
+  onParkBoth?: () => void;
+  /** Pane state asked for from outside (a parked tab, the Claw AI 5.0 toggle). */
+  paneRequest?: PilotPaneRequest | null;
 };
 
 export default function RexMarketsReportData({
@@ -74,6 +80,8 @@ export default function RexMarketsReportData({
   selectedMarketSource,
   onClose,
   onClearSessionReport,
+  onParkBoth,
+  paneRequest,
 }: RexMarketsReportDataProps) {
   const [aiReportMinimized, setAiReportMinimized] = useState(true);
   const [marketsDataMinimized, setMarketsDataMinimized] = useState(false);
@@ -122,20 +130,42 @@ export default function RexMarketsReportData({
     setMarketsDataMinimized(false);
   }, []);
 
-  // Minimizing one pane gives the whole sidebar to the other (prototype pane states: both · pilot-min · news-min)
+  // Minimizing one pane gives the whole sidebar to the other (prototype pane states: both · pilot-min · news-min).
+  // On desktop market pages, minimizing the second one parks both as tabs on the right edge and closes the
+  // sidebar; it comes back with both panes (or with the pane whose tab was clicked).
   const handleMinimizeMarketsData = useCallback(() => {
+    if (onParkBoth && aiReportMinimized && isPilotDesktop()) {
+      setMarketsDataMinimized(false);
+      setAiReportMinimized(false);
+      onParkBoth();
+      return;
+    }
     setMarketsDataMinimized(true);
     setAiReportMinimized(false);
-  }, []);
+  }, [onParkBoth, aiReportMinimized]);
 
   const handleExpandAiReport = useCallback(() => {
     setAiReportMinimized(false);
   }, []);
 
   const handleMinimizeAiReport = useCallback(() => {
+    if (onParkBoth && marketsDataMinimized && isPilotDesktop()) {
+      setMarketsDataMinimized(false);
+      setAiReportMinimized(false);
+      onParkBoth();
+      return;
+    }
     setAiReportMinimized(true);
     setMarketsDataMinimized(false);
-  }, []);
+  }, [onParkBoth, marketsDataMinimized]);
+
+  // Pane state asked for from outside: a parked tab (that pane expanded, the other minimized) or the
+  // Claw AI 5.0 toggle (both).
+  useEffect(() => {
+    if (!paneRequest) return;
+    setMarketsDataMinimized(paneRequest.state === "pilot-min");
+    setAiReportMinimized(paneRequest.state === "news-min");
+  }, [paneRequest]);
 
   const handleBackToEmptyState = useCallback(() => {
     if (onReportSelect) {

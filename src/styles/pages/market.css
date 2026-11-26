@@ -4,11 +4,16 @@
    design/css/pages.css ("Terminal layout for chart pages": flat, edge-to-edge sections split by 1px lines)
    and design/css/pages.css .err (region notice). The Rex Pilot sidebar is styled separately (pilot.css).
 
-   Plain unlayered CSS, every rule scoped under one of three roots:
+   Plain unlayered CSS, every rule scoped under one of four roots:
      .rx-mk-top    shared market head (TradingHeader). Self-contained (its own container query), so it works
                    inside any venue interface, with or without .rx-mk.
      .rx-mk        venue trading-interface root (flex column, full height; container "mk" for the layout).
      .rx-mk-state  page-level loading / error message (page.tsx shells), outside both roots.
+     .rx-mk-page   page frame around the interface and the Rex Pilot sidebar (RexMarketsReport/shared/
+                   PilotSidebarLayout.tsx): .mk-sb-edge (drag the sidebar's left edge, desktop) and
+                   .mk-page-main--rail (room for the parked pane tabs, .rx-pilot-rail in pilot.css).
+                   Its inline --rx-sb-w (saved sidebar width) overrides the default in globals.css.
+   While a line is dragged <body> has .is-resizing (+ .is-resizing-x|y): see the end of this file.
    React helpers for most pieces: RexMarketsReportData/shared/marketUi.tsx.
 
    Structure (inside .rx-mk):
@@ -24,6 +29,8 @@
      .mk-scroll                         the scrolling body (everything under the head)
        .mk-main                         chart + ticket. Side by side (ticket 340px) from 760px of container width,
                                         filling the visible height; stacked below that.
+         .mk-gutter                     1px line between chart and ticket, also the drag handle (side by side
+                                        only). Sets --ticket-w on .mk-main (saved; clamped so the chart keeps 380px).
          .mk-chart                      chart section: .mk-chart__head (rx-eyebrow + rx-seg rx-seg--mono),
                                         .mk-chart__plot (recharts; flat grid, mono axis labels), .mk-chart__empty
            .mk-legend                   series toggles: button.rx-check(.is-on) with style="--c:<series colour>"
@@ -147,14 +154,22 @@
 .rx-mk .mk-chart__empty{display:flex;align-items:center;justify-content:center;flex-direction:column;gap:4px;font-size:13px;color:var(--rx-text-3)}
 .rx-mk .mk-side{min-width:0;border-top:1px solid var(--rx-line);scrollbar-width:thin;scrollbar-color:var(--rx-line-strong) transparent}
 
+.rx-mk .mk-gutter{display:none}
 @container mk (min-width:760px){
   .rx-mk .mk-main{flex-direction:row;align-items:stretch;height:100%;min-height:460px}
   .rx-mk .mk-chart{flex:1 1 auto;min-height:0;padding:14px 20px 12px;overflow:hidden}
   .rx-mk .mk-chart__plot{flex:1 1 0;height:auto;min-height:200px}
-  .rx-mk .mk-side{flex:0 0 340px;min-height:0;overflow-y:auto;border-top:0;border-left:1px solid var(--rx-line)}
+  /* ticket width: dragged / saved --ticket-w, never leaving the chart less than 380px */
+  .rx-mk .mk-side{flex:0 0 min(var(--ticket-w,340px),max(300px,calc(100% - 381px)));min-height:0;overflow-y:auto;border-top:0;border-left:1px solid var(--rx-line)}
+  /* the line between chart and ticket is the drag handle (design/css/pages.css "Terminal layout" .gutter) */
+  .rx-mk .mk-gutter{display:block;position:relative;flex:0 0 1px;align-self:stretch;z-index:8;background:var(--rx-line);cursor:col-resize;touch-action:none;outline:none;
+    transition:background .15s,box-shadow .15s}
+  .rx-mk .mk-gutter::before{content:"";position:absolute;top:0;bottom:0;left:-5px;width:11px}
+  .rx-mk .mk-gutter:hover,.rx-mk .mk-gutter:focus-visible,.rx-mk .mk-gutter.is-active{background:var(--rx-gold);box-shadow:0 0 10px rgba(255,184,0,.45)}
+  .rx-mk .mk-gutter + .mk-side{border-left:0}
 }
 @container mk (min-width:1600px){
-  .rx-mk .mk-side{flex-basis:360px}
+  .rx-mk .mk-side{flex-basis:min(var(--ticket-w,360px),max(300px,calc(100% - 381px)))}
 }
 
 /* chart chrome (recharts): flat horizontal grid, mono axis labels, no axis lines */
@@ -392,6 +407,27 @@
   .rx-mk .mk-feed__body{padding:4px 14px 16px}
   .rx-mk .mk-post > .mk-replies{margin-left:0}
   .rx-mk .mk-yn .rx-yes,.rx-mk .mk-yn .rx-no{height:48px}
+}
+
+/* ===================== page frame (.rx-mk-page) ===================== */
+/* drag the Rex Pilot sidebar's left edge (design/market.html #gSidebar): an 11px hit area over the sidebar's
+   1px left line, which turns gold on hover / focus / drag. Desktop only (the sidebar is an overlay below 1024px). */
+.rx-mk-page .mk-sb-edge{display:none}
+@media (min-width:1024px){
+  .rx-mk-page .mk-sb-edge{display:block;position:absolute;top:0;bottom:0;left:-5px;width:11px;z-index:25;cursor:col-resize;touch-action:none;outline:none}
+  .rx-mk-page .mk-sb-edge::after{content:"";position:absolute;top:0;bottom:0;left:5px;width:1px;background:transparent;transition:background .15s,box-shadow .15s}
+  .rx-mk-page .mk-sb-edge:hover::after,.rx-mk-page .mk-sb-edge:focus-visible::after,.rx-mk-page .mk-sb-edge.is-active::after{background:var(--rx-gold);box-shadow:0 0 10px rgba(255,184,0,.45)}
+  /* parked pane tabs on the right edge: keep the market clear of them (design/css/pages.css has-rail) */
+  .rx-mk-page .mk-page-main--rail{padding-right:40px}
+}
+
+/* while a line is dragged (body.is-resizing, see RexMarketsReport/shared/dragResize.ts): no width animation,
+   no text selection, resize cursor everywhere */
+body.is-resizing .rx-mk-page .main-content-shrink,body.is-resizing .rx-mk-page #rex-pilot-sidebar{transition:none !important}
+body.is-resizing .rx-mk-page{user-select:none;-webkit-user-select:none}
+body.is-resizing-x .rx-mk-page,body.is-resizing-x .rx-mk-page *{cursor:col-resize !important}
+@media (prefers-reduced-motion:reduce){
+  .rx-mk .mk-gutter,.rx-mk-page .mk-sb-edge::after{transition:none}
 }
 
 /* ===================== page-level loading / error (.rx-mk-state) ===================== */

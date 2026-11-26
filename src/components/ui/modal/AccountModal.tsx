@@ -15,6 +15,8 @@ import { LogOut, RefreshCw } from "lucide-react";
 import { useWallet } from "@/contexts/WalletContext";
 import { usePolymarketDepositAddresses } from "@/hooks/usePolymarketDepositAddresses";
 import useSafeDeployment from "@/hooks/useSafeDeployment";
+import { useLeaderboardRank } from "@/hooks/useLeaderboard";
+import { TierClimb } from "@/components/rewards/tiers";
 import {
   showErrorNotification,
   showSuccessNotification,
@@ -34,6 +36,7 @@ import {
   AcctTabs,
   ProfileDetails,
   ProfileHero,
+  PortfolioLink,
   ProfileLinks,
   type OrdersTabKey,
 } from "@/components/ui/modal/accountUi";
@@ -60,6 +63,8 @@ interface AccountModalProps {
   onLogout: () => void;
   /** "My orders and positions" / "Trade history": open My orders on that tab. The links are hidden without it. */
   onOpenOrders?: (tab: OrdersTabKey) => void;
+  /** Tab shown each time the popup opens (default Profile), e.g. Referrals from the missions popup's "Get link" */
+  initialTab?: "profile" | "goldenReport" | "referral";
 }
 
 const ACCOUNT_TABS = [
@@ -92,10 +97,16 @@ export default function AccountModal({
   isLoggingOut,
   onLogout,
   onOpenOrders,
+  initialTab = "profile",
 }: AccountModalProps) {
   const [activeTab, setActiveTab] = useState<
     "profile" | "goldenReport" | "referral"
-  >("profile");
+  >(initialTab);
+  useEffect(() => {
+    if (isOpen) setActiveTab(initialTab);
+  }, [isOpen, initialTab]);
+  // "Rank #N" in the profile hero (fetched each time the popup opens)
+  const myRank = useLeaderboardRank(currentUser?.id, isOpen);
   const [copiedAddress, setCopiedAddress] = useState<string | null>(null);
   const modalRef = useRef<HTMLDivElement>(null);
   const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -397,13 +408,16 @@ export default function AccountModal({
             <AcctLoading label="Loading your account" />
           ) : currentUser ? (
             <>
-              {/* Profile: hero, links to My orders, and the one Base wallet */}
+              {/* Profile: hero, links to Portfolio and My orders, and the one Base wallet */}
               {activeTab === "profile" && (
                 <>
                   <ProfileHero
                     username={currentUser.username}
                     points={currentUser.points}
+                    rank={myRank}
                   />
+                  <TierClimb points={currentUser.points} />
+                  <PortfolioLink onNavigate={onClose} />
                   {onOpenOrders ? <ProfileLinks onOpen={onOpenOrders} /> : null}
                   <ProfileDetails
                     username={currentUser.username}

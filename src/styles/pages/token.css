@@ -405,6 +405,10 @@
     height: 40px;
     border-radius: 11px;
   }
+  /* the report / trade bar above the tab bar opens Rex Pilot on phones (design/token.html .tk-mbar) */
+  .rx-tk__tools .rx-tk__claw {
+    display: none;
+  }
   .rx-tk__chart {
     flex: 0 0 auto;
     height: max(360px, calc(100cqh - 62px));

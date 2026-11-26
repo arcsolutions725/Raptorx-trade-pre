@@ -1,23 +1,44 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState, useCallback, useId } from "react";
+import { useState, useCallback, useId, type Ref } from "react";
 import { Search, X } from "lucide-react";
 
 interface TokenSearchBarProps {
   onSearch: (query: string, type: "ticker" | "address") => void;
   onClear: () => void;
   className?: string;
+  /**
+   * `search` (default): Enter runs the screener search (`onSearch`).
+   * `filter`: the text filters a list in place as you type (Golden / Pump Reports view). Enter does
+   * not search and the ↵ key is hidden; the clear button shows whenever there is text.
+   */
+  mode?: "search" | "filter";
+  /** Every edit of the text (typing, clear, Escape). */
+  onValueChange?: (value: string) => void;
+  /** Text to start with (e.g. a filter that outlived a remount). Remount (`key`) to reset. */
+  defaultValue?: string;
+  placeholder?: string;
+  /** Screen-reader label for the input. */
+  label?: string;
+  inputRef?: Ref<HTMLInputElement>;
 }
 
 export function TokenSearchBar({
   onSearch,
   onClear,
   className = "",
+  mode = "search",
+  onValueChange,
+  defaultValue = "",
+  placeholder = "Filter by name, ticker or CA",
+  label = "Search tokens by name, ticker or contract address",
+  inputRef,
 }: TokenSearchBarProps) {
-  const [searchInput, setSearchInput] = useState("");
+  const [searchInput, setSearchInput] = useState(defaultValue);
   const [hasActiveSearch, setHasActiveSearch] = useState(false);
   const inputId = useId();
+  const filterMode = mode === "filter";
 
   const validateInput = (
     input: string
@@ -84,11 +105,14 @@ export function TokenSearchBar({
   const handleClear = useCallback(() => {
     setSearchInput("");
     setHasActiveSearch(false);
+    onValueChange?.("");
     onClear();
-  }, [onClear]);
+  }, [onClear, onValueChange]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
+    // Filter mode already applies the text as it is typed.
+    if (filterMode) return;
     if (searchInput.trim()) {
       performSearch(searchInput);
     }
@@ -104,6 +128,8 @@ export function TokenSearchBar({
     }
   };
 
+  const showClear = filterMode ? searchInput.length > 0 : hasActiveSearch;
+
   return (
     <form
       role="search"
@@ -112,40 +138,47 @@ export function TokenSearchBar({
     >
       <Search className="size-[15px] shrink-0 text-rx-text-3" aria-hidden />
       <label htmlFor={inputId} className="sr-only">
-        Search tokens by name, ticker or contract address
+        {label}
       </label>
       <input
+        ref={inputRef}
         id={inputId}
         type="text"
         value={searchInput}
-        onChange={(e) => setSearchInput(e.target.value)}
+        onChange={(e) => {
+          setSearchInput(e.target.value);
+          onValueChange?.(e.target.value);
+        }}
         onKeyDown={handleKeyDown}
-        placeholder="Filter by name, ticker or CA"
+        placeholder={placeholder}
         title="Filter by name or ticker, or paste a contract address"
         autoComplete="off"
         spellCheck={false}
+        enterKeyHint="search"
         className="text-base sm:text-sm"
       />
-      {hasActiveSearch && (
+      {showClear && (
         <button
           type="button"
           onClick={handleClear}
-          className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-rx-text-3 transition-colors hover:bg-white/[0.06] hover:text-rx-text"
+          className="inline-flex size-7 shrink-0 items-center justify-center rounded-lg text-rx-text-3 transition-colors hover:bg-white/[0.06] hover:text-rx-text focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-rx-gold-hi"
           title="Clear search"
           aria-label="Clear search"
         >
           <X className="size-4" aria-hidden />
         </button>
       )}
-      <button
-        type="submit"
-        disabled={!searchInput.trim()}
-        className="rx-kbd shrink-0 cursor-pointer transition-colors hover:border-rx-gold-line hover:text-rx-text disabled:cursor-default disabled:opacity-0"
-        title="Search"
-        aria-label="Search"
-      >
-        ↵
-      </button>
+      {filterMode ? null : (
+        <button
+          type="submit"
+          disabled={!searchInput.trim()}
+          className="rx-kbd shrink-0 cursor-pointer transition-colors hover:border-rx-gold-line hover:text-rx-text disabled:cursor-default disabled:opacity-0"
+          title="Search"
+          aria-label="Search"
+        >
+          ↵
+        </button>
+      )}
     </form>
   );
 }

@@ -2,7 +2,8 @@
    Source: design/market.html (aside.pilot-sb) + design/css/predictions.css ("docked Rex Pilot sidebar",
    "Rex Pilot disclosures"), design/css/components.css (.report, .stats, .empty, .panel__title, .panel-ctl)
    and design/css/pages.css ("Terminal layout": flat background + 1px line on desktop).
-   Scoped under .rx-pilot (root of RexMarketsReport); unlayered, so it wins over the layered DS rules. */
+   Scoped under .rx-pilot (root of RexMarketsReport) and .rx-pilot-rail (parked pane tabs on the market pages);
+   unlayered, so it wins over the layered DS rules. */
 
 .rx-pilot{position:relative;display:flex;flex-direction:column;width:100%;height:100%;min-height:0;max-height:100dvh;overflow:hidden;
   background:linear-gradient(180deg,var(--rx-pop-a),var(--rx-pop-b));color:var(--rx-text);font-family:var(--rx-ui);
@@ -163,6 +164,20 @@ body.is-resizing .rx-pilot .sb-pane{transition:none}
 .rx-pilot .rex-markets-report-md td{border-color:var(--rx-line) !important}
 .rx-pilot .rep-caret{display:inline-block;width:7px;height:15px;margin-left:3px;vertical-align:-2px;border-radius:1px;background:var(--rx-gold);animation:rx-pilot-blink 1s steps(1) infinite}
 
+/* ---------- both panes minimized: vertical tabs on the right edge, middle of the screen ----------
+   design/css/pages.css (.side-rail / .rail-tab). Rendered by RexMarketsReport/shared/PilotSidebarLayout.tsx
+   (outside .rx-pilot) while the sidebar is closed with both panes parked; desktop only. */
+.rx-pilot-rail{position:fixed;right:0;top:50%;transform:translateY(-50%);z-index:75;display:none;flex-direction:column;gap:8px}
+@media (min-width:1024px){.rx-pilot-rail{display:flex}}
+.rx-pilot-rail .rail-tab{writing-mode:vertical-rl;display:flex;align-items:center;gap:9px;padding:16px 10px;border-radius:12px 0 0 12px;cursor:pointer;
+  background:linear-gradient(180deg,var(--rx-pop-a),var(--rx-pop-b));border:1px solid var(--rx-line-strong);border-right:0;color:var(--rx-text-2);
+  font:600 13px var(--rx-ui);letter-spacing:.01em;box-shadow:-8px 0 24px rgba(0,0,0,.35);animation:rx-rail-in .3s cubic-bezier(.2,.7,.2,1);
+  transition:color .2s,background .2s,border-color .2s,padding .2s}
+.rx-pilot-rail .rail-tab svg,.rx-pilot-rail .rail-tab img{flex-shrink:0;color:var(--rx-gold-hi)}
+.rx-pilot-rail .rail-tab:hover,.rx-pilot-rail .rail-tab:focus-visible{color:var(--rx-text);background:rgba(255,184,0,.1);border-color:var(--rx-gold-line);padding-right:14px;outline:none}
+.rx-pilot-rail .rail-tab:focus-visible{box-shadow:0 0 0 2px var(--rx-gold-hi)}
+@keyframes rx-rail-in{from{opacity:0;transform:translateX(16px)}to{opacity:1;transform:none}}
+
 @media (max-width:767px){
   .rx-pilot .panel__sub{display:none}
   .rx-pilot .sb-body{padding:16px}
@@ -171,4 +186,5 @@ body.is-resizing .rx-pilot .sb-pane{transition:none}
 @media (prefers-reduced-motion:reduce){
   .rx-pilot .sb-pane,.rx-pilot .disc svg{transition:none}
   .rx-pilot .qa__caret,.rx-pilot .rep-caret{animation:none}
+  .rx-pilot-rail .rail-tab{animation:none;transition:none}
 }

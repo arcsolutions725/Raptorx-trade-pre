@@ -12,7 +12,7 @@ import ChatInput, {
   type ClawSelectionContext,
 } from "./_components/chat/ChatInput";
 import { CLAW_V5_PENDING_STREAM_KEY } from "@/lib/clawV5/streamingReportDisplay";
-import { consumeClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
+import { consumeClawV5Prefill, consumeClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
 import RexHeader from "@/components/ui/layout/Header";
 import Footer from "@/components/ui/layout/Footer";
 import {
@@ -49,6 +49,11 @@ export default function ClawV5Page() {
   const [currentUserId, setCurrentUserId] = useState<string>("");
   const [hasFetched, setHasFetched] = useState(false);
   const [prefillText, setPrefillText] = useState<string>("");
+  // "Ask Claw about SYM" (Full Report / What's New actions) leaves a question for the composer
+  useEffect(() => {
+    const q = consumeClawV5Prefill();
+    if (q) setPrefillText(q);
+  }, []);
   const [marketMode, setMarketMode] = useState<PredictionMarketMode>("Markets");
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallLimitCode, setPaywallLimitCode] = useState<PaywallLimitCode | null>(null);

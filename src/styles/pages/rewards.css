@@ -4,8 +4,8 @@
    (AcctModal variant "rw"); everything here is scoped under .rx-acct, the portal root.
    Unlayered on purpose (globals.css styles bare h2–h6 and b outside any layer).
    Keyframes are prefixed rw- because keyframe names are global.
-   Left out on purpose (main has no such data): raptor tiers and the tier climb bar,
-   the reset countdown, and per-mission "go" links. */
+   Raptor tiers (badges, tier pill, climb bar, tier strip) come from season points
+   (components/rewards/tiers); the Account popup imports this file for them too. */
 
 @property --rw-ring { syntax: "<angle>"; initial-value: 0deg; inherits: false; }
 
@@ -17,6 +17,8 @@
 @keyframes rw-shine { 0% { left: -60%; } 45%, 100% { left: 130%; } }
 @keyframes rw-crown { 50% { transform: translateY(-4px) rotate(-4deg); } }
 @keyframes rw-up { from { transform: scaleY(.2); transform-origin: bottom; opacity: 0; } to { transform: none; opacity: 1; } }
+@keyframes rw-bar-grow { from { width: 0; } }
+@keyframes rw-glint { from { background-position: -60% 0; } to { background-position: 180% 0; } }
 
 .rx-acct .rw-in { animation: rw-rise .55s var(--rx-ease) both; }
 .rx-acct .rw-eyebrow { display: block; font-family: var(--rx-mono); font-size: 11px; letter-spacing: .12em; text-transform: uppercase; color: #FFB27A; }
@@ -59,6 +61,11 @@
 .rx-acct .dm-card__m { font-family: var(--rx-mono); font-size: 12px; color: var(--rx-text-3); }
 .rx-acct .dm-card__m b { color: var(--rx-gold-hi); font-weight: 600; }
 .rx-acct .dm-earned { font-family: var(--rx-mono); font-size: 14px; font-weight: 600; color: var(--rx-up); white-space: nowrap; }
+/* per-mission Go button ("Find a token", "Ask Claw") */
+.rx-acct .dm-go { position: relative; z-index: 1; height: 32px; padding: 0 14px; border-radius: 10px; font-size: 13px; }
+/* "Earn from referrals" note with its Get link button */
+.rx-acct .dm-ref { align-items: center; }
+.rx-acct .dm-ref .rx-btn { flex-shrink: 0; }
 
 .rx-acct .dm-how { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0; padding: 0; list-style: none; }
 .rx-acct .dm-how li { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border-radius: 12px; background: rgba(var(--rx-hair), .03); border: 1px solid var(--rx-line); font-size: 12.5px; color: var(--rx-text-2); line-height: 1.4; }
@@ -105,14 +112,17 @@
 .rx-acct .lb-you__t > span { font-size: 12px; color: var(--rx-text-2); }
 .rx-acct .lb-you__t > span b { font-family: var(--rx-mono); color: var(--rx-gold-hi); font-size: 12px; font-weight: 600; }
 .rx-acct .lb-you__pts { font-family: var(--rx-mono); font-weight: 600; font-size: 15px; color: var(--rx-up); }
-.rx-acct .rw-av { width: 36px; height: 36px; flex-shrink: 0; border-radius: 50%; object-fit: cover; display: block; }
+/* avatar with the tier badge on its corner */
+.rx-acct .rw-av { position: relative; display: inline-block; flex-shrink: 0; width: 36px; height: 36px; border-radius: 50%; }
+.rx-acct .rw-av img { display: block; width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.rx-acct .rw-av .tier-badge { position: absolute; right: -5px; bottom: -4px; filter: drop-shadow(0 2px 3px rgba(0,0,0,.6)); }
 
 /* ranked list */
 .rx-acct .lb-list { display: flex; flex-direction: column; margin: 0; padding: 0; list-style: none; }
 .rx-acct .lb-row { display: grid; grid-template-columns: 44px minmax(0, 1fr) auto auto; gap: 12px; align-items: center; min-height: 54px; padding: 10px 6px; border-bottom: 1px solid rgba(var(--rx-hair), .06); animation: rw-rise .45s var(--rx-ease) both; }
 .rx-acct .lb-row__r { font-family: var(--rx-mono); font-size: 13px; color: var(--rx-text-3); text-align: center; }
 .rx-acct .lb-row__u { display: flex; align-items: center; gap: 10px; min-width: 0; font-size: 14px; font-weight: 500; color: var(--rx-text); }
-.rx-acct .lb-row__u > span:not(.rx-badge) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rx-acct .lb-row__u > span:not(.rx-badge):not(.rw-av) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rx-acct .lb-row__u .rx-badge { flex-shrink: 0; }
 .rx-acct .lb-row__tier { font-size: 12px; color: var(--rx-text-3); white-space: nowrap; }
 .rx-acct .lb-row__p { font-family: var(--rx-mono); font-size: 14px; font-weight: 600; color: var(--rx-up); text-align: right; min-width: 84px; }
@@ -123,6 +133,26 @@
 .rx-acct .lb-row.is-you { border-radius: 12px; border-bottom-color: transparent; background: linear-gradient(90deg, rgba(255,184,0,.14), rgba(255,184,0,.03)); box-shadow: inset 2px 0 0 var(--rx-gold); }
 .rx-acct .lb-row.is-you .lb-row__r { color: var(--rx-gold-hi); font-weight: 700; }
 .rx-acct .lb-list .rw-av { width: 34px; height: 34px; }
+
+/* ---------- Raptor tiers ---------- */
+.rx-acct .tier-badge { display: inline-block; flex-shrink: 0; vertical-align: middle; }
+.rx-acct .pd__av .tier-badge, .rx-acct .ac-av .tier-badge { position: absolute; right: -4px; bottom: -2px; z-index: 2; filter: drop-shadow(0 2px 4px rgba(0,0,0,.7)); }
+.rx-acct .rw-tier { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 9px 0 5px; border-radius: 999px; font-size: 12px; font-weight: 600; background: rgba(var(--rx-hair), .05); border: 1px solid var(--rx-line); color: var(--rx-text); }
+.rx-acct .rw-tier .tier-badge { width: 15px; height: 17px; }
+/* tier progress (missions + account) */
+.rx-acct .rw-climb { display: flex; align-items: center; gap: 14px; padding: 14px; border-radius: 16px; background: linear-gradient(90deg, rgba(255,184,0,.08), rgba(240,74,44,.05)); border: 1px solid var(--rx-gold-line); }
+.rx-acct .rw-climb__body { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.rx-acct .rw-climb__row { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13px; }
+.rx-acct .rw-climb__row > b { font-weight: 600; color: var(--rx-text); }
+.rx-acct .rw-climb__row > span { font-size: 12px; color: var(--rx-text-3); text-align: right; }
+.rx-acct .rw-climb__row > span b { color: var(--rx-gold-hi); font-family: var(--rx-mono); font-weight: 600; }
+.rx-acct .rw-climb .rx-bar span { position: relative; overflow: hidden; animation: rw-bar-grow 1.1s .3s var(--rx-ease) both; }
+.rx-acct .rw-climb .rx-bar span::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, transparent, rgba(255,255,255,.6), transparent); background-size: 50% 100%; background-repeat: no-repeat; animation: rw-glint 2.6s 1.4s ease-in-out infinite; }
+/* the five tiers under the podium; the user's own is gold */
+.rx-acct .lb-tiers { display: flex; justify-content: space-between; gap: 6px; margin: 0; padding: 10px 12px; list-style: none; border-radius: 14px; border: 1px solid var(--rx-line); background: rgba(var(--rx-hair), .02); }
+.rx-acct .lb-tiers li { display: flex; flex-direction: column; align-items: center; gap: 4px; font-size: 11px; color: var(--rx-text-3); text-align: center; }
+.rx-acct .lb-tiers li b { font-size: 11.5px; color: var(--rx-text-2); font-weight: 600; }
+.rx-acct .lb-tiers li.is-you b { color: var(--rx-gold-hi); }
 
 /* ---------- BNB Chain mission card (BnbMission; scoped on its own root so it works in or out of a popup) ---------- */
 .bnb-mission { display: flex; flex-direction: column; gap: 12px; padding: 14px; border-radius: 16px; color: var(--rx-text); font-family: var(--rx-ui); }
@@ -149,16 +179,20 @@
   .rx-acct .dm-ringwrap { width: 112px; height: 112px; }
   .rx-acct .dm-hero__t h3 { font-size: 18px; }
   .rx-acct .dm-how { grid-template-columns: 1fr; }
+  .rx-acct .dm-card { gap: 12px; }
+  .rx-acct .dm-go, .rx-acct .dm-ref .rx-btn { height: 40px; }
   .rx-acct .pd__av { width: 60px; height: 60px; }
   .rx-acct .pd__p--1 .pd__av { width: 84px; height: 84px; }
   .rx-acct .pd__pts { font-size: 14px; }
   .rx-acct .pd__p--1 .pd__pts { font-size: 16px; }
   .rx-acct .lb-row { grid-template-columns: 34px minmax(0, 1fr) auto; gap: 10px; }
   .rx-acct .lb-row__tier { display: none; }
+  .rx-acct .lb-tiers li { font-size: 12px; }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .rx-acct .rw-in, .rx-acct .dm-card::before, .rx-acct .dm-ringwrap::after, .rx-acct .pd::before, .rx-acct .pd__av::before, .rx-acct .pd__av::after,
-  .rx-acct .pd__crown, .rx-acct .pd__base, .rx-acct .lb-row, .rx-acct .lb-you::after { animation: none !important; }
+  .rx-acct .pd__crown, .rx-acct .pd__base, .rx-acct .lb-row, .rx-acct .lb-you::after,
+  .rx-acct .rw-climb .rx-bar span, .rx-acct .rw-climb .rx-bar span::after { animation: none !important; }
   .rx-acct .dm-ringwrap .seg.is-done { animation: none; }
 }

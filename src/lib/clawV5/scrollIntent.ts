@@ -32,3 +32,25 @@ export function consumeClawV5ScrollToInput(): boolean {
     return false;
   }
 }
+
+const PREFILL_KEY = "claw-v5:prefill";
+
+/** "Ask Claw about SYM": put a question in Claw's composer (not sent) on the next welcome-screen mount. */
+export function markClawV5Prefill(text: string): void {
+  try {
+    sessionStorage.setItem(PREFILL_KEY, text);
+  } catch {
+    /* storage disabled — Claw opens with an empty composer */
+  }
+}
+
+/** Reads and clears the pending composer text. */
+export function consumeClawV5Prefill(): string | null {
+  try {
+    const value = sessionStorage.getItem(PREFILL_KEY);
+    if (value !== null) sessionStorage.removeItem(PREFILL_KEY);
+    return value;
+  } catch {
+    return null;
+  }
+}

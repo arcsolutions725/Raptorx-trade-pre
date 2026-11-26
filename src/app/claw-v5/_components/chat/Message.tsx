@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo, useRef } from "react";
 import copy from "copy-to-clipboard";
-import { Copy, Quote, Check } from "lucide-react";
+import { Copy, Quote, Check, Share } from "lucide-react";
 import clsx from "clsx";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -29,6 +29,8 @@ interface MessageProps {
   onEdit?: (messageId: string, newContent: string) => void;
   onCopy?: (content: string) => void;
   onQuote?: (content: string) => void;
+  /** Share one answer (Claw messages only): the chat's share link, pointing at this answer. */
+  onShare?: (message: MessageData) => void;
   onCryptoReport?: (payload: any) => void;
   onDeepAnalysisMarket?: (params: {
     provider: "polymarket" | "kalshi" | "limitless" | "myriad" | "predictfun";
@@ -453,11 +455,88 @@ const markdownRehypePlugins = [
   [rehypeSanitize as any, sanitizeSchema as any],
 ] as any;
 
+/* ---------- word-by-word reveal of a new answer (design/js/claw.js `wordify`) ----------
+   While an answer streams, every word of the rendered markdown is wrapped in `<span class="claw-w">`
+   (claw.css fades it in). Words already on screen keep their element, so only the words a chunk
+   adds animate in, each a little after the one before. Nothing is held back: every word is in the
+   DOM the moment it arrives. Code blocks (and the market / report embeds they carry) are left alone. */
+
+type HastNode = {
+  type: string;
+  tagName?: string;
+  value?: string;
+  properties?: Record<string, unknown>;
+  children?: HastNode[];
+};
+
+const WORD_REVEAL_SKIP = new Set(["pre", "code", "kbd", "script", "style", "svg"]);
+/** Stagger between the words one chunk adds, and the most a word waits (the stream itself isn't delayed). */
+const WORD_REVEAL_STEP_MS = 22;
+const WORD_REVEAL_MAX_STEPS = 12;
+
+function rehypeWordReveal(options: {
+  /** Words already shown by the previous render: they get no delay. */
+  from: number;
+  /** Receives this render's word count. */
+  count: { current: number };
+}) {
+  return (tree: HastNode) => {
+    let index = 0;
+    const walk = (node: HastNode) => {
+      if (!node.children) return;
+      const next: HastNode[] = [];
+      for (const child of node.children) {
+        if (child.type === "text" && typeof child.value === "string" && child.value.trim()) {
+          for (const part of child.value.split(/(\s+)/)) {
+            if (!part) continue;
+            if (!part.trim()) {
+              next.push({ type: "text", value: part });
+              continue;
+            }
+            const step = Math.min(Math.max(index - options.from, 0), WORD_REVEAL_MAX_STEPS);
+            index += 1;
+            next.push({
+              type: "element",
+              tagName: "span",
+              properties: {
+                className: ["claw-w"],
+                ...(step > 0 ? { style: `--claw-w-d:${step * WORD_REVEAL_STEP_MS}ms` } : {}),
+              },
+              children: [{ type: "text", value: part }],
+            });
+          }
+          continue;
+        }
+        if (child.type === "element" && !WORD_REVEAL_SKIP.has(child.tagName ?? "")) walk(child);
+        next.push(child);
+      }
+      node.children = next;
+    };
+    walk(tree);
+    options.count.current = index;
+  };
+}
+
+/** prefers-reduced-motion, kept in sync with the OS setting. */
+function usePrefersReducedMotion(): boolean {
+  const [reduce, setReduce] = useState(false);
+  useEffect(() => {
+    if (typeof window === "undefined" || !window.matchMedia) return;
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduce(mq.matches);
+    const onChange = () => setReduce(mq.matches);
+    mq.addEventListener?.("change", onChange);
+    return () => mq.removeEventListener?.("change", onChange);
+  }, []);
+  return reduce;
+}
+
 export default function Message({
   message,
   onEdit: _onEdit,
   onCopy,
   onQuote,
+  onShare,
   onCryptoReport,
   onDeepAnalysisMarket,
   isStreaming = false,
@@ -469,6 +548,24 @@ export default function Message({
   const [streamingCountdown, setStreamingCountdown] = useState(STREAMING_COUNTDOWN_START);
   const wasStreamingRef = useRef(false);
   const isUser = message.role === "user";
+
+  // Word-by-word reveal: only answers that stream in while this bubble is on screen (not history).
+  // Words stay wrapped after the stream ends so the last ones finish fading in without a jump.
+  const reduceMotion = usePrefersReducedMotion();
+  const [streamedHere, setStreamedHere] = useState(isStreaming);
+  if (isStreaming && !streamedHere) setStreamedHere(true);
+  const revealWords = streamedHere && !isUser && !reduceMotion;
+  const revealCountRef = useRef(0);
+  const revealShownRef = useRef(0);
+  useEffect(() => {
+    revealShownRef.current = revealCountRef.current;
+  });
+  const answerRehypePlugins = revealWords
+    ? [
+        ...markdownRehypePlugins,
+        [rehypeWordReveal, { from: revealShownRef.current, count: revealCountRef }],
+      ]
+    : markdownRehypePlugins;
 
   // Countdown 20→0, then reset to 20, while streaming (same as Prediction Market; works for both phase and no-phase e.g. crypto).
   useEffect(() => {
@@ -640,6 +737,17 @@ export default function Message({
       >
         {isCopied ? <Check aria-hidden="true" /> : <Copy aria-hidden="true" />}
       </button>
+      {!isUser && onShare && (
+        <button
+          type="button"
+          onClick={() => onShare(message)}
+          className="rx-icon-btn rx-icon-btn--s"
+          title="Share"
+          aria-label="Share answer"
+        >
+          <Share aria-hidden="true" />
+        </button>
+      )}
     </div>
   ) : null;
 
@@ -653,7 +761,11 @@ export default function Message({
   }
 
   return (
-    <div className="msg-claw">
+    <div
+      className="msg-claw"
+      // Anchor for a shared answer link (/claw-v5/<chat>#answer-<id>); temporary stream ids have none
+      id={message.id && !message.id.startsWith("temp-") ? `answer-${message.id}` : undefined}
+    >
       <span
         className={clsx("claw-mark", isStreaming && "claw-mark--pulse")}
         aria-hidden="true"
@@ -683,7 +795,7 @@ export default function Message({
           <div className="rex-markets-report-md rex-markets-report-md--fluid claw-md">
             <ReactMarkdown
               remarkPlugins={[remarkGfm, remarkBreaks]}
-              rehypePlugins={markdownRehypePlugins}
+              rehypePlugins={answerRehypePlugins}
               components={mdComponents}
             >
               {mainContent}

@@ -247,6 +247,32 @@ export function SectionNav({
     if (focusBtn) btnRef.current?.focus();
   }, []);
 
+  /**
+   * Live "you are here" (design report.html section spy): an IntersectionObserver watches each
+   * section cross the top third of the report, so the menu always marks the section being read,
+   * open or not, and the button says which one it is.
+   */
+  const idsKey = items.map((it) => it.id).join("|");
+  useEffect(() => {
+    const root = scrollRootRef.current;
+    if (!root || !idsKey) return;
+    const update = () => setActiveId(findActive());
+    update();
+    if (typeof IntersectionObserver === "undefined") return;
+    const io = new IntersectionObserver(update, {
+      root,
+      rootMargin: "0px 0px -70% 0px",
+      threshold: 0,
+    });
+    for (const id of idsKey.split("|")) {
+      const el = document.getElementById(id);
+      if (el && root.contains(el)) io.observe(el);
+    }
+    return () => io.disconnect();
+  }, [idsKey, scrollRootRef, findActive]);
+
+  const activeTitle = items.find((it) => it.id === activeId)?.title;
+
   useEffect(() => {
     if (!open) return;
     setActiveId(findActive());
@@ -286,8 +312,12 @@ export function SectionNav({
         aria-haspopup="menu"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
-        aria-label="Jump to a report section"
-        title="Jump to a section"
+        aria-label={
+          activeTitle
+            ? `Jump to a report section (reading: ${activeTitle})`
+            : "Jump to a report section"
+        }
+        title={activeTitle ? `Jump to a section · reading ${activeTitle}` : "Jump to a section"}
       >
         <IconMenu />
       </button>

@@ -104,7 +104,31 @@ type Props = {
   layout?: "row" | "card";
   /** Which report program the card belongs to (badge + layout). */
   cardKind?: "golden" | "pump";
+  /**
+   * Pump Reports (design/reports.html): Full Report + Trade, with What's New kept as a compact bolt
+   * button after them. Trade opens this token's view with the Exchange on top of the side column.
+   */
+  showTrade?: boolean;
 };
+
+/** Trade: the design's swap glyph (i-swap). */
+function SwapIcon() {
+  return (
+    <svg width="13" height="13" viewBox="0 0 24 24" aria-hidden="true">
+      <path
+        d="M7 7h12l-3-3M17 17H5l3 3"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2.2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+const TRADE_BTN =
+  "rx-btn rx-btn--secondary rx-btn--s px-2.5 font-bold hover:-translate-y-px disabled:translate-none sm:px-3";
 
 /** Small inline icons for the report cards (design sprite: i-star, i-trend, i-clock). */
 function CardIco({ d, size = 12 }: { d: string; size?: number }) {
@@ -144,6 +168,7 @@ export function TableRow({
   marketLoading = false,
   layout = "row",
   cardKind = "golden",
+  showTrade = false,
 }: Props) {
   const { isGenerating, startedAt } = useReportGenStatus(token?.tokenAddress);
   const [countdown, setCountdown] = useState<number | null>(null);
@@ -463,7 +488,15 @@ export function TableRow({
     </>
   );
 
-  /** Full Report (or the generation countdown) + What's New: same controls in rows and cards. */
+  /** Trade: chart this token, then open the panel's Exchange on it (same as What's New's Trade). */
+  const onTradeClick = () => {
+    if (!token?.tokenAddress) return;
+    openChart();
+    requestShellAction("exchange");
+  };
+
+  /** Full Report (or the generation countdown) + What's New: same controls in rows and cards.
+   *  Pump Reports: Full Report + Trade, What's New as a compact bolt button. */
   const reportButtons = (
     <>
       {isGenerating && countdown !== null ? (
@@ -492,9 +525,25 @@ export function TableRow({
           Full Report
         </button>
       )}
+      {showTrade ? (
+        <button
+          type="button"
+          className={TRADE_BTN}
+          onClick={onTradeClick}
+          disabled={!token?.tokenAddress}
+          aria-label={`Trade ${displaySymbol || displayName} on the Exchange`}
+          title="Trade on the Exchange"
+        >
+          <SwapIcon />
+          Trade
+        </button>
+      ) : null}
       <button
         type="button"
-        className={WHATS_NEW_BTN}
+        className={clsx(
+          WHATS_NEW_BTN,
+          showTrade && "rx-rp-btn-icon",
+        )}
         onClick={!authenticated ? handleSignIn : onWhatsNewClick}
         disabled={!ready || whatsNewLoading}
         aria-label={`What's New for ${displayName}`}
@@ -505,7 +554,7 @@ export function TableRow({
         ) : (
           <NewsIcon />
         )}
-        What&apos;s New
+        {showTrade ? null : <>What&apos;s New</>}
       </button>
     </>
   );

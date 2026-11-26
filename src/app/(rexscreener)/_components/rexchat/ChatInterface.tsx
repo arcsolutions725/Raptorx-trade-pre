@@ -45,7 +45,6 @@ import {
 } from "@/app/rexmarkets/_components/RexMarketsReport/RexMarketsReportData/pilotUi";
 import {
   IconCheck,
-  IconCopy,
   IconExt,
   IconNews,
   IconRefresh,
@@ -53,6 +52,21 @@ import {
   ReportPaneHead,
   SectionNav,
 } from "./screenerSideUi";
+import {
+  CopyReportButton,
+  IN_SHORT_ID,
+  ReportInShort,
+  ReportRail,
+  recentReportItems,
+  reportCopyText,
+  reportInShort,
+  reportReadMinutes,
+  useTokenChartAction,
+} from "./fullReportUi";
+import type {
+  RecentReports,
+  WhatsNewFacts,
+} from "@/components/ui/modal/WhatsNewModal";
 import { hrefForScreenerToken } from "@/lib/rexscreenerRoutes";
 import { resolveSwapChain } from "@/lib/swapChain";
 
@@ -107,6 +121,10 @@ type Props = {
   onOpenExchange?: (opts?: { full?: boolean }) => void;
   /** Minimize control in the pane head (the sidebar's Exchange then takes the column). */
   onMinimize?: () => void;
+  /** The viewer's saved reports (GET /api/reports rows) for the "Recently generated" card. */
+  recentReports?: ReadonlyArray<Record<string, unknown>>;
+  /** Open another saved report in this panel ("Recently generated"). */
+  onOpenReport?: (reportId: string) => void;
 };
 
 /** Pane head while a saved report is open: Back, title, Report history, minimize (and close if given). */
@@ -134,7 +152,6 @@ function PilotSessionTopChrome({
   );
 }
 
-const COPY_MS = 500;
 const MAX_H = 200;
 
 const TOP_TWEETS_FETCH_COUNTDOWN_SEC = 20;
@@ -148,6 +165,8 @@ export default function ChatInterface({
   onCloseSidebar,
   onOpenExchange,
   onMinimize,
+  recentReports,
+  onOpenReport,
 }: Props) {
   const {
     data: reportData,
@@ -262,9 +281,11 @@ export default function ChatInterface({
     shouldAutoScroll,
   ]);
 
-  // When switching conversations (e.g., via chat history), do not auto-scroll initially
+  // When switching conversations (e.g., via chat history), do not auto-scroll initially,
+  // and start the newly opened report at its top (e.g. opened from "Recently generated")
   useEffect(() => {
     setShouldAutoScroll(false);
+    scrollContainerRef.current?.scrollTo({ top: 0 });
   }, [reportId]);
 
   // Do not auto-scroll when answer generation finishes — let the user scroll manually
@@ -455,14 +476,72 @@ export default function ChatInterface({
     );
   }, [reportMarkdownSource, isBNBToken, goldenPublic]);
 
+  /** "In short" (design report.html .report-takeaway): the opening of the report's own summary. */
+  const inShort = useMemo(
+    () => reportInShort(reportSectionsDisplay),
+    [reportSectionsDisplay],
+  );
+
+  /** "· N min read" next to Updated, from the report text. */
+  const readMinutes = useMemo(
+    () => reportReadMinutes(reportMarkdownSource),
+    [reportMarkdownSource],
+  );
+
   const reportMenuItems = useMemo(
-    () =>
-      reportSectionsDisplay.map((s) => ({
+    () => [
+      ...(inShort ? [{ title: "In short", id: IN_SHORT_ID }] : []),
+      ...reportSectionsDisplay.map((s) => ({
         title: displayReportSectionTitle(s.title),
         id: s.id,
       })),
-    [reportSectionsDisplay],
+    ],
+    [reportSectionsDisplay, inShort],
   );
+
+  const getReportCopyText = useCallback(
+    () =>
+      reportCopyText({
+        ticker: reportData?.ticker,
+        projectName: reportData?.projectName,
+        updatedAt: reportData?.updatedAt,
+        sections: reportSectionsDisplay,
+      }),
+    [
+      reportData?.ticker,
+      reportData?.projectName,
+      reportData?.updatedAt,
+      reportSectionsDisplay,
+    ],
+  );
+
+  /** Key facts (report rail + What's New): only numbers the report's DexScreener pair has. */
+  const tokenFacts = useMemo<WhatsNewFacts>(
+    () => ({
+      priceUsd: dexData?.priceUsd != null ? Number(dexData.priceUsd) : null,
+      change24h: dexData?.priceChange?.h24 ?? null,
+      marketCap: dexData?.marketCap ?? null,
+      volume24h: dexData?.volume?.h24 ?? null,
+      liquidityUsd: dexData?.liquidity?.usd ?? null,
+      createdAt: dexData?.pairCreatedAt ?? null,
+      contract: reportData?.contractAddress ?? null,
+    }),
+    [dexData, reportData?.contractAddress],
+  );
+
+  const chartAction = useTokenChartAction(
+    dexData?.chainId || reportData?.chain,
+    reportData?.contractAddress,
+  );
+
+  /** "Recently generated": the viewer's other token reports, opened in this panel. */
+  const recent = useMemo<RecentReports | null>(() => {
+    if (!onOpenReport || !recentReports?.length) return null;
+    const items = recentReportItems(recentReports, reportId);
+    return items.length
+      ? { items, onOpen: onOpenReport, onViewHistory: onViewHistory ?? null }
+      : null;
+  }, [recentReports, reportId, onOpenReport, onViewHistory]);
 
   useEffect(() => {
     if (isRegenerating && countdown === null) {
@@ -1014,6 +1093,7 @@ export default function ChatInterface({
   function renderReportFromSections(sections: RexReportSection[]): React.ReactNode {
     return (
       <div className="ss-report">
+        {inShort ? <ReportInShort text={inShort} /> : null}
         {sections.map(({ title, body, id }) => (
           <section
             key={id}
@@ -1099,31 +1179,6 @@ export default function ChatInterface({
           </span>
         ) : null}
       </span>
-    );
-  }
-
-  function CopyContractAddressButton({
-    contractaddress,
-  }: {
-    contractaddress: string;
-  }) {
-    const [copied, setCopied] = useState(false);
-    const onCopy = useCallback(() => {
-      copy(contractaddress);
-      setCopied(true);
-      setTimeout(() => setCopied(false), COPY_MS);
-    }, [contractaddress]);
-
-    return (
-      <button
-        type="button"
-        onClick={onCopy}
-        className={`rx-icon-btn${copied ? " ss-rh__ok" : ""}`}
-        title={copied ? "Copied!" : "Copy contract address"}
-        aria-label={copied ? "Copied!" : "Copy contract address"}
-      >
-        {copied ? <IconCheck /> : <IconCopy />}
-      </button>
     );
   }
 
@@ -1332,6 +1387,7 @@ export default function ChatInterface({
 
           <span className="ss-rh__upd">
             {formatRelativeTime(reportData.updatedAt)}
+            {readMinutes ? ` · ${readMinutes} min read` : ""}
           </span>
 
           {headerImage && (
@@ -1361,13 +1417,21 @@ export default function ChatInterface({
               What&apos;s New
             </button>
             <ShareReportLinkButton />
-            <CopyContractAddressButton
-              contractaddress={reportData?.contractAddress ?? ""}
-            />
+            {/* the contract address copies from the Key facts card below */}
+            <CopyReportButton getText={getReportCopyText} />
           </div>
         </header>
 
         {renderReportFromSections(reportSectionsDisplay)}
+
+        <ReportRail
+          symbol={reportData.ticker}
+          facts={tokenFacts}
+          chart={chartAction}
+          onWhatsNew={reportData.ticker ? onWhatsNewClick : null}
+          whatsNewBusy={whatsNewLoading}
+          recent={recent}
+        />
 
         {/* Follow-up questions (right) and Rex Pilot answers (left, claw mark) */}
         <QaThread messages={msgs} streaming={streamingContent} />
@@ -1411,15 +1475,19 @@ export default function ChatInterface({
       fallbackLinks={projectLinks}
       imageUrl={logo}
       symbol={reportData?.ticker}
-      facts={{
-        priceUsd: dexData?.priceUsd != null ? Number(dexData.priceUsd) : null,
-        change24h: dexData?.priceChange?.h24 ?? null,
-        marketCap: dexData?.marketCap ?? null,
-        volume24h: dexData?.volume?.h24 ?? null,
-        liquidityUsd: dexData?.liquidity?.usd ?? null,
-        createdAt: dexData?.pairCreatedAt ?? null,
-        contract: reportData?.contractAddress ?? null,
+      facts={tokenFacts}
+      actions={{
+        chart: chartAction,
+        // the report is right behind the popup: close it and start the report from the top
+        onFullReport: () => {
+          const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+          scrollContainerRef.current?.scrollTo({
+            top: 0,
+            behavior: reduce ? "auto" : "smooth",
+          });
+        },
       }}
+      recent={recent}
       trade={
         onOpenExchange && reportData?.ticker && reportData?.contractAddress
           ? {

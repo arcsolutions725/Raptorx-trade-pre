@@ -3,8 +3,13 @@
 /**
  * Daily missions popup (prototype design/js/shell.js `missions:` view, design/css/rewards.css).
  * Shell: AcctModal (reward family, warm aura). Styles: styles/pages/rewards.css.
- * Data and behaviour are unchanged: /api/daily-tasks on open, close via X or the footer button.
- * Left out (main has no such data): raptor tiers / tier climb, the reset countdown, per-task links.
+ * Data is unchanged: /api/daily-tasks on open. Close via X, Esc or the scrim.
+ * Each open mission has a Go button to where it is done: reports → the RexScreener list
+ * ("Find a token"); follow-up questions → the page's Rex Pilot sidebar ("Ask Claw", the report
+ * chat that /api/conversations/…/message counts; Claw AI 5.0 chats don't). "Get link" opens the
+ * Account popup on its Referrals tab, the footer goes to Claw AI 5.0.
+ * "Resets in" counts down to the server's next reset (lastResetDate + 24h); the tier climb bar
+ * comes from the user's points (components/rewards/tiers).
  */
 
 import "@/styles/pages/rewards.css";
@@ -16,15 +21,11 @@ import {
   type CSSProperties,
   type ReactNode,
 } from "react";
+import Image from "next/image";
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
 import clsx from "clsx";
-import {
-  Check,
-  CircleAlert,
-  Clock,
-  FileText,
-  MessageCircle,
-  Zap,
-} from "lucide-react";
+import { Check, CircleAlert, Clock, FileText, Zap } from "lucide-react";
 import type { DailyTasksStatus } from "@/app/api/daily-tasks/route";
 import {
   AcctEmpty,
@@ -32,6 +33,52 @@ import {
   AcctModal,
   AcctModalHead,
 } from "@/components/ui/modal/accountUi";
+import { requestShellAction } from "@/components/ui/layout/shellActions";
+import {
+  REX_SCREENER_ALL_HREF,
+  isScreenerChainSlug,
+} from "@/lib/rexscreenerRoutes";
+import { markClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
+import { TierClimb } from "@/components/rewards/tiers";
+
+/** The claw talon (design sprite #i-claw), for the follow-up question mission. */
+function ClawIcon({ size = 20 }: { size?: number }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" aria-hidden="true">
+      <path d="M5 21c3-5 7-9 14-17-1 7-5 12-11 16z" fill="currentColor" />
+    </svg>
+  );
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** Next reset: the server's day start + 24h (its midnight, UTC on Vercel); local midnight without it. */
+function nextResetAt(lastResetDate: string | null): number {
+  const start = lastResetDate ? Date.parse(lastResetDate) : NaN;
+  if (Number.isFinite(start)) return start + DAY_MS;
+  const m = new Date();
+  m.setHours(24, 0, 0, 0);
+  return m.getTime();
+}
+
+/** "5h 07m" until the daily reset, refreshed every 30 seconds. */
+function useResetCountdown(lastResetDate: string | null): string {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = window.setInterval(() => setNow(Date.now()), 30_000);
+    return () => window.clearInterval(id);
+  }, []);
+  const s = Math.max(0, Math.floor((nextResetAt(lastResetDate) - now) / 1000));
+  return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`;
+}
+
+/** RexScreener keeps its Rex Pilot sidebar mounted and marks its wrapper aria-hidden while it is
+ *  closed. The "pilot" shell action toggles the sidebar, so it is only sent when it is closed. */
+function isPilotSidebarOpen(): boolean {
+  if (typeof document === "undefined") return false;
+  const host = document.querySelector(".rx-pilot")?.closest("[aria-hidden]");
+  return host?.getAttribute("aria-hidden") === "false";
+}
 
 interface DailyTasksPopupProps {
   userId: string;
@@ -48,6 +95,8 @@ export function DailyTasksPopup({
   const [loading, setLoading] = useState(false);
   const [userPoints, setUserPoints] = useState(0);
   const modalRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+  const pathname = usePathname();
 
   useEffect(() => {
     if (isOpen && userId) {
@@ -55,7 +104,35 @@ export function DailyTasksPopup({
     }
   }, [isOpen, userId]);
 
+  // Esc closes the dialog.
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onClose();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [isOpen, onClose]);
+
   // Page scroll is locked by the modal shell (AcctModal) while the dialog is open.
+
+  /** "Find a token": the RexScreener list, where reports are generated (a list page stays put). */
+  const goFindToken = () => {
+    onClose();
+    const segments = (pathname ?? "").split("/").filter(Boolean);
+    const onList = segments.length === 1 && isScreenerChainSlug(segments[0]);
+    if (!onList) router.push(REX_SCREENER_ALL_HREF);
+  };
+  /** "Ask Claw": the page's Rex Pilot sidebar (Claw AI 5.0), where report follow-ups are asked. */
+  const goAskClaw = () => {
+    onClose();
+    if (!isPilotSidebarOpen()) requestShellAction("pilot");
+  };
+  /** "Get link": the Account popup on its Referrals tab, where the referral link is. */
+  const goReferrals = () => {
+    onClose();
+    requestShellAction("referrals");
+  };
 
   const fetchDailyTasks = async () => {
     if (!userId) return;
@@ -83,7 +160,12 @@ export function DailyTasksPopup({
   if (!isOpen) return null;
 
   return (
-    <AcctModal labelledBy="dm-title" variant="rw" modalRef={modalRef}>
+    <AcctModal
+      labelledBy="dm-title"
+      variant="rw"
+      modalRef={modalRef}
+      onScrimClick={onClose}
+    >
       <AcctModalHead
         id="dm-title"
         title="Daily missions"
@@ -95,7 +177,13 @@ export function DailyTasksPopup({
         {loading ? (
           <AcctLoading label="Loading tasks" />
         ) : tasks ? (
-          <MissionsView tasks={tasks} userPoints={userPoints} />
+          <MissionsView
+            tasks={tasks}
+            userPoints={userPoints}
+            onFindToken={goFindToken}
+            onAskClaw={goAskClaw}
+            onReferrals={goReferrals}
+          />
         ) : (
           <AcctEmpty
             icon={<CircleAlert className="size-5" />}
@@ -107,13 +195,23 @@ export function DailyTasksPopup({
       </div>
 
       <div className="acct-modal__foot">
-        <button
-          type="button"
-          onClick={onClose}
-          className="rx-btn rx-btn--primary rx-btn--block"
+        <Link
+          href="/claw-v5"
+          className="rx-btn rx-btn--claw rx-btn--block"
+          onClick={() => {
+            markClawV5ScrollToInput();
+            onClose();
+          }}
         >
-          {tasks?.isCompleted ? "Awesome" : "Let's go"}
-        </button>
+          <Image
+            src="/images/claw-logo-96.webp"
+            alt=""
+            width={20}
+            height={20}
+            className="claw-ico"
+          />
+          Start with Claw AI
+        </Link>
       </div>
     </AcctModal>
   );
@@ -125,14 +223,22 @@ type Mission = {
   done: number;
   of: number;
   icon: ReactNode;
+  /** Where the mission is done. */
+  go: { label: string; onClick: () => void };
 };
 
 function MissionsView({
   tasks,
   userPoints,
+  onFindToken,
+  onAskClaw,
+  onReferrals,
 }: {
   tasks: DailyTasksStatus;
   userPoints: number;
+  onFindToken: () => void;
+  onAskClaw: () => void;
+  onReferrals: () => void;
 }) {
   const missions: Mission[] = [
     {
@@ -141,18 +247,21 @@ function MissionsView({
       done: tasks.reportsCompleted,
       of: tasks.reportsRequired,
       icon: <FileText className="size-5" aria-hidden="true" />,
+      go: { label: "Find a token", onClick: onFindToken },
     },
     {
       key: "queries",
       title: "Ask 3 follow-up questions",
       done: tasks.queriesCompleted,
       of: tasks.queriesRequired,
-      icon: <MessageCircle className="size-5" aria-hidden="true" />,
+      icon: <ClawIcon />,
+      go: { label: "Ask Claw", onClick: onAskClaw },
     },
   ];
   const stepsDone = missions.reduce((a, m) => a + Math.min(m.done, m.of), 0);
   const stepsAll = missions.reduce((a, m) => a + m.of, 0);
   const missionsDone = missions.filter((m) => m.done >= m.of).length;
+  const resetIn = useResetCountdown(tasks.lastResetDate);
 
   return (
     <>
@@ -183,7 +292,8 @@ function MissionsView({
               </span>
             )}
             <span className="dm-chip">
-              Your points <b>{userPoints.toLocaleString()}</b>
+              <Clock className="size-3" aria-hidden="true" />
+              Resets in <b className="rx-num">{resetIn}</b>
             </span>
           </div>
         </div>
@@ -216,10 +326,16 @@ function MissionsView({
                   {m.done}/{m.of} done · <b>+100</b> pts each
                 </span>
               </div>
-              {m.done > 0 ? (
+              {complete ? (
                 <span className="dm-earned">+{m.done * 100}</span>
               ) : (
-                <span aria-hidden="true" />
+                <button
+                  type="button"
+                  className="rx-btn rx-btn--report rx-btn--s dm-go"
+                  onClick={m.go.onClick}
+                >
+                  {m.go.label}
+                </button>
               )}
             </div>
           );
@@ -236,6 +352,8 @@ function MissionsView({
         </div>
       )}
 
+      <TierClimb points={userPoints} />
+
       <h3 className="rx-h3">How it works</h3>
       <ul className="dm-how">
         <li>
@@ -243,7 +361,7 @@ function MissionsView({
           Generate a token analysis report.
         </li>
         <li>
-          <MessageCircle className="size-3.5" aria-hidden="true" />
+          <ClawIcon size={14} />
           Ask a follow-up question about any report.
         </li>
         <li>
@@ -256,11 +374,18 @@ function MissionsView({
         </li>
       </ul>
 
-      <div className="acct-alert">
+      <div className="acct-alert dm-ref">
         <p>
-          <b>Earn from referrals.</b> Earn points by referring your friends.
-          Your referral link is in the Account section on the top right.
+          <b>Earn from referrals.</b> Invite friends with your referral link in
+          Account.
         </p>
+        <button
+          type="button"
+          className="rx-btn rx-btn--report rx-btn--s"
+          onClick={onReferrals}
+        >
+          Get link
+        </button>
       </div>
     </>
   );

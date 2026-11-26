@@ -292,7 +292,7 @@ async function buildReportScreenerTokenRows(
 
   const projects = await prisma.goldenReportProject.findMany({
     where: { isGolden },
-    select: { contractAddress: true, chain: true },
+    select: { contractAddress: true, chain: true, createdAt: true },
     orderBy: { updatedAt: "desc" },
   });
 
@@ -308,7 +308,10 @@ async function buildReportScreenerTokenRows(
   const limiter = createLimiter(3);
   const rows = await Promise.all(
     projects.map((p) =>
-      limiter(() => tokenRowFromProject(p.contractAddress, p.chain, apiKey)),
+      limiter(() => tokenRowFromProject(p.contractAddress, p.chain, apiKey)).then(
+        // when the project joined the report list (ms): the Reports view's "Newest" sort
+        (row) => ({ ...row, reportCreatedAt: p.createdAt.getTime() }),
+      ),
     ),
   );
 
@@ -361,7 +364,7 @@ async function buildReportScreenerTokenRows(
 const buildReportScreenerTokenRowsCached = unstable_cache(
   async (isGolden: boolean, includeAge: boolean) =>
     buildReportScreenerTokenRows(isGolden, { includeAge }),
-  ["report-screener-rows-v2"],
+  ["report-screener-rows-v3"],
   { revalidate: 60, tags: [REPORT_SCREENER_ROWS_TAG] },
 );
 

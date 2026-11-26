@@ -9,6 +9,7 @@ import {
   MarketPageMessage,
   OutcomeTabs,
   RangeSeg,
+  TicketGutter,
 } from "../shared/marketUi";
 import PriceChart from "./components/Chart/PriceChart";
 import KalshiOrderBook from "./components/OrderBook/OrderBook";
@@ -407,6 +408,9 @@ export default function KalshiTradingInterface({
             </section>
 
             {/* Kalshi BuySellWidget (DFlow order logic) */}
+            {/* line between chart and ticket: drag (or arrow keys) to resize the ticket */}
+            <TicketGutter />
+
             <section className="mk-side" aria-label="Trade">
               <BuySellWidget
                 currentYesPrice={currentYesPrice}

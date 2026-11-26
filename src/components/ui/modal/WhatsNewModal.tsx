@@ -12,6 +12,7 @@ import {
   REX_SCREENER_EXCHANGE_HREF,
   requestShellAction,
 } from "@/components/ui/layout/shellActions";
+import { markClawV5Prefill, markClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
 import "@/styles/pages/reports.css";
 
 export type WhatsNewParagraph = { title: string; body: string };
@@ -59,6 +60,32 @@ export type WhatsNewFacts = {
   contract?: string | null;
 };
 
+/**
+ * "Open chart" (design report.html / whats-new.html actions card): the token's RexScreener page.
+ * `onOpen` handles the click on the same page instead (e.g. closes the panel that covers the
+ * chart) and returns true when it did; otherwise the link navigates.
+ */
+export type TokenChartAction = { href: string; onOpen?: () => boolean };
+
+/** Actions card in the popup (design whats-new.html): Ask Claw about SYM · Open chart · Full Report. */
+export type WhatsNewActions = {
+  chart?: TokenChartAction | null;
+  /** Open (or go back to) this token's Full Report. The popup closes itself. */
+  onFullReport?: (() => void) | null;
+  /** "Ask Claw about SYM" shows whenever the ticker is known; set to hide it. */
+  hideAskClaw?: boolean;
+};
+
+/** One of the viewer's own saved reports (design "Recently generated" card). */
+export type RecentReport = { id: string; title: string; detail: string | null };
+
+export type RecentReports = {
+  items: RecentReport[];
+  /** Open that report. The popup closes itself. */
+  onOpen: (id: string) => void;
+  onViewHistory?: (() => void) | null;
+};
+
 type Props = {
   open: boolean;
   onClose: () => void;
@@ -73,6 +100,10 @@ type Props = {
   trade?: WhatsNewTrade | null;
   /** Key facts card (price, 24h, market cap, volume, liquidity, age, contract). */
   facts?: WhatsNewFacts | null;
+  /** Actions card: Ask Claw (by default), Open chart and Full Report when the caller can do them. */
+  actions?: WhatsNewActions | null;
+  /** "Recently generated": the viewer's other saved reports, when the caller has them. */
+  recent?: RecentReports | null;
 };
 
 /** Source icons (design/assets/whats-new). */
@@ -179,7 +210,7 @@ function fmtAge(ms: number): string {
   return `${Math.floor(d / 365)}y`;
 }
 
-function hasFacts(f?: WhatsNewFacts | null): f is WhatsNewFacts {
+export function hasFacts(f?: WhatsNewFacts | null): f is WhatsNewFacts {
   if (!f) return false;
   return (
     [f.priceUsd, f.change24h, f.marketCap, f.volume24h, f.liquidityUsd, f.createdAt].some(isNum) ||
@@ -401,6 +432,177 @@ export function WhatsNewFactsCard({ facts, className = "" }: { facts: WhatsNewFa
   );
 }
 
+const IconTrend = () => (
+  <svg width="14" height="14" viewBox="0 0 24 24" aria-hidden="true">
+    <path d="M3 17l6-6 4 4 8-8M15 7h6v6" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+  </svg>
+);
+
+/**
+ * Actions card (design report.html / whats-new.html .rail-actions): "Ask Claw about SYM" opens
+ * Claw AI 5.0 (same as the header's link), then whichever of Open chart / What's New / Full
+ * Report the caller can do. `onAction` runs after a click (the popup closes itself).
+ */
+export function TokenActionsCard({
+  symbol,
+  askClaw = true,
+  chart = null,
+  onWhatsNew = null,
+  whatsNewBusy = false,
+  onFullReport = null,
+  onAction,
+  className = "",
+}: {
+  symbol?: string | null;
+  askClaw?: boolean;
+  chart?: TokenChartAction | null;
+  onWhatsNew?: (() => void) | null;
+  whatsNewBusy?: boolean;
+  onFullReport?: (() => void) | null;
+  onAction?: () => void;
+  className?: string;
+}) {
+  const sym = (symbol || "").replace(/^\$/, "").trim().toUpperCase();
+  const showClaw = askClaw && !!sym;
+  if (!showClaw && !chart && !onWhatsNew && !onFullReport) return null;
+  return (
+    <section className={`rx-raised rx-wn-actions ${className}`} aria-label="Actions">
+      {showClaw ? (
+        <Link
+          className="rx-btn rx-btn--claw"
+          href="/claw-v5"
+          onClick={() => {
+            markClawV5ScrollToInput();
+            markClawV5Prefill(`What's the outlook for $${sym}? Price action, liquidity, holders and the main risks.`);
+            onAction?.();
+          }}
+        >
+          <img className="claw-ico" src="/images/claw-logo-96.webp" alt="" width={18} height={18} />
+          <span>Ask Claw about {sym}</span>
+        </Link>
+      ) : null}
+      {chart ? (
+        <a
+          className="rx-btn rx-btn--secondary"
+          href={chart.href}
+          onClick={(e) => {
+            if (chart.onOpen?.()) e.preventDefault();
+            onAction?.();
+          }}
+        >
+          <IconTrend />
+          Open chart
+        </a>
+      ) : null}
+      {onWhatsNew ? (
+        <button type="button" className="rx-btn rx-btn--news" onClick={onWhatsNew} disabled={whatsNewBusy}>
+          {whatsNewBusy ? (
+            <span className="rx-spin" aria-hidden="true" />
+          ) : (
+            <img className="rx-emo" src="/images/emoji/bolt.webp" alt="" width={16} height={16} />
+          )}
+          What&apos;s New
+        </button>
+      ) : null}
+      {onFullReport ? (
+        <button
+          type="button"
+          className="rx-btn rx-btn--report"
+          onClick={() => {
+            onFullReport();
+            onAction?.();
+          }}
+        >
+          <img className="rx-emo" src="/images/emoji/report.webp" alt="" width={16} height={16} />
+          Full Report
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+/** "Recently generated" (design .rail-card .hist): the viewer's other saved reports + report history. */
+export function RecentReportsCard({
+  recent,
+  onAction,
+  className = "",
+}: {
+  recent: RecentReports;
+  onAction?: () => void;
+  className?: string;
+}) {
+  const titleId = useId();
+  if (!recent.items.length) return null;
+  return (
+    <section className={`rx-raised rx-wn-recent ${className}`} aria-labelledby={titleId}>
+      <h3 id={titleId}>Recently generated</h3>
+      <ul>
+        {recent.items.map((it) => (
+          <li key={it.id}>
+            <button
+              type="button"
+              onClick={() => {
+                recent.onOpen(it.id);
+                onAction?.();
+              }}
+            >
+              <b>{it.title}</b>
+              {it.detail ? <span>{it.detail}</span> : null}
+            </button>
+          </li>
+        ))}
+      </ul>
+      {recent.onViewHistory ? (
+        <button
+          type="button"
+          className="rx-btn rx-btn--ghost rx-btn--s"
+          onClick={() => {
+            recent.onViewHistory?.();
+            onAction?.();
+          }}
+        >
+          View report history
+        </button>
+      ) : null}
+    </section>
+  );
+}
+
+/** Per-update "Copy" (design whats-new.html .feed__foot): copies that update, says "Copied" for a moment. */
+function CopyUpdateButton({ text, what }: { text: string; what: string }) {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const t = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(t);
+  }, [copied]);
+  return (
+    <>
+      <button
+        type="button"
+        className={`rx-btn rx-btn--ghost rx-btn--s rx-wn__copy${copied ? " is-done" : ""}`}
+        onClick={() => {
+          if (copy(text)) setCopied(true);
+        }}
+        aria-label={copied ? `${what} copied` : `Copy ${what}`}
+      >
+        {copied ? <IconCheck /> : <IconCopy />}
+        <span aria-hidden="true">{copied ? "Copied" : "Copy"}</span>
+      </button>
+      <span className="sr-only" role="status">
+        {copied ? `${what} copied` : ""}
+      </span>
+    </>
+  );
+}
+
+type UpdateKind = "all" | "summary" | "posts";
+const UPDATE_KINDS: { key: UpdateKind; label: string }[] = [
+  { key: "all", label: "All updates" },
+  { key: "summary", label: "Summary" },
+  { key: "posts", label: "Posts on X" },
+];
+
 export function WhatsNewModal({
   open,
   onClose,
@@ -412,10 +614,18 @@ export function WhatsNewModal({
   symbol = null,
   trade = null,
   facts = null,
+  actions = null,
+  recent = null,
 }: Props) {
   const titleId = useId();
   const dialogRef = useRef<HTMLDivElement>(null);
   const closeRef = useRef<HTMLButtonElement>(null);
+  const [kind, setKind] = useState<UpdateKind>("all");
+
+  // every new read (or reopening) starts on "All updates"
+  useEffect(() => {
+    setKind("all");
+  }, [open, result]);
 
   const onKeyDown = useCallback(
     (e: KeyboardEvent) => {
@@ -473,14 +683,38 @@ export function WhatsNewModal({
       : "Mini-report from top posts on X";
 
   const showFacts = hasFacts(facts);
-  const hasRail = !!trade || showFacts;
+  const actionsCard = (cls = "") => (
+    <TokenActionsCard
+      symbol={ticker}
+      askClaw={!actions?.hideAskClaw}
+      chart={actions?.chart ?? null}
+      onFullReport={actions?.onFullReport ?? null}
+      onAction={onClose}
+      className={cls}
+    />
+  );
+  const showActions = (!actions?.hideAskClaw && !!ticker) || !!actions?.chart || !!actions?.onFullReport;
+  const showRecent = !!recent?.items.length;
+  const hasRail = !!trade || showFacts || showActions || showRecent;
+  // below 1024px (and without a rail) the cards follow the updates
   const factsInline = showFacts ? (
     <WhatsNewFactsCard facts={facts} className="rx-wn__facts-inline" />
   ) : null;
+  const sideInline = (
+    <>
+      {factsInline}
+      {showActions ? actionsCard("rx-wn__facts-inline") : null}
+      {showRecent ? <RecentReportsCard recent={recent!} onAction={onClose} className="rx-wn__facts-inline" /> : null}
+    </>
+  );
 
   const tradeInline = trade ? (
     <WhatsNewTradeCard trade={trade} onClose={onClose} className="rx-wn__trade-inline" />
   ) : null;
+
+  const tweets = result?.tweets ?? [];
+  const showSummary = kind !== "posts";
+  const showPosts = kind !== "summary";
 
   return createPortal(
     <div className="rx-wn">
@@ -528,7 +762,7 @@ export function WhatsNewModal({
                   </p>
                 </div>
                 {tradeInline}
-                {factsInline}
+                {sideInline}
               </>
             ) : error ? (
               <>
@@ -536,7 +770,7 @@ export function WhatsNewModal({
                   {error}
                 </div>
                 {tradeInline}
-                {factsInline}
+                {sideInline}
               </>
             ) : result ? (
               <>
@@ -556,27 +790,53 @@ export function WhatsNewModal({
                 {/* phones and tablets: trade first, then the updates */}
                 {tradeInline}
 
-                {paragraphs.length ? (
-                  <ol className="rx-wn__list" aria-label="Summary">
-                    {paragraphs.map((p, i) => (
-                      <li key={`${p.title}-${i}`} className="rx-wn__item rx-wn__item--point">
-                        <img className="rx-wn__src" src="/images/emoji/bolt.webp" alt="" width={18} height={18} />
-                        <p>
-                          <b>{p.title.replace(/\.*$/, ".")}</b> {p.body}
-                        </p>
-                      </li>
-                    ))}
-                  </ol>
+                {/* kind filter (design whats-new.html #newsChips): the two kinds this read has */}
+                <div className="rx-wn__chips" role="group" aria-label="Filter updates">
+                  {UPDATE_KINDS.map((k) => (
+                    <button
+                      key={k.key}
+                      type="button"
+                      className={`rx-chip${kind === k.key ? " is-active" : ""}`}
+                      aria-pressed={kind === k.key}
+                      onClick={() => setKind(k.key)}
+                    >
+                      {k.label}
+                    </button>
+                  ))}
+                </div>
+
+                {showSummary ? (
+                  paragraphs.length ? (
+                    <ol className="rx-wn__list" aria-label="Summary">
+                      {paragraphs.map((p, i) => {
+                        const head = p.title.replace(/\.*$/, ".");
+                        return (
+                          <li key={`${p.title}-${i}`} className="rx-wn__item rx-wn__item--point">
+                            <img className="rx-wn__src" src="/images/emoji/bolt.webp" alt="" width={18} height={18} />
+                            <p>
+                              <b>{head}</b> {p.body}
+                            </p>
+                            <CopyUpdateButton text={`${head} ${p.body}`} what={`update “${p.title}”`} />
+                          </li>
+                        );
+                      })}
+                    </ol>
+                  ) : kind === "summary" ? (
+                    <p className="rx-wn__empty">No summary for {ticker || "this token"} yet.</p>
+                  ) : null
                 ) : null}
 
-                <h3 className="rx-wn__sub">Top posts on X</h3>
-                {result.tweets.length === 0 ? (
+                {showPosts ? <h3 className="rx-wn__sub">Top posts on X</h3> : null}
+                {!showPosts ? null : tweets.length === 0 ? (
                   <p className="rx-wn__empty">No recent posts found for this ticker right now.</p>
                 ) : (
                   <ol className="rx-wn__list" aria-label="Top posts on X">
-                    {result.tweets.map((t) => {
+                    {tweets.map((t) => {
                       const age = compactAge(t.createdAt);
                       const pfp = t.tweeter.publicImageUrl;
+                      const who = [t.tweeter.name, t.tweeter.username ? `@${t.tweeter.username}` : ""]
+                        .filter(Boolean)
+                        .join(" ");
                       return (
                         <li key={t.id || t.url || t.text.slice(0, 24)} className="rx-wn__item">
                           <img className="rx-wn__src" src={WN("x")} alt="" width={18} height={18} />
@@ -606,6 +866,10 @@ export function WhatsNewModal({
                                   {formatCount(t.viewCount)}
                                 </span>
                               ) : null}
+                              <CopyUpdateButton
+                                text={[t.text, who ? `— ${who}` : "", t.url || ""].filter(Boolean).join("\n")}
+                                what={t.tweeter.username ? `post by @${t.tweeter.username}` : "post"}
+                              />
                             </div>
                           </div>
                           {t.url ? (
@@ -652,7 +916,7 @@ export function WhatsNewModal({
                   })}
                 </ul>
 
-                {factsInline}
+                {sideInline}
               </>
             ) : null}
           </div>
@@ -661,6 +925,8 @@ export function WhatsNewModal({
             <div className="rx-wn__rail">
               {trade ? <WhatsNewTradeCard trade={trade} onClose={onClose} /> : null}
               {showFacts ? <WhatsNewFactsCard facts={facts} /> : null}
+              {showActions ? actionsCard() : null}
+              {showRecent ? <RecentReportsCard recent={recent!} onAction={onClose} /> : null}
             </div>
           ) : null}
         </div>

@@ -7,6 +7,7 @@ import {
   useMemo,
   useState,
   useCallback,
+  type ReactNode,
 } from "react";
 import { Check } from "lucide-react";
 import clsx from "clsx";
@@ -27,6 +28,11 @@ import useSafeDeployment from "@/hooks/useSafeDeployment";
 import useUserPositions, { PolymarketPosition } from "@/hooks/useUserPosition";
 import useRedeemPosition from "@/hooks/useRedeemPosition";
 import useClobOrder from "@/hooks/useClobOrder";
+import useActiveOrders, { type PolymarketOrder } from "@/hooks/useActiveOrder";
+import usePolygonBalances from "@/hooks/usePolygonBalances";
+import { useUsdcBalance } from "@/hooks/useUsdcBalance";
+import { useBaseBalance } from "@/hooks/useBaseBalance";
+import { useMyriadBscBalances } from "@/hooks/useMyriadBscBalances";
 import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
 import {
   useDflowPositions,
@@ -61,24 +67,30 @@ import {
   showSuccessNotification,
 } from "@/components/ui/notification";
 import PredictFunMarketInfoPanel from "@/components/ui/modal/PredictFunMarketInfoPanel";
-import {
-  AcctModal,
-  AcctModalHead,
-  AcctTabs,
-} from "@/components/ui/modal/accountUi";
+import { AcctModal, AcctTabs } from "@/components/ui/modal/accountUi";
+import { requestShellAction } from "@/components/ui/layout/shellActions";
 import {
   BusyLabel,
+  CancelOrderButton,
+  DepositButton,
+  FillBar,
   MarketName,
+  OrdersBrowseProvider,
+  OrdersHead,
   OrdersLoading,
   OrdersState,
+  OrdersSummary,
   RecordTable,
   RxToggle,
   SideTag,
   StatusBadge,
   SuccessNote,
+  TabCount,
   VenueSeg,
+  ORDERS_VENUES,
   type OrdersVenue,
   type RecordColumn,
+  type SummaryItem,
   type Tone,
 } from "@/components/ui/modal/ordersUi";
 import bs58 from "bs58";
@@ -101,11 +113,15 @@ const SOLANA_RPC =
   process.env.NEXT_PUBLIC_SOLANA_RPC_URL ||
   "https://api.mainnet-beta.solana.com";
 
+/** View tabs. "open" (open orders) exists for Polymarket only: it is the one venue with both an
+ *  open-orders feed (useActiveOrders) and a cancel call (useClobOrder.cancelOrder). */
+type OrdersView = "open" | "positions" | "trades";
+
 interface MarketInfoModalProps {
   isOpen: boolean;
   onClose: () => void;
   /** Tab to show when the dialog opens (account links: "My orders and positions", "Trade history"). */
-  initialTab?: "trades" | "positions";
+  initialTab?: OrdersView;
 }
 
 const formatDate = (timestamp: number | string) => {
@@ -148,6 +164,36 @@ const formatKalshiFillTime = (createdTime: string | undefined): string => {
   if (Number.isNaN(date.getTime())) return createdTime;
   return date.toLocaleString(undefined, { dateStyle: "short", timeStyle: "short" });
 };
+
+/** Numeric string from the CLOB ("0.34", "120") → number; 0 when missing. */
+const toNum = (v: string | number | undefined | null): number => {
+  const n = typeof v === "number" ? v : parseFloat(v ?? "");
+  return Number.isFinite(n) ? n : 0;
+};
+
+/** Open order limit price as cents ("34¢", "70.5¢"). */
+const formatCents = (price: string): string => {
+  const n = parseFloat(price);
+  if (!Number.isFinite(n)) return "—";
+  return `${Number((n * 100).toFixed(1))}¢`;
+};
+
+/** Open order age ("2m ago", "3h ago", then the date). created_at is unix seconds. */
+const formatOrderAge = (createdAt: number | undefined): string => {
+  if (!createdAt) return "—";
+  const ms = createdAt < 1e12 ? createdAt * 1000 : createdAt;
+  const diff = Date.now() - ms;
+  if (diff < 60_000) return "Just now";
+  const mins = Math.floor(diff / 60_000);
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return new Date(ms).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+};
+
+/** Value still resting on the book: unfilled shares × limit price. */
+const openOrderValue = (o: PolymarketOrder): number =>
+  Math.max(0, toNum(o.original_size) - toNum(o.size_matched)) * toNum(o.price);
 
 export default function MarketInfoModal({
   isOpen,
@@ -194,11 +240,21 @@ export default function MarketInfoModal({
   const [platformTab, setPlatformTab] = useState<
     "polymarket" | "kalshi" | "limitless" | "myriad" | "predictfun"
   >("polymarket");
-  const [activeTab, setActiveTab] = useState<"trades" | "positions">("trades");
+  const [activeTab, setActiveTab] = useState<OrdersView>("trades");
   // Opened from an account link: start on the tab it names.
   useEffect(() => {
     if (isOpen && initialTab) setActiveTab(initialTab);
   }, [isOpen, initialTab]);
+  /** Open orders: the row waiting for "Confirm cancel", the one being canceled, and the ones
+   *  canceled this session (hidden right away, before the next poll drops them). */
+  const [confirmCancelId, setConfirmCancelId] = useState<string | null>(null);
+  const [cancelingOrderId, setCancelingOrderId] = useState<string | null>(null);
+  const [canceledOrderIds, setCanceledOrderIds] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  useEffect(() => {
+    if (!isOpen) setConfirmCancelId(null);
+  }, [isOpen]);
   const [hideDust, setHideDust] = useState(true);
   const [redeemingAsset, setRedeemingAsset] = useState<string | null>(null);
   const [sellingAsset, setSellingAsset] = useState<string | null>(null);
@@ -848,9 +904,48 @@ export default function MarketInfoModal({
   const kalshiPositions = dflowData?.positions ?? [];
   const emptyOutcomeAccounts = dflowData?.emptyOutcomeAccounts ?? [];
 
+  // Polymarket open orders (CLOB, status LIVE) — polled only while this dialog shows Polymarket.
+  const polymarketShown = isOpen && platformTab === "polymarket";
+  const { data: openOrdersData, isLoading: isLoadingOpenOrders } =
+    useActiveOrders(
+      polymarketShown ? clobClient : null,
+      polymarketShown ? safeAddress : undefined,
+    );
+  const openOrders = useMemo(
+    () => (openOrdersData ?? []).filter((o) => !canceledOrderIds.has(o.id)),
+    [openOrdersData, canceledOrderIds],
+  );
+  const openOrderMarketIds = useMemo(
+    () => [...new Set(openOrders.map((o) => o.market).filter(Boolean))],
+    [openOrders],
+  );
+  const { data: openOrderTitles } = useMarketTitles(
+    clobClient,
+    openOrderMarketIds,
+  );
+
+  // Cash available for the summary strip: the same balance hooks the Deposit popup reads,
+  // each enabled only while its venue is shown here.
+  const polygonCash = usePolygonBalances(
+    polymarketShown ? safeAddress : undefined,
+  );
+  const kalshiCash = useUsdcBalance(
+    isOpen && platformTab === "kalshi" ? solanaAddress : null,
+  );
+  const limitlessCash = useBaseBalance(
+    isOpen && platformTab === "limitless" ? eoaAddress : undefined,
+  );
+  const bscCash = useMyriadBscBalances(
+    eoaAddress,
+    isOpen && (platformTab === "myriad" || platformTab === "predictfun"),
+  );
+
   // Position actions
   const { redeemPosition, isRedeeming } = useRedeemPosition();
-  const { submitOrder, isSubmitting } = useClobOrder(clobClient, eoaAddress);
+  const { submitOrder, cancelOrder, isSubmitting } = useClobOrder(
+    clobClient,
+    eoaAddress,
+  );
   const { redeem: limitlessRedeem, isRedeeming: isLimitlessRedeemLoading } =
     useLimitlessRedeem();
 
@@ -1131,6 +1226,26 @@ export default function MarketInfoModal({
     }
   };
 
+  /** Open orders: first click asks "Confirm cancel", the second cancels on the CLOB. */
+  const handleCancelOrder = async (orderId: string) => {
+    if (confirmCancelId !== orderId) {
+      setConfirmCancelId(orderId);
+      return;
+    }
+    setCancelingOrderId(orderId);
+    try {
+      await cancelOrder(orderId);
+      setCanceledOrderIds((prev) => new Set(prev).add(orderId));
+      setConfirmCancelId(null);
+      showSuccessNotification("Order canceled");
+    } catch (err) {
+      console.error("Failed to cancel order:", err);
+      showErrorNotification("Cancel order", getErrorMessage(err));
+    } finally {
+      setCancelingOrderId(null);
+    }
+  };
+
   // Limitless: claim winnings after market resolves (CTF redeemPositions on Base)
   const handleLimitlessClaim = useCallback(
     async (marketSlug: string) => {
@@ -1280,13 +1395,162 @@ export default function MarketInfoModal({
   /** Venue picker: same switching as before (every venue but Polymarket opens on Trades). */
   const selectVenue = (venue: OrdersVenue) => {
     setPlatformTab(venue);
+    setConfirmCancelId(null);
     if (venue !== "polymarket") setActiveTab("trades");
+  };
+  const selectView = (view: OrdersView) => {
+    setActiveTab(view);
+    setConfirmCancelId(null);
   };
   /** Market links inside the dialog close it, then route in-app. */
   const openMarket = (href: string) => {
     onClose();
     router.push(href);
   };
+  /** "Deposit or withdraw": the Header's Deposit popup (log in first when signed out). The two
+   *  dialogs don't stack (this one closes on any click outside it), so this one closes first. */
+  const openDeposit = () => {
+    onClose();
+    requestShellAction("deposit");
+  };
+
+  const polymarketReady =
+    !!tradingContext && !!clobClient && !!safeAddress && !!isTradingSessionComplete;
+
+  /* Tab counts, from the lists this venue has loaded (Predict.fun keeps its lists in its own
+     panel, so its tabs carry no count). */
+  const openOrdersCount =
+    platformTab === "polymarket" && polymarketReady && !isLoadingOpenOrders
+      ? openOrders.length
+      : null;
+  const positionsCount =
+    platformTab === "polymarket"
+      ? polymarketReady && !isLoadingPositions && !positionsError
+        ? activePositions.length
+        : null
+      : platformTab === "kalshi"
+        ? solanaAddress && !isLoadingKalshiPositions && !kalshiPositionsError
+          ? kalshiPositions.length
+          : null
+        : platformTab === "limitless"
+          ? limitlessUser?.sessionCookie &&
+            !isLoadingLimitlessPositions &&
+            !limitlessPositionsError
+            ? limitlessPositions.length
+            : null
+          : platformTab === "myriad"
+            ? eoaAddress && !isLoadingMyriadUserMarkets && !myriadUserMarketsError
+              ? myriadUserMarketsVisible.length
+              : null
+            : null;
+
+  const viewTabs: (readonly [OrdersView, ReactNode])[] = [
+    ...(platformTab === "polymarket"
+      ? [
+          [
+            "open",
+            <>
+              Open orders
+              <TabCount n={openOrdersCount} />
+            </>,
+          ] as const,
+        ]
+      : []),
+    [
+      "positions",
+      <>
+        Positions
+        <TabCount n={positionsCount} />
+      </>,
+    ],
+    [
+      "trades",
+      <>
+        <span className="o-tab-long">Trade history</span>
+        <span className="o-tab-short">History</span>
+      </>,
+    ],
+  ];
+
+  /* Summary strip: only figures the selected venue's data supports. Polymarket has all four
+     (positions carry value and P&L, open orders their size and price, the Safe its USDC.e);
+     the other venues' position feeds carry no live prices, so they show cash only. */
+  const summaryItems: SummaryItem[] = [];
+  if (platformTab === "polymarket") {
+    if (polymarketReady) {
+      if (!positionsError) {
+        summaryItems.push(
+          {
+            key: "value",
+            label: "Portfolio value",
+            value: positions.reduce((a, p) => a + toNum(p.currentValue), 0),
+            loading: isLoadingPositions,
+            hint: "Current value of your Polymarket positions",
+          },
+          {
+            key: "pnl",
+            label: "Unrealized P&L",
+            value: positions.reduce((a, p) => a + toNum(p.cashPnl), 0),
+            signed: true,
+            loading: isLoadingPositions,
+            hint: "Gain or loss on your Polymarket positions at today's prices",
+          },
+        );
+      }
+      summaryItems.push({
+        key: "orders",
+        label: "In open orders",
+        value: openOrders.reduce((a, o) => a + openOrderValue(o), 0),
+        loading: isLoadingOpenOrders,
+        hint: "Unfilled shares × limit price of your open Polymarket orders",
+      });
+      if (!polygonCash.isError) {
+        summaryItems.push({
+          key: "cash",
+          label: "Cash available",
+          value: polygonCash.usdcBalance,
+          loading: polygonCash.isLoading,
+          hint: "USDC.e in your Polymarket wallet",
+        });
+      }
+    }
+  } else if (platformTab === "kalshi") {
+    if (solanaAddress && !kalshiCash.isError) {
+      summaryItems.push({
+        key: "cash",
+        label: "Cash available",
+        value: kalshiCash.data?.amount,
+        loading: kalshiCash.isLoading,
+        hint: "USDC in your Solana wallet, used for Kalshi",
+      });
+    }
+  } else if (platformTab === "limitless") {
+    if (eoaAddress && !limitlessCash.isError) {
+      summaryItems.push({
+        key: "cash",
+        label: "Cash available",
+        value: limitlessCash.usdcBalance,
+        loading: limitlessCash.isLoading,
+        hint: "USDC on Base, used for Limitless",
+      });
+    }
+  } else if (eoaAddress && !bscCash.isError) {
+    const b = bscCash.data;
+    summaryItems.push({
+      key: "cash",
+      label: "Cash available",
+      value: b
+        ? platformTab === "predictfun"
+          ? b.usdt
+          : b.usd1 + b.usdt + b.usdc
+        : undefined,
+      loading: bscCash.isLoading,
+      hint:
+        platformTab === "predictfun"
+          ? "USDT on BNB Chain, used for Predict.fun"
+          : "USD1, USDT and USDC on BNB Chain, used for Myriad",
+    });
+  }
 
   const tradesEmptyCopy = (
     <p>Orders you fill on this venue show here, newest first.</p>
@@ -1343,12 +1607,16 @@ export default function MarketInfoModal({
   );
 
   return (
+    <OrdersBrowseProvider
+      value={{ href: "/rexmarkets", onNavigate: () => openMarket("/rexmarkets") }}
+    >
     <AcctModal labelledBy="orders-title" variant="orders" modalRef={modalRef}>
-      <AcctModalHead
+      <OrdersHead
         id="orders-title"
         eyebrow="Account"
         title="My orders and positions"
-        description="Your positions and trade history on Polymarket, Kalshi, Limitless, Myriad and Predict.fun."
+        description="Your open orders, positions and trade history on Polymarket, Kalshi, Limitless, Myriad and Predict.fun."
+        tools={<DepositButton onClick={openDeposit} />}
         onClose={onClose}
       />
 
@@ -1357,9 +1625,9 @@ export default function MarketInfoModal({
         <AcctTabs
           idPrefix="orders"
           label="View"
-          tabs={ORDERS_TABS}
+          tabs={viewTabs}
           active={activeTab}
-          onChange={setActiveTab}
+          onChange={selectView}
         />
         <VenueSeg value={platformTab} onChange={selectVenue} />
       </div>
@@ -1369,6 +1637,10 @@ export default function MarketInfoModal({
         role="tabpanel"
         aria-labelledby={`orders-tab-${activeTab}`}
       >
+        <OrdersSummary
+          items={summaryItems}
+          label={`${ORDERS_VENUES.find((v) => v.key === platformTab)?.label ?? "Venue"} summary`}
+        />
         {platformTab === "kalshi" ? (
           <>
             {/* Kalshi Trades: user's fill history (PortfolioApi.getFills) */}
@@ -1761,11 +2033,7 @@ export default function MarketInfoModal({
                 )
               ) : myriadUserEventsSorted.length === 0 && myriadOrdersSorted.length === 0 ? (
                 <OrdersState icon="trades" title="No trades or activity yet">
-                  <p>
-                    GET /users/…/events lists AMM and other on-chain actions.
-                    GET /orders lists signed order-book orders (resting and
-                    filled).
-                  </p>
+                  {tradesEmptyCopy}
                 </OrdersState>
               ) : (
                 <RecordTable
@@ -1913,7 +2181,7 @@ export default function MarketInfoModal({
           <PredictFunMarketInfoPanel
             isOpen={isOpen}
             onClose={onClose}
-            activeTab={activeTab}
+            activeTab={activeTab === "open" ? "positions" : activeTab}
             setActiveTab={setActiveTab}
             eoaAddress={eoaAddress}
             signer={ethersSigner}
@@ -1988,6 +2256,85 @@ export default function MarketInfoModal({
           </OrdersState>
         ) : (
           <>
+            {/* Polymarket open orders (resting on the CLOB): Cancel → Confirm cancel */}
+            {activeTab === "open" &&
+              (isLoadingOpenOrders ? (
+                <OrdersLoading label="Loading open orders" />
+              ) : openOrders.length === 0 ? (
+                <OrdersState icon="trades" title="No open orders">
+                  <p>
+                    Orders you place on Rex Predictions show here until they
+                    fill or you cancel them.
+                  </p>
+                </OrdersState>
+              ) : (
+                <RecordTable
+                  label="Polymarket open orders"
+                  actionLabel="Actions"
+                  columns={OPEN_ORDER_COLUMNS}
+                  rows={openOrders.map((order) => {
+                    const title =
+                      openOrderTitles?.get(order.market) ||
+                      marketTitlesMap.get(order.market) ||
+                      (order.market
+                        ? `Market ${order.market.slice(0, 8)}…`
+                        : "Polymarket market");
+                    const isBuy = order.side === "BUY";
+                    const outcomeTone = sideTone(order.outcome);
+                    const side = (
+                      <SideTag
+                        tone={
+                          outcomeTone !== "neutral"
+                            ? outcomeTone
+                            : isBuy
+                              ? "up"
+                              : "down"
+                        }
+                      >
+                        {isBuy ? "Buy" : "Sell"} {order.outcome}
+                      </SideTag>
+                    );
+                    return {
+                      key: order.id,
+                      market: (
+                        <MarketName
+                          title={title}
+                          sub={order.outcome || undefined}
+                          venue="polymarket"
+                          onClick={() => handleMarketClick(order.market, title)}
+                          disabled={loadingMarketId === order.market}
+                          loading={loadingMarketId === order.market}
+                          tooltip={`Click to view ${title}`}
+                        />
+                      ),
+                      tag: side,
+                      cells: {
+                        side,
+                        price: formatCents(order.price),
+                        filled: (
+                          <FillBar
+                            filled={toNum(order.size_matched)}
+                            total={toNum(order.original_size)}
+                          />
+                        ),
+                        placed: formatOrderAge(order.created_at),
+                      },
+                      action: (
+                        <CancelOrderButton
+                          confirming={confirmCancelId === order.id}
+                          busy={cancelingOrderId === order.id}
+                          disabled={
+                            isSubmitting && cancelingOrderId !== order.id
+                          }
+                          onClick={() => void handleCancelOrder(order.id)}
+                          marketLabel={title}
+                        />
+                      ),
+                    };
+                  })}
+                />
+              ))}
+
             {/* Polymarket Trades */}
             {activeTab === "trades" &&
               (isLoadingTrades ? (
@@ -2221,13 +2568,17 @@ export default function MarketInfoModal({
         )}
       </div>
     </AcctModal>
+    </OrdersBrowseProvider>
   );
 }
 
-const ORDERS_TABS = [
-  ["positions", "Positions"],
-  ["trades", "Trade history"],
-] as const;
+/** Open orders (prototype columns): the side is the card's head tag. */
+const OPEN_ORDER_COLUMNS: RecordColumn[] = [
+  { key: "side", label: "Side", card: false },
+  { key: "price", label: "Price", num: true },
+  { key: "filled", label: "Filled", hint: "Shares filled / ordered" },
+  { key: "placed", label: "Placed", muted: true },
+];
 
 /** Trades with a role column (Kalshi fills): the side is the card's head tag. */
 const TRADE_COLUMNS_ROLE: RecordColumn[] = [

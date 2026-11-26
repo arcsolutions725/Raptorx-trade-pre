@@ -511,10 +511,11 @@ export default function DexscreenerView({
             >
               <Ico d={ICO_SCAN} size={14} />
             </a>
-            {/* Opens/closes Rex Pilot (the page title with its Claw AI 5.0 button is hidden on token pages) */}
+            {/* Opens/closes Rex Pilot (the page title with its Claw AI 5.0 button is hidden on token pages).
+                Phones use the report / trade bar under the chart instead (RexScreenerShell). */}
             <button
               type="button"
-              className="rx-btn rx-btn--claw rx-btn--s"
+              className="rx-btn rx-btn--claw rx-btn--s rx-tk__claw"
               onClick={() => requestShellAction("pilot")}
               aria-label="Claw AI 5.0: open Rex Pilot"
             >

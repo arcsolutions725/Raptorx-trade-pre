@@ -11,8 +11,11 @@ import LoginModal from "@/components/ui/modal/LoginModal";
 import DepositWithdrawModal from "@/components/ui/modal/DepositWithdrawModal";
 import MarketInfoModal from "@/components/ui/modal/MarketInfoModal";
 import type { OrdersTabKey } from "@/components/ui/modal/accountUi";
+import { DailyTasksPopup } from "@/components/leaderboard/DailyTaskPopup";
+import { LeaderboardModal } from "@/components/leaderboard/LeaderboradModal";
+import type { DailyTasksStatus } from "@/app/api/daily-tasks/route";
 import PredictionsTicker from "@/components/ui/layout/PredictionsTicker";
-import { User, Wallet, ClipboardList, ArrowRight } from "lucide-react";
+import { User, ArrowRight } from "lucide-react";
 import { useTopbar } from "@/contexts/TopbarContext";
 import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
 import { useEthereumWalletAddress } from "@/hooks/useEthereumWalletAddress";
@@ -24,9 +27,12 @@ import {
 import {
   RX_SHELL_ACTION_EVENT,
   REX_SCREENER_EXCHANGE_HREF,
+  setShellRewards,
   type RxShellActionDetail,
 } from "@/components/ui/layout/shellActions";
 import { markClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
+// Daily missions + Leaderboard buttons: phone header icons (here) and the desktop dock (Footer)
+import "@/styles/pages/shell-dock.css";
 import clsx from "clsx";
 
 type User = {
@@ -67,6 +73,44 @@ const SCREENER_CHAIN_EYEBROW: Record<string, string> = {
 function initialsOf(name?: string | null): string {
   const clean = (name ?? "").replace(/[^A-Za-z0-9]/g, "");
   return clean.slice(0, 2).toUpperCase();
+}
+
+/** Missions done today, counted like the Daily missions popup (a mission is done once its steps are). */
+function missionsCountOf(t: DailyTasksStatus): { done: number; total: number } {
+  const missions: [done: number, of: number][] = [
+    [t.reportsCompleted, t.reportsRequired],
+    [t.queriesCompleted, t.queriesRequired],
+  ];
+  return {
+    done: missions.filter(([done, of]) => done >= of).length,
+    total: missions.length,
+  };
+}
+
+/** Daily missions (check) and Leaderboard (crown) glyphs, same strokes as the design's icon sprite. */
+function DockIcon({ kind }: { kind: "check" | "crown" }) {
+  return (
+    <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true">
+      {kind === "check" ? (
+        <path
+          d="M5 12l5 5 9-10"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2.6"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      ) : (
+        <path
+          d="M3 8l4 4 5-7 5 7 4-4-2 11H5z"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinejoin="round"
+        />
+      )}
+    </svg>
+  );
 }
 
 export default function RexHeader({
@@ -131,6 +175,8 @@ export default function RexHeader({
   const [isLoadingUser, setIsLoadingUser] = useState(false);
   const [isLoggingOut, setIsLoggingOut] = useState(false);
   const [showAccountModal, setShowAccountModal] = useState(false);
+  /** Tab the account popup opens on ("referrals" shell action → Referrals) */
+  const [accountTab, setAccountTab] = useState<"profile" | "referral">("profile");
   const [showLoginModal, setShowLoginModal] = useState(false);
   const [showDepositModal, setShowDepositModal] = useState(false);
   const [showPolymarketModal, setShowPolymarketModal] = useState(false);
@@ -138,7 +184,13 @@ export default function RexHeader({
   const [ordersTab, setOrdersTab] = useState<OrdersTabKey | undefined>(
     undefined,
   );
-  const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [showMissions, setShowMissions] = useState(false);
+  const [showLeaderboard, setShowLeaderboard] = useState(false);
+  /** Today's missions (null until /api/daily-tasks answers): the count on the dock buttons. */
+  const [missionsCount, setMissionsCount] = useState<{
+    done: number;
+    total: number;
+  } | null>(null);
   // Redesign: the green topbar strip is no longer rendered. Report it as hidden so
   // layouts that size around it (e.g. the screener table height) use the no-strip values.
   const { setTopbarVisible } = useTopbar();
@@ -240,6 +292,73 @@ export default function RexHeader({
     }
   }, [showAccountModal, fetchUser]);
 
+  /* ---------- Daily missions + Leaderboard (signed in) ----------
+     The Header owns both popups on every page: its phone icons open them, and the Footer's dock
+     asks for them through the "missions" / "leaderboard" shell actions. */
+  const rewardsUserId = authenticated ? (currentUser?.id ?? "") : "";
+
+  const loadMissionsCount = useCallback(async () => {
+    if (!rewardsUserId) {
+      setMissionsCount(null);
+      return;
+    }
+    try {
+      const res = await fetch("/api/daily-tasks", {
+        headers: { "x-user-id": rewardsUserId },
+        cache: "no-store",
+      });
+      if (!res.ok) return;
+      const data = (await res.json()) as { tasks?: DailyTasksStatus };
+      if (data?.tasks) setMissionsCount(missionsCountOf(data.tasks));
+    } catch {
+      /* keep the last count; the buttons work without it */
+    }
+  }, [rewardsUserId]);
+
+  useEffect(() => {
+    void loadMissionsCount();
+  }, [loadMissionsCount]);
+
+  // Reports and questions made on other tabs or pages count too: refresh when the tab comes back
+  useEffect(() => {
+    if (!rewardsUserId) return;
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void loadMissionsCount();
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [rewardsUserId, loadMissionsCount]);
+
+  // Publish for the Footer's dock; cleared when signed out or when this header unmounts
+  const rewardsOwnerRef = useRef<symbol | null>(null);
+  if (rewardsOwnerRef.current === null) rewardsOwnerRef.current = Symbol("rx-header");
+  useEffect(() => {
+    const owner = rewardsOwnerRef.current!;
+    setShellRewards(
+      owner,
+      rewardsUserId
+        ? {
+            userId: rewardsUserId,
+            missionsDone: missionsCount?.done ?? null,
+            missionsTotal: missionsCount?.total ?? null,
+          }
+        : null,
+    );
+  }, [rewardsUserId, missionsCount]);
+  useEffect(() => {
+    const owner = rewardsOwnerRef.current!;
+    return () => setShellRewards(owner, null);
+  }, []);
+
+  const closeMissions = useCallback(() => {
+    setShowMissions(false);
+    void loadMissionsCount();
+  }, [loadMissionsCount]);
+
+  const missionsLabel = missionsCount
+    ? `Daily missions, ${missionsCount.done} of ${missionsCount.total} done`
+    : "Daily missions";
+
   // Check for query parameter to open Polymarket modal after redirect
   // Using client-side only approach to avoid Suspense boundary requirement
   useEffect(() => {
@@ -290,7 +409,6 @@ export default function RexHeader({
    *  context, so other pages go to /rexmarkets first and it opens there (on the same tab). */
   const openOrders = useCallback(
     (tab: OrdersTabKey) => {
-      setShowUserDropdown(false);
       setShowAccountModal(false);
       if (!isRexMarketsPage) {
         router.push(`/rexmarkets?openPolymarketModal=true&ordersTab=${tab}`);
@@ -325,7 +443,8 @@ export default function RexHeader({
     router.push(REX_SCREENER_EXCHANGE_HREF);
   }, [onExchangeClick, router]);
 
-  /** Phone tab bar (in the Footer): Account opens login or the account menu, Exchange as above. */
+  /** Phone tab bar (in the Footer): Account opens login or the account popup, Exchange as above.
+   *  The Footer's dock: Daily missions / Leaderboard. */
   useEffect(() => {
     const onShellAction = (e: Event) => {
       const detail = (e as CustomEvent<RxShellActionDetail>).detail;
@@ -343,6 +462,19 @@ export default function RexHeader({
         setShowLoginModal(true);
         return;
       }
+      if (detail.action === "deposit") {
+        setShowDepositModal(true);
+        return;
+      }
+      if (detail.action === "missions") {
+        setShowMissions(true);
+        return;
+      }
+      if (detail.action === "leaderboard") {
+        setShowLeaderboard(true);
+        return;
+      }
+      setAccountTab(detail.action === "referrals" ? "referral" : "profile");
       setShowAccountModal(true);
     };
     window.addEventListener(RX_SHELL_ACTION_EVENT, onShellAction);
@@ -436,8 +568,36 @@ export default function RexHeader({
             </button>
           </nav>
 
-          {/* Right: Exchange, Deposit & account */}
+          {/* Right: (phones) Daily missions + Leaderboard, Exchange, Deposit & account */}
           <div className="rx-header__actions relative z-30 shrink-0">
+            {rewardsUserId ? (
+              <>
+                <button
+                  type="button"
+                  className="rx-icon-btn rx-hdr-dock rx-hdr-dock--missions"
+                  onClick={() => setShowMissions(true)}
+                  aria-label={missionsLabel}
+                  title="Daily missions"
+                >
+                  <DockIcon kind="check" />
+                  {missionsCount ? (
+                    <span className="rx-hdr-dock__count rx-num" aria-hidden="true">
+                      {missionsCount.done}/{missionsCount.total}
+                    </span>
+                  ) : null}
+                </button>
+                <button
+                  type="button"
+                  className="rx-icon-btn rx-hdr-dock"
+                  onClick={() => setShowLeaderboard(true)}
+                  aria-label="Leaderboard"
+                  title="Leaderboard"
+                >
+                  <DockIcon kind="crown" />
+                </button>
+              </>
+            ) : null}
+
             <button
               type="button"
               className="rx-btn rx-btn--exchange"
@@ -446,17 +606,6 @@ export default function RexHeader({
               <span className="rx-hdr-long">Enter the&nbsp;</span>Exchange
               <ArrowRight className="size-3.5" aria-hidden="true" />
             </button>
-
-            {authenticated && isRexMarketsPage && (
-              <button
-                type="button"
-                onClick={() => setShowDepositModal(true)}
-                className="rx-btn rx-btn--primary hidden md:inline-flex"
-                title="Deposit & Withdraw"
-              >
-                Deposit
-              </button>
-            )}
 
             {!authenticated ? (
               <button
@@ -467,14 +616,26 @@ export default function RexHeader({
                 Log in
               </button>
             ) : (
-              <div className="relative">
+              <>
+                {/* Every page (design). Hidden on phones like the design (shell-dock.css). */}
                 <button
                   type="button"
-                  onClick={() => setShowUserDropdown((prev) => !prev)}
+                  onClick={() => setShowDepositModal(true)}
+                  className="rx-btn rx-btn--primary rx-hdr-deposit"
+                  title="Deposit & Withdraw"
+                >
+                  Deposit
+                </button>
+                {/* Avatar opens the account popup (Profile, Portfolio, My orders, Trade history, referrals) */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    setAccountTab("profile");
+                    setShowAccountModal(true);
+                  }}
                   className="rx-account-btn"
-                  aria-label="Account menu"
-                  aria-haspopup="menu"
-                  aria-expanded={showUserDropdown}
+                  aria-label="Account and referrals"
+                  aria-haspopup="dialog"
                 >
                   {accountInitials ? (
                     <span aria-hidden="true">{accountInitials}</span>
@@ -482,54 +643,7 @@ export default function RexHeader({
                     <User className="size-5" aria-hidden="true" />
                   )}
                 </button>
-
-                {showUserDropdown && (
-                  <>
-                    <div
-                      className="fixed inset-0 z-30"
-                      onClick={() => setShowUserDropdown(false)}
-                    />
-                    <div className="rx-menu" role="menu">
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => {
-                          setShowUserDropdown(false);
-                          setShowAccountModal(true);
-                          fetchUser();
-                        }}
-                        className="rx-menu__item"
-                      >
-                        <User aria-hidden="true" />
-                        Profile
-                      </button>
-                      {isRexMarketsPage && (
-                        <button
-                          type="button"
-                          role="menuitem"
-                          onClick={() => {
-                            setShowUserDropdown(false);
-                            setShowDepositModal(true);
-                          }}
-                          className="rx-menu__item md:hidden"
-                        >
-                          <Wallet aria-hidden="true" />
-                          Deposit
-                        </button>
-                      )}
-                      <button
-                        type="button"
-                        role="menuitem"
-                        onClick={() => openOrders("positions")}
-                        className="rx-menu__item"
-                      >
-                        <ClipboardList aria-hidden="true" />
-                        My orders and positions
-                      </button>
-                    </div>
-                  </>
-                )}
-              </div>
+              </>
             )}
           </div>
         </header>
@@ -553,6 +667,7 @@ export default function RexHeader({
       </div>
       <AccountModal
         isOpen={showAccountModal}
+        initialTab={accountTab}
         onClose={() => setShowAccountModal(false)}
         currentUser={currentUser}
         isLoadingUser={isLoadingUser}
@@ -586,6 +701,18 @@ export default function RexHeader({
         isOpen={showPolymarketModal}
         onClose={() => setShowPolymarketModal(false)}
         initialTab={ordersTab}
+      />
+
+      <DailyTasksPopup
+        userId={rewardsUserId}
+        isOpen={showMissions && Boolean(rewardsUserId)}
+        onClose={closeMissions}
+      />
+
+      <LeaderboardModal
+        currentUserId={rewardsUserId || undefined}
+        isOpen={showLeaderboard}
+        onClose={() => setShowLeaderboard(false)}
       />
     </>
   );

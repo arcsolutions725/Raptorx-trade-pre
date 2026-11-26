@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import RexHeader from "@/components/ui/layout/Header";
 import Footer from "@/components/ui/layout/Footer";
+import { AskClawFab } from "@/components/ui/AskClawFab";
 import "@/styles/pages/not-found.css";
 
 export const metadata: Metadata = {
@@ -58,6 +59,9 @@ export default function NotFound() {
       <div className="rx-404__chrome rx-404__chrome--foot">
         <Footer />
       </div>
+
+      {/* design/404.html loads js/universal.js, so the floating Ask Claw shows here too */}
+      <AskClawFab />
     </div>
   );
 }

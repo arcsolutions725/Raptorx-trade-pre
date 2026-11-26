@@ -1,5 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
-import type { LeaderboardEntry } from "@/app/api/leaderboard/route";
+import type {
+  LeaderboardEntry,
+  LeaderboardMe,
+} from "@/app/api/leaderboard/route";
 
 interface LeaderboardPagination {
   page: number;
@@ -10,8 +13,10 @@ interface LeaderboardPagination {
   hasPrev: boolean;
 }
 
-export function useLeaderboard() {
+/** `userId` (optional) also returns that user's own rank as `me`, wherever they are in the list. */
+export function useLeaderboard(userId?: string) {
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>([]);
+  const [me, setMe] = useState<LeaderboardMe | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [pagination, setPagination] = useState<LeaderboardPagination>({
@@ -31,6 +36,7 @@ export function useLeaderboard() {
       const url = new URL("/api/leaderboard", window.location.origin);
       url.searchParams.set("page", page.toString());
       url.searchParams.set("pageSize", pageSize.toString());
+      if (userId) url.searchParams.set("userId", userId);
 
       const response = await fetch(url.toString());
 
@@ -38,6 +44,7 @@ export function useLeaderboard() {
         const data = await response.json();
         setLeaderboard(data.leaderboard);
         setPagination(data.pagination);
+        setMe(data.me ?? null);
       } else {
         setError("Failed to fetch leaderboard");
       }
@@ -47,7 +54,7 @@ export function useLeaderboard() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [userId]);
 
   useEffect(() => {
     fetchLeaderboard();
@@ -98,6 +105,7 @@ export function useLeaderboard() {
 
   return {
     leaderboard,
+    me,
     loading,
     error,
     pagination,
@@ -108,4 +116,24 @@ export function useLeaderboard() {
     setPageIndex,
     setPageSize,
   };
+}
+
+/** Just the user's rank (the Account popup's "Rank #N"); null while loading or when unranked. */
+export function useLeaderboardRank(userId?: string, enabled = true): number | null {
+  const [rank, setRank] = useState<number | null>(null);
+  useEffect(() => {
+    if (!userId || !enabled) return;
+    let alive = true;
+    const url = `/api/leaderboard?page=1&pageSize=1&userId=${encodeURIComponent(userId)}`;
+    fetch(url)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((d) => {
+        if (alive) setRank(d?.me?.rank ?? null);
+      })
+      .catch(() => {});
+    return () => {
+      alive = false;
+    };
+  }, [userId, enabled]);
+  return rank;
 }

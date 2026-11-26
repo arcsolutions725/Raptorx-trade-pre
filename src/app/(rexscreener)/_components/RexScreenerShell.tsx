@@ -9,6 +9,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  type TouchEvent as ReactTouchEvent,
 } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { usePrivy } from "@privy-io/react-auth";
@@ -40,9 +41,30 @@ import {
 import { useOpenPilotSidebarOnMobileReportGen } from "@/hooks/useOpenPilotSidebarOnMobileReportGen";
 import { markClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
 import { REX_SCREENER_EXCHANGE_PARAM } from "@/components/ui/layout/shellActions";
+import {
+  PHONE_MQ,
+  matchesMedia,
+  useMediaQuery,
+} from "@/app/(rexscreener)/_components/tokenside/useMediaQuery";
+import {
+  SidebarEdge,
+  useSidebarWidth,
+} from "@/app/(rexscreener)/_components/tokenside/sidebarWidth";
+import {
+  TokenPhoneBar,
+  type SheetPane,
+} from "@/app/(rexscreener)/_components/tokenside/TokenPhoneBar";
+import { ParkedPanesRail } from "@/app/(rexscreener)/_components/tokenside/ParkedPanesRail";
 
 /** After the first auto-open on RexScreener, skip auto-open on refresh; user can still open via the button. */
 const DAILY_MISSION_MODAL_OPENED_KEY = "dailymission_modal_opened";
+
+/** id of the sidebar (Exchange + Intelligence report): aria-controls of the buttons that open it. */
+const SIDEBAR_ID = "rx-screener-sidebar";
+/** The sidebar docks beside the page from 1024px; below it covers the page (tablets) or is a sheet (phones). */
+const DESKTOP_MQ = "(min-width: 1024px)";
+/** Swipe down this far on a sheet's grip or pane head to close it (prototype design/js/token.js). */
+const SHEET_SWIPE_CLOSE_PX = 60;
 
 function browserPathMatchesTarget(
   currentPathname: string,
@@ -122,6 +144,19 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
   const [showDailyTasksPopup, setShowDailyTasksPopup] = useState(false);
   const [showLeaderboard, setShowLeaderboard] = useState(false);
   const [forceShowExchange, setForceShowExchange] = useState(false);
+  /** Phones: which pane the bottom sheet shows (set by whatever opens the sidebar). */
+  const [sheetPane, setSheetPane] = useState<SheetPane>("report");
+  /** Desktop token view: both panes minimized, parked as tabs on the right edge (sidebar closed). */
+  const [parked, setParked] = useState(false);
+  /** A parked tab asks the sidebar for its pane; `seq` makes every request new. */
+  const [paneRequest, setPaneRequest] = useState<{
+    pane: SheetPane;
+    seq: number;
+  } | null>(null);
+  const paneRequestSeqRef = useRef(0);
+  const isPhone = useMediaQuery(PHONE_MQ);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const sidebarRef = useRef<HTMLDivElement>(null);
 
   /**
    * Coming back from the Phantom app, land the user on the Exchange.
@@ -147,6 +182,7 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
     if (!phantomResumeRef.current) return;
     setShowReportSidebar(true);
     setForceShowExchange(true);
+    setSheetPane("exchange");
   }, []);
 
   /**
@@ -159,6 +195,7 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
     if (url.searchParams.get(REX_SCREENER_EXCHANGE_PARAM) !== "1") return;
     setShowReportSidebar(true);
     setForceShowExchange(true);
+    setSheetPane("exchange");
     url.searchParams.delete(REX_SCREENER_EXCHANGE_PARAM);
     window.history.replaceState(
       window.history.state,
@@ -353,9 +390,14 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
 
   const reportGenLookupAddress =
     selectedTokenAddress ?? resolvedToken?.tokenAddress ?? null;
+  /** A report starts streaming on a phone / tablet: open the sidebar on the report (the sheet's report pane). */
+  const openSidebarForReportGen = useCallback((open: boolean) => {
+    if (open) setSheetPane("report");
+    setShowReportSidebar(open);
+  }, []);
   useOpenPilotSidebarOnMobileReportGen(
     reportGenLookupAddress,
-    setShowReportSidebar,
+    openSidebarForReportGen,
   );
 
   const reportChain: Chain = useMemo(() => {
@@ -393,6 +435,8 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
       setGeneratedReport(report);
       setShowReportSidebar(true);
       setForceShowExchange(true);
+      // Phones: the sheet shows the report that was just generated
+      setSheetPane("report");
     },
     [routeChain, router]
   );
@@ -436,6 +480,7 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
         if (!isMobile) {
           setShowReportSidebar(true);
           setForceShowExchange(true);
+          setSheetPane("exchange");
         } else {
           setShowReportSidebar(false);
           setForceShowExchange(false);
@@ -469,17 +514,124 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
   const toggleReportSidebar = useCallback(() => {
     setShowReportSidebar((v) => !v);
     setForceShowExchange(false);
+    setSheetPane("report");
   }, []);
 
   const openExchangePanel = useCallback(() => {
     setForceShowExchange(true);
     setShowReportSidebar(true);
+    setSheetPane("exchange");
   }, []);
 
   const closeReportSidebar = useCallback(() => {
     setShowReportSidebar(false);
     setForceShowExchange(false);
   }, []);
+
+  /** Phone bar: open the report or the Exchange as a bottom sheet. */
+  const openSheet = useCallback((pane: SheetPane) => {
+    setSheetPane(pane);
+    setForceShowExchange(pane === "exchange");
+    setShowReportSidebar(true);
+  }, []);
+
+  /** Desktop token view, both panes minimized: close the sidebar and park them on the right edge. */
+  const parkPanes = useCallback(() => {
+    setShowReportSidebar(false);
+    setParked(true);
+  }, []);
+
+  /** A parked tab: open the sidebar with that pane expanded (the other stays minimized). */
+  const restorePane = useCallback((pane: SheetPane) => {
+    paneRequestSeqRef.current += 1;
+    setPaneRequest({ pane, seq: paneRequestSeqRef.current });
+    setForceShowExchange(pane === "exchange");
+    setSheetPane(pane);
+    setParked(false);
+    setShowReportSidebar(true);
+  }, []);
+
+  // Any other way back into the sidebar (Claw AI 5.0, Enter the Exchange, a new token) ends the parking,
+  // and so does leaving the token view (the tabs belong to it).
+  useEffect(() => {
+    if (showReportSidebar) setParked(false);
+  }, [showReportSidebar]);
+  useEffect(() => {
+    if (!viewingChart) setParked(false);
+  }, [viewingChart]);
+
+  /** Desktop: drag the sidebar's left edge to resize it (saved per viewer). */
+  const sidebarWidth = useSidebarWidth(
+    rootRef,
+    sidebarRef,
+    !isUnknownScreenerPath(pathname),
+  );
+
+  /**
+   * Phone sheet / tablet overlay (below 1024px): Esc closes it; opening moves focus to its close button,
+   * closing gives focus back to the button that opened it (prototype design/js/token.js).
+   */
+  const sheetReturnFocusRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    if (!showReportSidebar || matchesMedia(DESKTOP_MQ)) return;
+    const sb = sidebarRef.current;
+    const ae = document.activeElement;
+    sheetReturnFocusRef.current =
+      ae instanceof HTMLElement && ae !== document.body && !sb?.contains(ae)
+        ? ae
+        : null;
+    const raf = requestAnimationFrame(() => {
+      const closers = sb?.querySelectorAll<HTMLElement>(
+        'button[aria-label="Close sidebar"]',
+      );
+      const visible = Array.from(closers ?? []).find(
+        (b) => b.offsetParent !== null,
+      );
+      visible?.focus({ preventScroll: true });
+    });
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== "Escape" || e.defaultPrevented || matchesMedia(DESKTOP_MQ)) return;
+      closeReportSidebar();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener("keydown", onKey);
+      const back = sheetReturnFocusRef.current;
+      sheetReturnFocusRef.current = null;
+      const now = document.activeElement;
+      if (
+        back?.isConnected &&
+        (!now || now === document.body || (sb && sb.contains(now)))
+      ) {
+        back.focus({ preventScroll: true });
+      }
+    };
+  }, [showReportSidebar, closeReportSidebar]);
+
+  /** Phones: swipe down on the sheet's grip or a pane head to close it. */
+  const sheetSwipeY0 = useRef<number | null>(null);
+  const onSheetTouchStart = useCallback(
+    (e: ReactTouchEvent<HTMLDivElement>) => {
+      const t = e.target as Element | null;
+      sheetSwipeY0.current =
+        isPhone && t?.closest?.(".rx-sheet-grip, .sb-head, .sb-min")
+          ? e.touches[0]?.clientY ?? null
+          : null;
+    },
+    [isPhone],
+  );
+  const onSheetTouchEnd = useCallback(
+    (e: ReactTouchEvent<HTMLDivElement>) => {
+      const y0 = sheetSwipeY0.current;
+      sheetSwipeY0.current = null;
+      const y1 = e.changedTouches[0]?.clientY;
+      if (y0 != null && y1 != null && y1 - y0 > SHEET_SWIPE_CLOSE_PX) {
+        closeReportSidebar();
+      }
+    },
+    [closeReportSidebar],
+  );
 
   const openDailyTasksPopup = useCallback(() => {
     setShowDailyTasksPopup(true);
@@ -568,7 +720,7 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
     }
   }, [showReportSidebar]);
 
-  /** Daily missions + Leaderboard (signed in): the footer's left slot on desktop, floating on phones. */
+  /** Daily missions + Leaderboard (signed in): the footer's left slot on desktop (phones: icon buttons in the Header). */
   const dockButtons = (
     <>
       <button
@@ -623,9 +775,15 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
     );
   }
 
+  /** Phones: the pane the bottom sheet shows (null on tablets / desktop, where the sidebar is a column). */
+  const phoneSheetPane: SheetPane | null = isPhone ? sheetPane : null;
+  /** Desktop token view: both panes parked as tabs on the right edge. */
+  const showRail = parked && !showReportSidebar;
+
   return (
     <RexScreenerTableContext.Provider value={tableContext}>
       <div
+        ref={rootRef}
         className="rx-screener relative w-full h-screen flex flex-col overflow-hidden"
         aria-busy={loadingUser}
         data-loading-user={loadingUser || undefined}
@@ -643,37 +801,71 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
               onLogout={handleLogout}
             />
 
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {/* room on the right for the parked pane tabs (design/css/pages.css has-rail) */}
+            <div
+              className={`flex min-h-0 flex-1 flex-col overflow-hidden${
+                showRail ? " lg:pr-10" : ""
+              }`}
+            >
               {children}
             </div>
+
+            {/* Phones, token view: Intelligence report | Trade SYM (opens the bottom sheets) */}
+            {viewingChart ? (
+              <TokenPhoneBar
+                symbol={chartToken?.symbol}
+                openPane={showReportSidebar && isPhone ? sheetPane : null}
+                controls={SIDEBAR_ID}
+                onOpen={openSheet}
+              />
+            ) : null}
 
             <Footer dock={currentUserId ? dockButtons : undefined} />
           </div>
 
+          {/* The sidebar: a column on desktop (drag its left edge), a full-height overlay on tablets,
+              a bottom sheet on phones (.rx-side in styles/pages/screener-side.css) */}
           <div
+            ref={sidebarRef}
+            id={SIDEBAR_ID}
             data-rx-sidebar
-            className={`fixed top-0 right-0 h-screen lg:h-full w-full sm:w-[500px] lg:w-[700px] bg-rx-bg z-[60] lg:z-auto transform transition-transform duration-500 ease-in-out motion-reduce:transition-none ${
+            data-open={showReportSidebar || undefined}
+            data-sheet={phoneSheetPane ?? undefined}
+            className={`rx-side fixed top-0 right-0 h-screen max-h-dvh lg:h-full w-full sm:w-[500px] lg:w-[700px] bg-rx-bg z-[60] lg:z-auto transform transition-transform duration-500 ease-in-out motion-reduce:transition-none ${
               showReportSidebar
                 ? "translate-x-0 lg:relative lg:flex-shrink-0"
                 : "translate-x-full lg:absolute"
             }`}
             role="dialog"
             aria-modal="true"
+            aria-label={
+              phoneSheetPane === "exchange"
+                ? "Exchange"
+                : phoneSheetPane === "report"
+                  ? "Intelligence report"
+                  : "Exchange and intelligence report"
+            }
             aria-hidden={!showReportSidebar}
+            inert={!showReportSidebar}
+            onTouchStart={onSheetTouchStart}
+            onTouchEnd={onSheetTouchEnd}
             style={{
               WebkitOverflowScrolling: "touch",
               touchAction: "pan-y",
-              maxHeight: "100dvh",
             }}
           >
+            {/* phones: the sheet's grip (swipe down on it, or on a pane head, to close) */}
+            <span className="rx-sheet-grip" aria-hidden="true" />
+            {showReportSidebar ? (
+              <SidebarEdge width={sidebarWidth} controls={SIDEBAR_ID} />
+            ) : null}
             <div
               // .rx-pilot .rx-ss inside paints the panel (flat + 1px line docked, gradient + gold glint as an overlay)
-              className="h-full overflow-y-auto overflow-x-hidden custom-sidebar-scrollbar"
+              className="rx-side__scroll h-full max-h-dvh overflow-y-auto overflow-x-hidden custom-sidebar-scrollbar"
               style={{
                 WebkitOverflowScrolling: "touch",
                 touchAction: "pan-y",
                 overscrollBehavior: "contain",
-                maxHeight: "100dvh",
               }}
             >
               <GenerateRexscreenerReport
@@ -689,30 +881,27 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
                 forceShowExchange={forceShowExchange}
                 onDismissGeneratedReport={() => setGeneratedReport(null)}
                 shellUserId={currentUserId}
+                onParkBoth={viewingChart ? parkPanes : undefined}
+                paneRequest={paneRequest}
+                sheetPane={phoneSheetPane}
               />
             </div>
           </div>
 
           {showReportSidebar && (
             <div
-              className="lg:hidden fixed inset-0 bg-black/50 z-50"
+              className="rx-sheet-scrim lg:hidden fixed inset-0 bg-black/50 z-50"
               onClick={closeReportSidebar}
               aria-hidden="true"
               style={{ touchAction: "none" }}
             />
           )}
-        </div>
 
-        {/* Phones: Daily missions + Leaderboard float just above the live-prices line and tab bar */}
-        {currentUserId && (
-          <div
-            className={`fixed bottom-[calc(108px+env(safe-area-inset-bottom,0px))] left-3 z-40 flex-col items-start gap-2 md:hidden ${
-              showReportSidebar ? "hidden" : "flex"
-            }`}
-          >
-            {dockButtons}
-          </div>
-        )}
+          {/* Desktop token view: both panes minimized, parked as tabs on the right edge */}
+          {showRail ? (
+            <ParkedPanesRail onRestore={restorePane} sidebarId={SIDEBAR_ID} />
+          ) : null}
+        </div>
 
         {/* Floating Ask Claw (desktop + tablet, overview list only) */}
         {!showReportSidebar && !viewingChart && (

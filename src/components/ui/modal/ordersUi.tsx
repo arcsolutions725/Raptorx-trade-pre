@@ -2,15 +2,18 @@
 
 /**
  * Presentation for My orders and positions (prototype design/orders.html + the orders code in
- * design/js/pages.js): venue picker with real venue logos, the record table on desktop and
- * record cards below 1024px (phones and tablets), market names, side / status tags and the
- * empty, loading, error and sign-in states. Props only: MarketInfoModal and
- * PredictFunMarketInfoPanel keep the data, hooks and every action.
+ * design/js/pages.js): the head with "Deposit or withdraw", the summary strip, view-tab counts,
+ * venue picker with real venue logos, the record table on desktop and record cards below
+ * 1024px (phones and tablets), market names, side / status tags, the open-order fill bar and
+ * two-step cancel button, and the empty, loading, error and sign-in states. Props only:
+ * MarketInfoModal and PredictFunMarketInfoPanel keep the data, hooks and every action.
  * Styles: styles/pages/account.css (.rx-acct scope).
  */
 
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
   useRef,
   useState,
@@ -18,7 +21,184 @@ import {
   type ReactNode,
 } from "react";
 import clsx from "clsx";
-import { AlertTriangle, Check, Clock, List, Wallet } from "lucide-react";
+import { AlertTriangle, Check, Clock, List, Wallet, X } from "lucide-react";
+
+/* ---------------- head ---------------- */
+
+/** Dialog head (eyebrow, title, line) with a tools slot before the close button.
+ *  Phones: the tools drop to their own row under the text. */
+export function OrdersHead({
+  id,
+  eyebrow,
+  title,
+  description,
+  tools,
+  onClose,
+}: {
+  id: string;
+  eyebrow?: string;
+  title: string;
+  description?: string;
+  tools?: ReactNode;
+  onClose: () => void;
+}) {
+  return (
+    <div className="acct-modal__head o-head">
+      <div className="o-head__t">
+        {eyebrow ? <span className="rx-eyebrow">{eyebrow}</span> : null}
+        <h2 id={id}>{title}</h2>
+        {description ? <p>{description}</p> : null}
+      </div>
+      {tools ? <div className="o-head__tools">{tools}</div> : null}
+      <button
+        type="button"
+        className="rx-icon-btn rx-icon-btn--s o-head__x"
+        onClick={onClose}
+        aria-label="Close"
+      >
+        <X className="size-3.5" aria-hidden="true" />
+      </button>
+    </div>
+  );
+}
+
+/** "Deposit or withdraw" (prototype page-head tool). */
+export function DepositButton({ onClick }: { onClick: () => void }) {
+  return (
+    <button type="button" className="rx-btn rx-btn--secondary rx-btn--s" onClick={onClick}>
+      <Wallet className="size-3.5" aria-hidden="true" />
+      Deposit or withdraw
+    </button>
+  );
+}
+
+/* ---------------- summary strip ---------------- */
+
+/** $1,248.30 · −$5.00; `signed` adds "+" to gains (P&L). */
+export function formatUsd(value: number, signed = false): string {
+  const abs = Math.abs(value).toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+  if (value < 0 && abs !== "0.00") return `−$${abs}`;
+  return `${signed && value > 0 ? "+" : ""}$${abs}`;
+}
+
+export type SummaryItem = {
+  key: string;
+  label: string;
+  /** Number shown as dollars; ignored while `loading`. */
+  value?: number;
+  /** Colour and sign the value as a gain / loss (P&L). */
+  signed?: boolean;
+  loading?: boolean;
+  /** What the figure covers (tooltip and screen-reader text). */
+  hint?: string;
+};
+
+/** Four-up strip of raised tiles (two-up on phones): Portfolio value, Unrealized P&L,
+ *  In open orders, Cash available. Only the figures the venue's data supports are passed. */
+export function OrdersSummary({ items, label }: { items: SummaryItem[]; label: string }) {
+  if (!items.length) return null;
+  return (
+    <dl className="o-sum" aria-label={label}>
+      {items.map((it) => {
+        const tone =
+          it.signed && !it.loading && it.value != null
+            ? it.value > 0
+              ? "up"
+              : it.value < 0
+                ? "down"
+                : undefined
+            : undefined;
+        return (
+          <div key={it.key} className="rx-raised" title={it.hint}>
+            <dt>{it.label}</dt>
+            <dd className={clsx("rx-num", tone)} aria-busy={it.loading || undefined}>
+              {it.loading ? (
+                <>
+                  <span className="rx-skel o-sum__skel" aria-hidden="true" />
+                  <span className="sr-only">Loading</span>
+                </>
+              ) : it.value != null ? (
+                formatUsd(it.value, it.signed)
+              ) : (
+                "—"
+              )}
+              {it.hint ? <span className="sr-only"> ({it.hint})</span> : null}
+            </dd>
+          </div>
+        );
+      })}
+    </dl>
+  );
+}
+
+/** Count badge inside a view tab ("Open orders 4"); nothing for 0 or unknown. */
+export function TabCount({ n }: { n?: number | null }) {
+  if (!n) return null;
+  return <span className="rx-badge rx-badge--neutral rx-num o-count">{n}</span>;
+}
+
+/* ---------------- open orders ---------------- */
+
+const shareFmt = (n: number) =>
+  n.toLocaleString("en-US", { maximumFractionDigits: 2 });
+
+/** "120 / 300" over a thin gold bar. */
+export function FillBar({ filled, total }: { filled: number; total: number }) {
+  const pct = total > 0 ? Math.max(0, Math.min(100, (filled / total) * 100)) : 0;
+  return (
+    <span className="o-fill">
+      <span className="rx-num">
+        {shareFmt(filled)} / {shareFmt(total)}
+      </span>
+      <span className="o-fill__bar" aria-hidden="true">
+        <i style={{ width: `${pct}%` }} />
+      </span>
+    </span>
+  );
+}
+
+/** Two-step cancel: "Cancel order" → "Confirm cancel" (danger) → spinner while it goes through. */
+export function CancelOrderButton({
+  confirming,
+  busy,
+  disabled,
+  onClick,
+  marketLabel,
+}: {
+  confirming: boolean;
+  busy: boolean;
+  disabled?: boolean;
+  onClick: () => void;
+  /** Market title, for the accessible name. */
+  marketLabel: string;
+}) {
+  return (
+    <button
+      type="button"
+      className={clsx(
+        "rx-btn rx-btn--s",
+        confirming || busy ? "rx-btn--danger" : "rx-btn--secondary",
+      )}
+      onClick={onClick}
+      disabled={busy || disabled}
+      aria-busy={busy || undefined}
+      aria-label={
+        busy
+          ? undefined
+          : confirming
+            ? `Confirm cancel: ${marketLabel}`
+            : `Cancel order: ${marketLabel}`
+      }
+    >
+      <BusyLabel busy={busy} busyText="Canceling...">
+        {confirming ? "Confirm cancel" : "Cancel order"}
+      </BusyLabel>
+    </button>
+  );
+}
 
 /* ---------------- venues ---------------- */
 
@@ -419,6 +599,14 @@ const STATE_ICONS = {
   error: AlertTriangle,
 } as const;
 
+type BrowseAction = { href: string; onNavigate: () => void };
+
+const OrdersBrowseContext = createContext<BrowseAction | null>(null);
+
+/** Gives every empty list in the dialog (icon "positions" / "trades", no actions of its own) a
+ *  "Browse markets" button, the Predict.fun panel's lists included. MarketInfoModal provides it. */
+export const OrdersBrowseProvider = OrdersBrowseContext.Provider;
+
 /** Empty / error / sign-in state: icon tile, title, copy and optional actions. */
 export function OrdersState({
   icon = "trades",
@@ -432,6 +620,21 @@ export function OrdersState({
   actions?: ReactNode;
 }) {
   const Icon = STATE_ICONS[icon];
+  const browse = useContext(OrdersBrowseContext);
+  const browseLink =
+    actions == null && browse && (icon === "positions" || icon === "trades") ? (
+      <a
+        className="rx-btn rx-btn--secondary rx-btn--s"
+        href={browse.href}
+        onClick={(e) => {
+          if (e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey) return;
+          e.preventDefault();
+          browse.onNavigate();
+        }}
+      >
+        Browse markets
+      </a>
+    ) : null;
   return (
     <div className="o-empty" role={icon === "error" ? "alert" : undefined}>
       <span className={clsx("o-empty__ico", icon === "error" && "is-error")}>
@@ -439,7 +642,7 @@ export function OrdersState({
       </span>
       <b>{title}</b>
       {children}
-      {actions}
+      {actions ?? browseLink}
     </div>
   );
 }

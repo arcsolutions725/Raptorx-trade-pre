@@ -228,6 +228,12 @@
 .rx-claw .think__status--chip { align-self: flex-start; gap: 8px; height: 30px; padding: 0 12px; border-radius: 999px; border: 1px solid var(--rx-gold-line); background: var(--rx-gold-tint); font-size: 12px; }
 .rx-claw .shine { background: linear-gradient(90deg, var(--rx-text-3) 0%, var(--rx-text-3) 35%, #FFE7A6 50%, var(--rx-text-3) 65%, var(--rx-text-3) 100%); background-size: 250% 100%; -webkit-background-clip: text; background-clip: text; color: transparent; animation: claw-shine 1.8s linear infinite; }
 .rx-claw .think__word { display: inline-block; animation: claw-word-in .35s var(--rx-ease); }
+
+/* answer reveal: each word of a streaming answer fades in as it arrives (Message.tsx rehypeWordReveal; design `.w`) */
+.rx-claw .claw-w { animation: claw-word .4s ease both; animation-delay: var(--claw-w-d, 0ms); }
+@keyframes claw-word { from { opacity: 0; filter: blur(4px); } to { opacity: 1; filter: none; } }
+/* a shared answer link (#answer-<id>) lands with a little air above the answer */
+.rx-claw .msg-claw[id] { scroll-margin-top: 24px; }
 .rx-claw .think__status .shine.think__word { animation: claw-word-in .35s var(--rx-ease), claw-shine 1.8s linear infinite; }
 .rx-claw .think__time { font-family: var(--rx-mono); font-size: 11px; font-variant-numeric: tabular-nums; color: var(--rx-text-3); }
 .rx-claw .scan { display: grid; grid-template-columns: repeat(32, 1fr); gap: 3px; max-width: 520px; }
@@ -379,7 +385,7 @@
 
 @media (prefers-reduced-motion: reduce) {
   .rx-claw .claw-aura, .rx-claw .claw-aura i, .rx-claw .claw-wave, .rx-claw .claw-empty > *, .rx-claw .claw-prompt, .rx-claw .composer-wrap--intro .composer,
-  .rx-claw .msg-user, .rx-claw .msg-claw, .rx-claw .think__word, .rx-claw .claw-hero, .rx-claw .claw-menu, .rx-claw .claw-modal { animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important; }
+  .rx-claw .msg-user, .rx-claw .msg-claw, .rx-claw .think__word, .rx-claw .claw-w, .rx-claw .claw-hero, .rx-claw .claw-menu, .rx-claw .claw-modal { animation: none !important; opacity: 1 !important; transform: none !important; filter: none !important; }
   .rx-claw .claw-empty h1 em, .rx-claw .shine, .rx-claw .think__status .shine.think__word { animation: none; }
   .rx-claw .shine { color: var(--rx-text-2); background: none; }
   .rx-claw .composer::after, .rx-claw .composer__ring, .rx-claw .composer__glow, .rx-claw .scan i.on { animation: none !important; }

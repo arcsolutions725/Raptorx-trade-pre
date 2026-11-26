@@ -238,3 +238,70 @@ body.is-resizing-y,body.is-resizing-y *{cursor:row-resize !important}
 .rx-ss .ss-md th.n,.rx-ss .ss-md td.n{text-align:right}
 .rx-ss .ss-md td.n{font-family:var(--rx-mono);font-size:12.5px;white-space:nowrap}
 .rx-ss .ss-chat__scroll{padding-bottom:64px}
+
+/* =====================================================================
+   The sidebar around .rx-ss, rendered by RexScreenerShell.tsx (root .rx-screener, sidebar .rx-side):
+   desktop drag edge, phone bottom sheets + the token view's report / trade bar.
+   Source: design/token.html + design/js/token.js + design/css/pages.css ("token page: mobile sheets",
+   "Terminal layout" gutters) + design/css/components.css (.gutter).
+   ===================================================================== */
+
+/* ---------- desktop: drag the sidebar's left edge (tokenside/sidebarWidth.tsx) ---------- */
+.rx-screener .rx-sb-edge{display:none}
+@media (min-width:1024px){
+  .rx-screener .rx-sb-edge{display:block;position:absolute;top:0;bottom:0;left:-5px;width:11px;z-index:25;cursor:col-resize;touch-action:none;outline:none}
+  .rx-screener .rx-sb-edge::after{content:"";position:absolute;top:0;bottom:0;left:5px;width:1px;background:transparent;transition:background .15s,box-shadow .15s}
+  .rx-screener .rx-sb-edge:hover::after,.rx-screener .rx-sb-edge:focus-visible::after,.rx-screener .rx-sb-edge.is-active::after{background:var(--rx-gold);box-shadow:0 0 10px rgba(255,184,0,.45)}
+}
+/* while a line is dragged (body.is-resizing, rexmarkets/.../shared/dragResize.ts): no width animation, no text
+   selection, the resize cursor everywhere, and the chart iframe does not swallow the pointer */
+body.is-resizing .rx-screener .main-content-shrink,body.is-resizing .rx-screener [data-rx-sidebar]{transition:none !important}
+body.is-resizing .rx-screener{user-select:none;-webkit-user-select:none}
+body.is-resizing .rx-screener iframe{pointer-events:none}
+body.is-resizing-x .rx-screener,body.is-resizing-x .rx-screener *{cursor:col-resize !important}
+
+/* ---------- phones: the token view's bar above the tab bar (tokenside/TokenPhoneBar.tsx, prototype .tk-mbar) ---------- */
+.rx-screener .rx-tk-mbar,.rx-screener .rx-sheet-grip{display:none}
+@media (max-width:767px){
+  .rx-screener .rx-tk-mbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;flex-shrink:0;margin:8px 12px;padding:8px;border-radius:16px;
+    background:rgba(var(--rx-pop-rgb-a),.92);border:1px solid var(--rx-line);box-shadow:0 12px 30px rgba(0,0,0,.5)}
+  .rx-screener .rx-tk-mbar .rx-btn{height:44px;justify-content:center;min-width:0}
+  .rx-screener .rx-tk-mbar .rx-btn--primary{padding:0 18px}
+  .rx-screener .rx-tk-mbar .rx-btn:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:2px}
+  .rx-screener .rx-tk-mbar__doc{display:inline-flex;color:var(--rx-gold)}
+  .rx-screener .rx-tk-mbar__sym{min-width:0;max-width:14ch;overflow:hidden;text-overflow:ellipsis}
+}
+
+/* ---------- phones: the sidebar is a bottom sheet with one pane (prototype .tk-side.is-open[data-sheet]) ---------- */
+@media (max-width:767px){
+  .rx-screener .rx-side{top:auto;bottom:0;left:0;right:0;width:auto;height:auto;max-height:86vh;max-height:86dvh;
+    display:flex;flex-direction:column;overflow:hidden;padding:0 0 env(safe-area-inset-bottom,0px);
+    background:linear-gradient(180deg,var(--rx-pop-a),var(--rx-pop-b));border-top:1px solid var(--rx-gold-line);border-radius:22px 22px 0 0;
+    box-shadow:0 -24px 60px rgba(0,0,0,.6);
+    translate:0 105%;visibility:hidden;
+    transition:translate .32s var(--rx-ease),visibility 0s linear .32s}
+  .rx-screener .rx-side[data-open]{translate:0 0;visibility:visible;transition:translate .32s var(--rx-ease),visibility 0s}
+  /* a report runs long: the sheet takes its full height (the Exchange and the signed-out intro fit their content) */
+  .rx-screener .rx-side[data-sheet="report"]:has(.ss-panes){height:86vh;height:86dvh}
+  .rx-screener .rx-sheet-grip{display:block;flex-shrink:0;width:44px;height:5px;margin:10px auto 6px;border-radius:3px;background:var(--rx-line-strong)}
+
+  .rx-screener .rx-side > .rx-side__scroll{flex:1 1 auto;min-height:0;height:auto;max-height:none;display:flex;flex-direction:column;overflow:hidden}
+  .rx-screener .rx-side .rx-ss{flex:1 1 auto;height:auto;max-height:none;min-height:0;background:transparent;box-shadow:none}
+  .rx-screener .rx-side .rx-ss::before{display:none}
+  .rx-screener .rx-side .rx-ss .sb-head{background:transparent}
+
+  /* only the sheet's pane; no divider */
+  .rx-ss[data-sheet] .ss-panes{flex:1 1 auto}
+  .rx-ss[data-sheet] .ss-panes[data-state] .ss-pane,.rx-ss[data-sheet] .sb-split{display:none}
+  .rx-ss[data-sheet="report"] .ss-panes[data-state] .ss-pane--rep,
+  .rx-ss[data-sheet="exchange"] .ss-panes[data-state] .ss-pane--ex{display:flex;flex:1 1 auto;max-height:none;min-height:0}
+  .rx-ss[data-sheet] .ss-pane__main{flex:1 1 auto}
+
+  .rx-screener .rx-sheet-scrim{background:rgba(5,4,3,.6);-webkit-backdrop-filter:blur(2px);backdrop-filter:blur(2px);animation:rx-sheet-scrim-in .25s ease-out}
+}
+@keyframes rx-sheet-scrim-in{from{opacity:0}}
+@media (prefers-reduced-motion:reduce){
+  .rx-screener .rx-side,.rx-screener .rx-side[data-open]{transition:none}
+  .rx-screener .rx-sheet-scrim{animation:none}
+  .rx-screener .rx-sb-edge::after{transition:none}
+}

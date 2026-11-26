@@ -14,6 +14,7 @@ import {
   MarketPageLoading,
   MarketPageMessage,
   RangeSeg,
+  TicketGutter,
 } from "../shared/marketUi";
 import MarketLineChart from "./components/MarketLineChart";
 import MyriadOrderBook from "./components/MyriadOrderBook";
@@ -339,6 +340,9 @@ export default function MyriadTradingInterface({
                 </div>
               )}
             </section>
+
+            {/* line between chart and ticket: drag (or arrow keys) to resize the ticket */}
+            <TicketGutter />
 
             <section className="mk-side" aria-label="Trade">
               <MyriadBuySellWidget

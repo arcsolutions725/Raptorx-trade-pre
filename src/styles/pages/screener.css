@@ -50,6 +50,51 @@
    Unlayered like the other page files, every rule scoped under .rx-screener.
    Head: report type tabs, program blurb, List / Cards + count + sort. Cards: the design's .rp-card. */
 
+/* Page head: breadcrumb + "RexScreener · All chains" + Golden / Pump Reports H1 (ReportsPageHead).
+   It replaces the Header's "Market overview" head while the view is open. */
+.rx-screener:has(.rx-rp-pagehead) .rx-page-head:not(.rx-rp-pagehead) {
+  display: none;
+}
+.rx-screener .rx-rp-crumbs {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin-bottom: 13px;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--rx-text-3);
+}
+.rx-screener .rx-rp-crumbs > * {
+  flex: none;
+}
+.rx-screener .rx-rp-crumbs a {
+  margin: -7px -4px;
+  padding: 7px 4px;
+  border-radius: 6px;
+  color: var(--rx-text-2);
+  text-decoration: none;
+  transition: color 0.15s;
+}
+.rx-screener .rx-rp-crumbs a:hover {
+  color: var(--rx-gold-hi);
+}
+.rx-screener .rx-rp-crumbs a:focus-visible {
+  outline: 2px solid var(--rx-gold-hi);
+  outline-offset: 0;
+}
+.rx-screener .rx-rp-crumbs svg {
+  opacity: 0.5;
+}
+.rx-screener .rx-rp-crumbs [aria-current] {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--rx-text);
+}
+
 .rx-screener .rx-rp-head {
   display: flex;
   flex-direction: column;
@@ -360,6 +405,42 @@
   border-top: 1px solid var(--rx-line);
 }
 
+/* Pump Reports: Full Report + Trade, then What's New as a square bolt button (cards and list rows) */
+.rx-screener .rx-btn.rx-rp-btn-icon {
+  flex: 0 0 auto;
+  width: 32px;
+  padding: 0;
+  justify-content: center;
+}
+
+/* No report matches the search (design/reports.html #rpEmpty) */
+.rx-screener .rx-rp-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 24px;
+  padding: 28px 12px;
+  text-align: center;
+}
+.rx-screener .rx-rp-empty > svg {
+  color: var(--rx-gold-hi);
+}
+.rx-screener .rx-rp-empty b {
+  font-family: var(--rx-display);
+  font-stretch: 112%;
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--rx-text);
+}
+.rx-screener .rx-rp-empty p {
+  margin: 0;
+  max-width: 300px;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--rx-text-2);
+}
+
 /* Desktop: room for the floating Ask Claw button below the last card */
 @media (min-width: 768px) {
   .rx-screener .rx-rp-grid {
@@ -401,6 +482,20 @@
   }
   .rx-screener .rx-rp-card__foot .rx-btn {
     height: 40px;
+  }
+  .rx-screener .rx-rp-card__foot .rx-btn.rx-rp-btn-icon {
+    width: 40px;
+  }
+  .rx-screener .rx-rp-empty {
+    margin: 0 14px 24px;
+  }
+  .rx-screener .rx-rp-crumbs {
+    margin-bottom: 7px;
+  }
+  /* 40px tap target around the link text */
+  .rx-screener .rx-rp-crumbs a {
+    margin: -11px -6px;
+    padding: 11px 6px;
   }
 }
 @media (prefers-reduced-motion: reduce) {

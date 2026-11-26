@@ -9,6 +9,8 @@
  */
 
 import "@/styles/pages/account.css";
+// tier badge, pill and climb bar styles (shared with Daily missions and the Leaderboard)
+import "@/styles/pages/rewards.css";
 import {
   useEffect,
   useRef,
@@ -19,7 +21,9 @@ import {
 import { createPortal } from "react-dom";
 import Image from "next/image";
 import clsx from "clsx";
-import { ArrowRight, Check, Clock, Copy, List, X } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, Check, Clock, Copy, List, Wallet, X } from "lucide-react";
+import { TierBadge, tierOf } from "@/components/rewards/tiers";
 
 /* ---------------- modal shell ---------------- */
 
@@ -234,13 +238,18 @@ export function animalAvatarSrc(username: string): string {
 
 /* ---------------- profile ---------------- */
 
+/** Avatar with the tier badge, name, tier pill and rank, points (design account `ac-hero`). */
 export function ProfileHero({
   username,
   points,
+  rank,
 }: {
   username: string;
   points: number;
+  /** Leaderboard rank; left out while loading or when the user has no points yet. */
+  rank?: number | null;
 }) {
+  const tier = tierOf(points);
   return (
     <div className="ac-hero acct-in">
       <span className="ac-av">
@@ -250,12 +259,39 @@ export function ProfileHero({
           width={84}
           height={84}
         />
+        <TierBadge tier={tier} size={30} decorative />
       </span>
       <div className="ac-hero__t">
         <span className="ac-hero__name">{username}</span>
+        <div className="ac-hero__row">
+          <span className="rw-tier">
+            <TierBadge tier={tier} size={15} decorative />
+            {tier.name}
+          </span>
+          {rank ? (
+            <span className="rx-small rx-num">Rank #{rank.toLocaleString("en-US")}</span>
+          ) : null}
+        </div>
         <span className="ac-hero__pts">{points.toLocaleString()} points</span>
       </div>
     </div>
+  );
+}
+
+/** "Portfolio and PNL" (design/js/shell.js, FEATURES.portfolio): opens /portfolio. */
+export function PortfolioLink({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <Link
+      href="/portfolio"
+      className="rx-btn rx-btn--secondary rx-btn--block ac-link"
+      onClick={onNavigate}
+    >
+      <span>
+        <Wallet className="size-[15px]" aria-hidden="true" />
+        Portfolio and PNL
+      </span>
+      <ArrowRight className="size-3.5" aria-hidden="true" />
+    </Link>
   );
 }
 
