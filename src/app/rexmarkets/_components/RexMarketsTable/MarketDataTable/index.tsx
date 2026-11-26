@@ -42,6 +42,8 @@ import {
   TableSkeleton,
 } from "./listUi";
 import RexPager from "./RexPager";
+import Image from "next/image";
+import { requestShellAction } from "@/components/ui/layout/shellActions";
 import {
   getRexmarketsDetailHref,
   getMarketReportGenKey,
@@ -145,7 +147,24 @@ export default function MarketDataTable({
   const [originalCategoryName, setOriginalCategoryName] = useState<
     string | null
   >(null);
-  const [layoutView, setLayoutView] = useState<MarketsLayoutView>("table");
+  // Cards first, like design/predictions.html; the viewer's choice is remembered (same key as the prototype)
+  const [layoutView, setLayoutViewState] = useState<MarketsLayoutView>("card");
+  useEffect(() => {
+    try {
+      const saved = window.localStorage.getItem("rx-pm-view");
+      if (saved === "table") setLayoutViewState("table");
+    } catch {
+      /* storage blocked: keep cards */
+    }
+  }, []);
+  const setLayoutView = useCallback((view: MarketsLayoutView) => {
+    setLayoutViewState(view);
+    try {
+      window.localStorage.setItem("rx-pm-view", view === "table" ? "table" : "cards");
+    } catch {
+      /* ignore */
+    }
+  }, []);
 
   // Extract source and tag from tag string in "all" mode
   const { kalshiTag, polymarketTag, limitlessTag, kalshiCategory, polymarketCategory, limitlessCategory } = useMemo(() => {
@@ -885,6 +904,22 @@ export default function MarketDataTable({
                 />
               </div>
               {layoutToggle}
+              {/* Rex Pilot (report history, reports): the page title that held this button is gone (design/predictions.html) */}
+              <button
+                type="button"
+                onClick={() => requestShellAction("pilot")}
+                className="rx-btn rx-btn--claw size-10 shrink-0 justify-center rounded-xl p-0"
+                aria-label="Claw AI 5.0: open Rex Pilot"
+                title="Claw AI 5.0"
+              >
+                <Image
+                  src="/images/claw-logo-96.webp"
+                  alt=""
+                  width={22}
+                  height={22}
+                  className="claw-ico"
+                />
+              </button>
             </>
           }
         />

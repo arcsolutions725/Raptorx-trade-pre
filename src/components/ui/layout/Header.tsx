@@ -13,7 +13,6 @@ import MarketInfoModal from "@/components/ui/modal/MarketInfoModal";
 import type { OrdersTabKey } from "@/components/ui/modal/accountUi";
 import PredictionsTicker from "@/components/ui/layout/PredictionsTicker";
 import { User, Wallet, ClipboardList, ArrowRight } from "lucide-react";
-import { useDataSource } from "@/contexts/DataSourceContext";
 import { useTopbar } from "@/contexts/TopbarContext";
 import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
 import { useEthereumWalletAddress } from "@/hooks/useEthereumWalletAddress";
@@ -27,10 +26,6 @@ import {
   REX_SCREENER_EXCHANGE_HREF,
   type RxShellActionDetail,
 } from "@/components/ui/layout/shellActions";
-import {
-  PREDICT_FUN_LOGO_SRC,
-  PREDICT_FUN_TAB_ICON_SRC,
-} from "@/lib/predictfun/assets";
 import { markClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
 import clsx from "clsx";
 
@@ -58,9 +53,6 @@ interface RexHeaderProps {
   mobileMenuButton?: React.ReactNode;
 }
 
-type MarketDataSource =
-  "all" | "predictfun" | "kalshi" | "polymarket" | "limitless" | "myriad";
-
 const SCREENER_CHAIN_EYEBROW: Record<string, string> = {
   base: "Base",
   robinhood: "Robinhood",
@@ -75,176 +67,6 @@ const SCREENER_CHAIN_EYEBROW: Record<string, string> = {
 function initialsOf(name?: string | null): string {
   const clean = (name ?? "").replace(/[^A-Za-z0-9]/g, "");
   return clean.slice(0, 2).toUpperCase();
-}
-
-const MARKET_SOURCE_TAB_THEME: Record<
-  MarketDataSource,
-  { hex: string; desktopActive: string }
-> = {
-  all: {
-    hex: "#ffc000",
-    desktopActive: "sm:bg-[#ffc000] sm:!text-black sm:!border-transparent",
-  },
-  predictfun: {
-    hex: "#A855F7",
-    desktopActive: "sm:bg-[#A855F7] sm:!text-white sm:!border-transparent",
-  },
-  kalshi: {
-    hex: "#17cb91",
-    desktopActive: "sm:bg-[#17cb91] sm:!text-black sm:!border-transparent",
-  },
-  polymarket: {
-    hex: "#2C59F7",
-    desktopActive: "sm:bg-[#2C59F7] sm:!text-white sm:!border-transparent",
-  },
-  limitless: {
-    hex: "#c3ff01",
-    desktopActive: "sm:bg-[#c3ff01] sm:!text-black sm:!border-transparent",
-  },
-  myriad: {
-    hex: "#ffffff",
-    desktopActive: "sm:bg-black sm:!text-white sm:!border-transparent",
-  },
-};
-
-function RexMarketSourceTab({
-  source,
-  label,
-  isActive,
-  onClick,
-  icon,
-}: {
-  source: MarketDataSource;
-  label: string;
-  isActive: boolean;
-  onClick: () => void;
-  icon?: React.ReactNode;
-}) {
-  const theme = MARKET_SOURCE_TAB_THEME[source];
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={isActive}
-      className={clsx("rx-seg__item shrink-0", isActive && "is-active")}
-      style={
-        isActive
-          ? ({
-              color: source === "myriad" ? "var(--rx-text)" : theme.hex,
-              boxShadow: `inset 0 -2px 0 ${theme.hex}, 0 2px 6px rgba(0,0,0,.4)`,
-            } as React.CSSProperties)
-          : undefined
-      }
-    >
-      {icon}
-      <span>{label}</span>
-    </button>
-  );
-}
-
-function RexMarketSourceTabs({
-  dataSource,
-  setDataSource,
-}: {
-  dataSource: MarketDataSource;
-  setDataSource: (source: MarketDataSource) => void;
-}) {
-  return (
-    <div className="w-full min-w-0 max-w-full overflow-x-auto scrollbar-none sm:w-auto sm:overflow-visible">
-      <div className="rx-seg min-w-max" role="group" aria-label="Market source">
-        <RexMarketSourceTab
-          source="all"
-          label="All"
-          isActive={dataSource === "all"}
-          onClick={() => setDataSource("all")}
-        />
-        <RexMarketSourceTab
-          source="predictfun"
-          label="Predict.fun"
-          isActive={dataSource === "predictfun"}
-          onClick={() => setDataSource("predictfun")}
-          icon={
-            <span className="flex size-4 sm:size-5 shrink-0 items-center justify-center">
-              <Image
-                src={
-                  dataSource === "predictfun"
-                    ? PREDICT_FUN_LOGO_SRC
-                    : PREDICT_FUN_TAB_ICON_SRC
-                }
-                alt=""
-                width={20}
-                height={20}
-                className="max-h-4 max-w-4 sm:max-h-5 sm:max-w-5 object-contain"
-              />
-            </span>
-          }
-        />
-        <RexMarketSourceTab
-          source="kalshi"
-          label="Kalshi"
-          isActive={dataSource === "kalshi"}
-          onClick={() => setDataSource("kalshi")}
-          icon={
-            <span className="flex size-4 sm:size-5 shrink-0 items-center justify-center font-bold leading-none text-[15px] sm:text-[18px] text-inherit">
-              K
-            </span>
-          }
-        />
-        <RexMarketSourceTab
-          source="polymarket"
-          label="Polymarket"
-          isActive={dataSource === "polymarket"}
-          onClick={() => setDataSource("polymarket")}
-          icon={
-            <span className="flex size-4 sm:size-5 shrink-0 items-center justify-center">
-              <Image
-                src="/images/polymarket.png"
-                alt=""
-                width={20}
-                height={20}
-                className="max-h-4 max-w-4 sm:max-h-5 sm:max-w-5 object-contain"
-              />
-            </span>
-          }
-        />
-        <RexMarketSourceTab
-          source="limitless"
-          label="Limitless"
-          isActive={dataSource === "limitless"}
-          onClick={() => setDataSource("limitless")}
-          icon={
-            <span className="flex size-4 sm:size-5 shrink-0 items-center justify-center">
-              <Image
-                src="/images/limitless-logo-new-white.webp"
-                alt=""
-                width={20}
-                height={20}
-                className="max-h-4 max-w-4 sm:max-h-5 sm:max-w-5 object-contain"
-              />
-            </span>
-          }
-        />
-        <RexMarketSourceTab
-          source="myriad"
-          label="Myriad"
-          isActive={dataSource === "myriad"}
-          onClick={() => setDataSource("myriad")}
-          icon={
-            <span className="flex size-4 sm:size-5 shrink-0 items-center justify-center">
-              <Image
-                src="/images/myriad.webp"
-                alt=""
-                width={20}
-                height={20}
-                className="max-h-4 max-w-4 sm:max-h-5 sm:max-w-5 object-contain"
-              />
-            </span>
-          }
-        />
-      </div>
-    </div>
-  );
 }
 
 export default function RexHeader({
@@ -272,15 +94,12 @@ export default function RexHeader({
   const pathname = usePathname();
   const isRexMarketsPage =
     pathname === "/rexmarkets" || pathname.startsWith("/rexmarkets/");
-  const isMarketDetailPage =
-    isRexMarketsPage && pathname.split("/").filter(Boolean).length >= 3;
   const isClawV5Page =
     pathname === "/claw-v5" || pathname.startsWith("/claw-v5/");
   const isRexScreenerPage = isRexScreenerPathname(pathname);
   /** /<chain>/<token>: the token view brings its own head (design/token.html has no page title) */
   const isScreenerTokenPage =
     isRexScreenerPage && parseRexScreenerPath(pathname).routeTokenSlug != null;
-  const { dataSource, setDataSource } = useDataSource();
   const { solanaAddress } = useSolanaWalletAddress();
   const { ethereumAddress } = useEthereumWalletAddress();
 
@@ -715,8 +534,9 @@ export default function RexHeader({
           </div>
         </header>
 
-        {/* Market detail and token pages have their own head (breadcrumbs, title, Claw AI 5.0 toggle) */}
-        {!isClawV5Page && !isMarketDetailPage && !isScreenerTokenPage && (
+        {/* Rex Predictions (list + market pages) and token pages have no page head in the prototype:
+            market and token pages bring their own (breadcrumbs, title, Claw AI 5.0 toggle) */}
+        {!isClawV5Page && !isRexMarketsPage && !isScreenerTokenPage && (
           <div className="rx-page-head">
             <div className="rx-page-head__title">
               {screenerEyebrow ? (
@@ -726,12 +546,6 @@ export default function RexHeader({
               <p>{displayDescription}</p>
             </div>
             <div className="rx-page-head__actions">
-              {isRexMarketsPage && !isMarketDetailPage && (
-                <RexMarketSourceTabs
-                  dataSource={dataSource}
-                  setDataSource={setDataSource}
-                />
-              )}
               {clawAiHeaderButton}
             </div>
           </div>

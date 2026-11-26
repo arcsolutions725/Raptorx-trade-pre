@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useCallback, Suspense } from "react";
+import { useEffect, useLayoutEffect, useState, useCallback, Suspense } from "react";
+import { useDataSource } from "@/contexts/DataSourceContext";
 import { usePrivy } from "@privy-io/react-auth";
 import { usePhantomConnect } from "@/components/providers/PhantomConnectProvider";
 import { RexMarketsReport, RexMarketsTable } from "./_components";
@@ -29,6 +30,13 @@ export default function RexMarketsPage() {
     null
   );
   const [showReportSidebar, setShowReportSidebar] = useState(false);
+
+  // design/predictions.html has no venue tabs: the list always shows every venue ("all").
+  // A layout effect, so it runs before the provider restores an older single-venue choice from storage.
+  const { dataSource, setDataSource } = useDataSource();
+  useLayoutEffect(() => {
+    if (dataSource !== "all") setDataSource("all");
+  }, [dataSource, setDataSource]);
 
   useEffect(() => {
     const fetchUser = async () => {
@@ -143,6 +151,10 @@ export default function RexMarketsPage() {
           />
 
           <div className="flex-1 overflow-hidden">
+            {/* No visible page head (design/predictions.html); keep the page heading for screen readers */}
+            <h1 className="sr-only">
+              Rex Predictions: prediction markets from Kalshi, Polymarket, Limitless, Myriad and Predict.fun
+            </h1>
             <Suspense
               fallback={
                 <div

@@ -80,8 +80,52 @@ function edgeFade(left: boolean, right: boolean): CSSProperties | undefined {
   return { maskImage: mask, WebkitMaskImage: mask };
 }
 
-const scrollArrowClass =
-  "rx-icon-btn rx-icon-btn--s absolute top-1/2 z-20 -translate-y-1/2 shadow-[0_4px_12px_rgba(0,0,0,.5)]";
+/** ‹ › buttons beside a horizontal chip row. Shown while the row overflows (on every device),
+ *  disabled at either end, and kept in the flow so they never cover a chip. */
+function ScrollRow({
+  canLeft,
+  canRight,
+  onScroll,
+  label,
+  children,
+}: {
+  canLeft: boolean;
+  canRight: boolean;
+  onScroll: (direction: "left" | "right") => void;
+  label: string;
+  children: ReactNode;
+}) {
+  const overflows = canLeft || canRight;
+  const arrowClass =
+    "rx-icon-btn size-9 shrink-0 rounded-full disabled:pointer-events-none disabled:opacity-35";
+  return (
+    <div className="flex min-w-0 items-center gap-1.5">
+      {overflows && (
+        <button
+          type="button"
+          onClick={() => onScroll("left")}
+          disabled={!canLeft}
+          className={arrowClass}
+          aria-label={`Scroll ${label} left`}
+        >
+          <ChevronIcon direction="left" />
+        </button>
+      )}
+      <div className="min-w-0 flex-1">{children}</div>
+      {overflows && (
+        <button
+          type="button"
+          onClick={() => onScroll("right")}
+          disabled={!canRight}
+          className={arrowClass}
+          aria-label={`Scroll ${label} right`}
+        >
+          <ChevronIcon direction="right" />
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function MarketCategory({
   onCategoryChange,
@@ -272,8 +316,6 @@ export default function MarketCategory({
   const resizeObserverRef = useRef<ResizeObserver | null>(null);
 
   // Hover and scroll state
-  const [isCategoryHovered, setIsCategoryHovered] = useState(false);
-  const [isTagHovered, setIsTagHovered] = useState(false);
   const [canScrollCategoryLeft, setCanScrollCategoryLeft] = useState(false);
   const [canScrollCategoryRight, setCanScrollCategoryRight] = useState(false);
   const [canScrollTagLeft, setCanScrollTagLeft] = useState(false);
@@ -942,32 +984,12 @@ export default function MarketCategory({
       : null;
 
     categoriesNode = (
-      <div
-        className="relative min-w-0"
-        onMouseEnter={() => setIsCategoryHovered(true)}
-        onMouseLeave={() => setIsCategoryHovered(false)}
+      <ScrollRow
+        canLeft={canScrollCategoryLeft}
+        canRight={canScrollCategoryRight}
+        onScroll={scrollCategory}
+        label="categories"
       >
-        {isCategoryHovered && canScrollCategoryLeft && (
-          <button
-            type="button"
-            onClick={() => scrollCategory("left")}
-            className={clsx(scrollArrowClass, "left-0")}
-            aria-label="Scroll categories left"
-          >
-            <ChevronIcon direction="left" />
-          </button>
-        )}
-        {isCategoryHovered && canScrollCategoryRight && (
-          <button
-            type="button"
-            onClick={() => scrollCategory("right")}
-            className={clsx(scrollArrowClass, "right-0")}
-            aria-label="Scroll categories right"
-          >
-            <ChevronIcon direction="right" />
-          </button>
-        )}
-
         <nav
           ref={categoryContainerRef}
           aria-label="Categories"
@@ -1011,7 +1033,7 @@ export default function MarketCategory({
             );
           })}
         </nav>
-      </div>
+      </ScrollRow>
     );
   }
 
@@ -1027,32 +1049,13 @@ export default function MarketCategory({
     clsx("rx-tab mb-0 h-10 shrink-0 px-3 text-[13px]", active && "is-active");
 
   const tagsNode = showTags ? (
-    <div
-      className="relative -mb-px mt-2 min-w-0"
-      onMouseEnter={() => setIsTagHovered(true)}
-      onMouseLeave={() => setIsTagHovered(false)}
-    >
-      {isTagHovered && canScrollTagLeft && (
-        <button
-          type="button"
-          onClick={() => scrollTags("left")}
-          className={clsx(scrollArrowClass, "left-0")}
-          aria-label="Scroll tags left"
-        >
-          <ChevronIcon direction="left" />
-        </button>
-      )}
-      {isTagHovered && canScrollTagRight && (
-        <button
-          type="button"
-          onClick={() => scrollTags("right")}
-          className={clsx(scrollArrowClass, "right-0")}
-          aria-label="Scroll tags right"
-        >
-          <ChevronIcon direction="right" />
-        </button>
-      )}
-
+    <div className="-mb-px mt-2 min-w-0">
+      <ScrollRow
+        canLeft={canScrollTagLeft}
+        canRight={canScrollTagRight}
+        onScroll={scrollTags}
+        label="tags"
+      >
       <div
         ref={tagsContainerRef}
         className="overflow-x-auto scrollbar-none"
@@ -1112,6 +1115,7 @@ export default function MarketCategory({
           )}
         </div>
       </div>
+      </ScrollRow>
     </div>
   ) : null;
 
