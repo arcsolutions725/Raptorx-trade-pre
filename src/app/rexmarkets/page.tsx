@@ -8,6 +8,7 @@ import { RexMarketsReport, RexMarketsTable } from "./_components";
 import RexHeader from "@/components/ui/layout/Header";
 import type { MarketReport } from "@/hooks/useGenerateMarketReport";
 import Footer from "@/components/ui/layout/Footer";
+import { AskClawFab } from "@/components/ui/AskClawFab";
 import { stashPendingGeneratedReport } from "@/lib/rexmarkets/pendingGeneratedReport";
 import { useOpenPilotSidebarOnMobileReportGen } from "@/hooks/useOpenPilotSidebarOnMobileReportGen";
 
@@ -223,6 +224,9 @@ export default function RexMarketsPage() {
           />
         )}
       </div>
+
+      {/* Floating Ask Claw, bottom right (design/predictions.html via js/universal.js); tablet + desktop */}
+      {!showReportSidebar && <AskClawFab />}
     </div>
   );
 }

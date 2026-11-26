@@ -1,24 +1,14 @@
 /* RexScreener page layer. Only what Tailwind + rx-* can't express on their own:
-   the light sweeping across the Golden / Pump Reports toggles, the rotating ring on
-   the floating Ask Claw button, and the Golden / Pump Reports view (head + cards, below).
+   the light sweeping across the Golden / Pump Reports toggles and the Golden / Pump Reports view
+   (head + cards, below). The floating Ask Claw button lives in styles/pages/ask-claw.css.
    Scoped under .rx-screener (RexScreenerShell root). Imported from app/(rexscreener)/layout.tsx. */
 
 /* Same layer order as Tailwind, in case this file is parsed before globals.css. */
 @layer theme, base, components, utilities;
 
-@property --rx-claw-sweep {
-  syntax: "<angle>";
-  initial-value: 0deg;
-  inherits: false;
-}
-
 @keyframes rx-sc-sweep {
   0% { left: -60%; }
   40%, 100% { left: 130%; }
-}
-
-@keyframes rx-claw-sweep {
-  to { --rx-claw-sweep: 360deg; }
 }
 
 @layer components {
@@ -47,31 +37,10 @@
     animation-delay: 2.5s;
   }
 
-  /* Floating Ask Claw button: raptor red, with a gold ring circling its edge */
-  .rx-screener .rx-ask-claw::before {
-    content: "";
-    position: absolute;
-    inset: -3px;
-    border-radius: inherit;
-    padding: 2px;
-    opacity: 0.9;
-    pointer-events: none;
-    background: conic-gradient(
-      from var(--rx-claw-sweep, 0deg),
-      transparent 0 240deg,
-      #ffb800 300deg,
-      #ffe7a6 345deg,
-      transparent 360deg
-    );
-    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
-    -webkit-mask-composite: xor;
-    mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
-    animation: rx-claw-sweep 5s linear infinite;
-  }
+  /* (the floating Ask Claw button and its ring: styles/pages/ask-claw.css) */
 
   @media (prefers-reduced-motion: reduce) {
-    .rx-screener .rx-sc-sweep::before,
-    .rx-screener .rx-ask-claw::before {
+    .rx-screener .rx-sc-sweep::before {
       animation: none;
     }
   }

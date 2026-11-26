@@ -1,0 +1,61 @@
+/* Floating "Ask Claw" pill (design: js/universal.js .claw-fab + css/app.css .cf-btn): raptor red with a
+   gold ring sweeping around its edge. Used by RexScreener and Rex Predictions (components/ui/AskClawFab.tsx).
+   Hidden on phones like the prototype (the tab bar has Claw AI there). Unlayered, scoped by its own class. */
+
+@property --rx-claw-sweep {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes rx-claw-sweep {
+  to { --rx-claw-sweep: 360deg; }
+}
+
+.rx-ask-claw {
+  position: fixed;
+  right: 20px;
+  bottom: 114px; /* clear of the list pager and the footer */
+  z-index: 40;
+  display: none;
+  align-items: center;
+  gap: 10px;
+  height: 52px;
+  padding: 0 20px 0 14px;
+  border: 0;
+  border-radius: 999px;
+  cursor: pointer;
+  background: linear-gradient(180deg, #f04a2c 0%, #d81f2a 55%, #b5101f 100%);
+  color: #fff;
+  font: 700 14px var(--rx-ui);
+  white-space: nowrap;
+  box-shadow: inset 0 1px 0 rgba(255, 190, 170, 0.45), 0 14px 34px rgba(200, 16, 46, 0.38), 0 4px 10px rgba(0, 0, 0, 0.4);
+  transition: transform 0.3s cubic-bezier(0.2, 0.7, 0.2, 1), filter 0.3s;
+}
+@media (min-width: 768px) {
+  .rx-ask-claw { display: inline-flex; }
+}
+.rx-ask-claw:hover { transform: translateY(-2px); filter: brightness(1.08); }
+.rx-ask-claw:focus-visible { outline: 2px solid #ffe7a6; outline-offset: 3px; }
+.rx-ask-claw .claw-ico { width: 24px; height: 24px; }
+
+/* the gold ring circling the edge */
+.rx-ask-claw::before {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: inherit;
+  padding: 2px;
+  opacity: 0.9;
+  pointer-events: none;
+  background: conic-gradient(from var(--rx-claw-sweep, 0deg), transparent 0 240deg, #ffb800 300deg, #ffe7a6 345deg, transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  animation: rx-claw-sweep 5s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rx-ask-claw { transition: none; }
+  .rx-ask-claw::before { animation: none; }
+}

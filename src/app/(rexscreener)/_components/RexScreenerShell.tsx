@@ -23,6 +23,7 @@ import type { TrendingToken, Chain } from "@/hooks/useTrendingTokens";
 import type { Report } from "@/lib/storage/storage-util";
 import Image from "next/image";
 import Footer from "@/components/ui/layout/Footer";
+import { AskClawFab } from "@/components/ui/AskClawFab";
 import { useResolveScreenerTokenSlug } from "@/hooks/useResolveScreenerTokenSlug";
 import {
   chainFromToken,
@@ -715,21 +716,7 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
 
         {/* Floating Ask Claw (desktop + tablet, overview list only) */}
         {!showReportSidebar && !viewingChart && (
-          <button
-            type="button"
-            onClick={openClawAssistant}
-            className="rx-ask-claw fixed bottom-[114px] right-5 z-40 hidden h-[52px] items-center gap-2.5 rounded-full border-0 bg-[linear-gradient(180deg,#F04A2C_0%,#D81F2A_55%,#B5101F_100%)] pl-3.5 pr-5 text-sm font-bold text-white shadow-[inset_0_1px_0_rgba(255,190,170,0.45),0_14px_34px_rgba(200,16,46,0.38),0_4px_10px_rgba(0,0,0,0.4)] transition-[transform,filter] duration-300 ease-[cubic-bezier(.2,.7,.2,1)] hover:-translate-y-0.5 hover:brightness-[1.08] focus-visible:outline-2 focus-visible:outline-offset-[3px] focus-visible:outline-[#FFE7A6] md:inline-flex"
-            aria-label="Ask Claw: open Claw AI 5.0"
-          >
-            <Image
-              src="/images/claw-logo-96.webp"
-              alt=""
-              width={24}
-              height={24}
-              className="claw-ico size-6"
-            />
-            Ask Claw
-          </button>
+          <AskClawFab onClick={openClawAssistant} />
         )}
 
         <DailyTasksPopup
