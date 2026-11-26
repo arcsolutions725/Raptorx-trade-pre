@@ -1,9 +1,11 @@
 "use client";
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useId, type CSSProperties } from "react";
 import {
   LineChart,
   Line,
+  AreaChart,
+  Area,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -26,8 +28,68 @@ import {
   formatChartAxisPercent,
   formatChartPercentValue,
 } from "../../../shared/chartPercentFormat";
+import { ChartLegend, IconCheck } from "../../../shared/marketUi";
 
 const LIMITLESS_LINE_COLOR = "#8B5CF6";
+
+/**
+ * variant="market" (market detail page, inside .rx-mk .mk-chart): prototype look shared with the other
+ * venues — plot in .mk-chart__plot, area fills, flat grid, y axis on the right, legend below as coloured
+ * checks (styles: market.css). The default variant keeps the original look used by the Rex Pilot sidebar,
+ * Claw AI embeds and the other venues.
+ */
+type ChartVariant = "default" | "market";
+
+/** Market look: room above / below for the Highest / Lowest labels; the y axis sits on the right. */
+const MARKET_CHART_MARGIN = { ...CHART_STATS_DOT_MARGIN, left: 36, right: 0, bottom: 12 };
+
+/** Y ticks: 5% steps; the market look widens them (10, 20, 25%) on tall ranges so the axis keeps a few clean labels. */
+function chartYTicks([low, high]: [number, number], marketLook: boolean): number[] {
+  const step = marketLook ? [5, 10, 20, 25].find((s) => (high - low) / s <= 7) ?? 25 : 5;
+  const ticks: number[] = [];
+  for (let v = marketLook ? Math.ceil(low / step) * step : low; v <= high; v += step) ticks.push(v);
+  return ticks;
+}
+
+/** Market-look tooltip (market.css .mk-tip). */
+function MarketTip({
+  time,
+  rows,
+}: {
+  time: number;
+  rows: { key: string; title: string; color: string; price: number | null | undefined }[];
+}) {
+  const label = new Date(time).toLocaleString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+  return (
+    <div className="mk-tip">
+      <div className="mk-tip__time">{label}</div>
+      {rows.map((row) => {
+        const hasPrice = typeof row.price === "number" && !isNaN(row.price);
+        return (
+          <div key={row.key} className="mk-tip__row">
+            <span className="mk-tip__name">
+              <i style={{ backgroundColor: row.color }} />
+              <span>{row.title}</span>
+            </span>
+            {hasPrice ? (
+              <span className="mk-tip__val" style={{ color: row.color }}>
+                {`${formatChartPercentValue(row.price as number, 2)}%`}
+              </span>
+            ) : (
+              <span className="mk-tip__none">No data</span>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function accentAlphaRgba(accentHex: string, alpha: number): string {
   const h = accentHex.replace("#", "").trim();
@@ -82,6 +144,7 @@ type PriceChartProps =
       lineName?: never;
       /** Chrome + single-series line color (default Limitless purple). Use `#ffc000` for Myriad. */
       accentColor?: string;
+      variant?: ChartVariant;
     }
   | {
       /** Single-series fallback */
@@ -90,6 +153,7 @@ type PriceChartProps =
       chartData?: never;
       marketKeys?: never;
       accentColor?: string;
+      variant?: ChartVariant;
     };
 
 function formatSingleChartData(
@@ -115,17 +179,28 @@ type CustomTooltipSingleProps = {
   active?: boolean;
   payload?: readonly { payload: SingleChartDataPoint }[];
   accentColor: string;
+  marketLook?: boolean;
 };
 
 const CustomTooltipSingle = ({
   active,
   payload,
   accentColor,
+  marketLook,
 }: CustomTooltipSingleProps) => {
   if (!active || !payload?.length) return null;
 
   const point = payload[0]?.payload;
   if (!point) return null;
+
+  if (marketLook) {
+    return (
+      <MarketTip
+        time={point.time}
+        rows={[{ key: "price", title: "Yes", color: accentColor, price: point.price }]}
+      />
+    );
+  }
 
   const date = new Date(point.time);
   const label = date.toLocaleString("en-US", {
@@ -193,6 +268,7 @@ type CustomTooltipMultiProps = {
   chartData: MultiChartDataPoint[];
   visibleMarketKeys: MarketKey[];
   accentColor: string;
+  marketLook?: boolean;
 };
 
 const CustomTooltipMulti = ({
@@ -202,6 +278,7 @@ const CustomTooltipMulti = ({
   chartData,
   visibleMarketKeys,
   accentColor,
+  marketLook,
 }: CustomTooltipMultiProps) => {
   if (!active || !payload?.length || !chartData?.length) return null;
 
@@ -251,6 +328,20 @@ const CustomTooltipMulti = ({
       price: typeof closest.price === "number" ? closest.price : null,
     };
   });
+
+  if (marketLook) {
+    return (
+      <MarketTip
+        time={hoveredTimeMs}
+        rows={marketData.map(({ market, price }) => ({
+          key: market.key,
+          title: market.title,
+          color: market.color,
+          price,
+        }))}
+      />
+    );
+  }
 
   return (
     <div
@@ -341,6 +432,9 @@ const CustomTooltipMulti = ({
 export default function PriceChart(props: PriceChartProps) {
   const accentColor = props.accentColor ?? LIMITLESS_LINE_COLOR;
   const isMultiMarket = "chartData" in props && props.chartData && props.marketKeys;
+  const marketLook = props.variant === "market";
+  // Unique ids for the area gradients of the market look (several charts can be on one page)
+  const fillId = `mkfill-${useId().replace(/:/g, "")}`;
 
   // Single-series mode
   const singleData = useMemo(() => {
@@ -368,13 +462,10 @@ export default function PriceChart(props: PriceChartProps) {
     return [low, high];
   }, [singleData]);
 
-  const singleYTicks = useMemo(() => {
-    const [low, high] = singleYDomain;
-    const step = 5;
-    const ticks: number[] = [];
-    for (let v = low; v <= high; v += step) ticks.push(v);
-    return ticks;
-  }, [singleYDomain]);
+  const singleYTicks = useMemo(
+    () => chartYTicks(singleYDomain, marketLook),
+    [singleYDomain, marketLook]
+  );
 
   // Multi-market mode
   const chartDataFormatted = isMultiMarket ? props.chartData : [];
@@ -418,13 +509,10 @@ export default function PriceChart(props: PriceChartProps) {
     return [low, high];
   }, [chartDataFormatted, visibleMarketKeys]);
 
-  const multiYTicks = useMemo(() => {
-    const [low, high] = multiYDomain;
-    const step = 5;
-    const ticks: number[] = [];
-    for (let v = low; v <= high; v += step) ticks.push(v);
-    return ticks;
-  }, [multiYDomain]);
+  const multiYTicks = useMemo(
+    () => chartYTicks(multiYDomain, marketLook),
+    [multiYDomain, marketLook]
+  );
 
   const lastPrices = useMemo(() => {
     const prices = new Map<string, number>();
@@ -485,10 +573,162 @@ export default function PriceChart(props: PriceChartProps) {
 
   if (isMultiMarket) {
     if (!chartDataFormatted.length || !marketKeys.length) {
+      if (marketLook) {
+        return <div className="mk-chart__plot mk-chart__empty">No chart data available</div>;
+      }
       return (
         <div className="flex flex-col items-center justify-center h-full gap-2">
           <div className="text-white/60">No chart data available</div>
         </div>
+      );
+    }
+
+    if (marketLook) {
+      return (
+        <>
+          <div className="mk-chart__plot">
+            <ResponsiveContainer width="100%" height="100%">
+              <AreaChart data={chartDataFormatted} margin={MARKET_CHART_MARGIN}>
+                <defs>
+                  {marketKeys.map((market, index) => (
+                    <linearGradient
+                      key={market.key}
+                      id={`${fillId}-${index}`}
+                      x1="0"
+                      y1="0"
+                      x2="0"
+                      y2="1"
+                    >
+                      <stop offset="0" stopColor={market.color} stopOpacity={0.16} />
+                      <stop offset="1" stopColor={market.color} stopOpacity={0} />
+                    </linearGradient>
+                  ))}
+                </defs>
+                <CartesianGrid vertical={false} />
+                <XAxis
+                  dataKey="time"
+                  type="number"
+                  domain={["dataMin", "dataMax"]}
+                  axisLine={false}
+                  tickLine={false}
+                  tickMargin={8}
+                  minTickGap={24}
+                  interval="preserveStartEnd"
+                  tickFormatter={(value) => {
+                    const date = new Date(value);
+                    return date.toLocaleDateString("en-US", {
+                      month: "short",
+                      day: "numeric",
+                    });
+                  }}
+                />
+                <YAxis
+                  orientation="right"
+                  width={44}
+                  axisLine={false}
+                  tickLine={false}
+                  tickMargin={6}
+                  domain={multiYDomain}
+                  ticks={multiYTicks}
+                  allowDataOverflow={false}
+                  tickFormatter={(value) => {
+                    const num =
+                      typeof value === "number"
+                        ? value
+                        : parseFloat(String(value)) || 0;
+                    return formatChartAxisPercent(num);
+                  }}
+                />
+                <Tooltip
+                  filterNull={false}
+                  allowEscapeViewBox={{ x: false, y: true }}
+                  wrapperStyle={{ zIndex: 10000 }}
+                  cursor={{ stroke: "rgba(255,236,205,.22)", strokeWidth: 1 }}
+                  content={(tooltipProps) => (
+                    <CustomTooltipMulti
+                      {...tooltipProps}
+                      marketKeys={marketKeys}
+                      chartData={chartDataFormatted}
+                      visibleMarketKeys={visibleMarketKeys}
+                      accentColor={accentColor}
+                      marketLook
+                    />
+                  )}
+                />
+                {marketKeys.map((market, index) => {
+                  if (hiddenMarketKeys.has(market.key)) return null;
+                  const hasData = chartDataFormatted.some((point) => {
+                    const value = point[market.key];
+                    return (
+                      value !== undefined &&
+                      value !== null &&
+                      !isNaN(value as number)
+                    );
+                  });
+                  if (!hasData) return null;
+                  const stats = seriesStatsMap.get(market.key);
+                  return (
+                    <Area
+                      key={market.key}
+                      type="monotone"
+                      dataKey={market.key}
+                      name={market.title}
+                      stroke={market.color}
+                      strokeWidth={2}
+                      fill={`url(#${fillId}-${index})`}
+                      fillOpacity={1}
+                      activeDot={{ r: 4, fill: market.color, stroke: "#0B0806", strokeWidth: 1.5 }}
+                      connectNulls
+                      isAnimationActive={false}
+                      dot={(dotProps: {
+                        cx?: number;
+                        cy?: number;
+                        payload?: MultiChartDataPoint;
+                      }) => {
+                        const payload = dotProps.payload;
+                        if (!payload || typeof payload.time === "undefined") return null;
+                        const labels = getStatsLabelsForPoint(payload.time, stats ?? null);
+                        if (labels.length === 0) return null;
+                        const placement = topPlacementMap.get(market.key);
+                        const isCurrent = stats && payload.time === stats.lastTime;
+                        return (
+                          <ChartStatsDot
+                            cx={dotProps.cx}
+                            cy={dotProps.cy}
+                            labels={labels}
+                            color={market.color}
+                            seriesIndex={index}
+                            isTopHighest={placement?.isTopHighest ?? true}
+                            isTopLowest={placement?.isTopLowest ?? true}
+                            isCurrentPriceLabel={isCurrent ?? false}
+                          />
+                        );
+                      }}
+                    />
+                  );
+                })}
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+
+          {/* Series toggles: coloured checks with each series' latest value */}
+          <ChartLegend
+            items={marketKeys.map((market) => {
+              const lastPrice = lastPrices.get(market.key);
+              return {
+                key: market.key,
+                label: market.title,
+                color: market.color,
+                value:
+                  lastPrice !== undefined
+                    ? `${formatChartPercentValue(lastPrice, 2)}%`
+                    : undefined,
+                on: !hiddenMarketKeys.has(market.key),
+              };
+            })}
+            onToggle={toggleMarketVisibility}
+          />
+        </>
       );
     }
 
@@ -643,6 +883,9 @@ export default function PriceChart(props: PriceChartProps) {
   // Single-series mode
   const lineName = props.lineName ?? "Yes";
   if (!singleData.length) {
+    if (marketLook) {
+      return <div className="mk-chart__plot mk-chart__empty">No chart data available</div>;
+    }
     return (
       <div className="flex flex-col items-center justify-center h-full gap-2">
         <div className="text-white/60">No chart data available</div>
@@ -655,6 +898,122 @@ export default function PriceChart(props: PriceChartProps) {
     () => computeSingleSeriesStats(singleData),
     [singleData]
   );
+
+  if (marketLook) {
+    return (
+      <>
+        <div className="mk-chart__plot">
+          <ResponsiveContainer width="100%" height="100%">
+            <AreaChart data={singleData} margin={MARKET_CHART_MARGIN}>
+              <defs>
+                <linearGradient id={`${fillId}-0`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0" stopColor={accentColor} stopOpacity={0.16} />
+                  <stop offset="1" stopColor={accentColor} stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="time"
+                type="number"
+                domain={["dataMin", "dataMax"]}
+                axisLine={false}
+                tickLine={false}
+                tickMargin={8}
+                minTickGap={24}
+                interval="preserveStartEnd"
+                tickFormatter={(value) => {
+                  const date = new Date(value);
+                  return date.toLocaleDateString("en-US", {
+                    month: "short",
+                    day: "numeric",
+                  });
+                }}
+              />
+              <YAxis
+                orientation="right"
+                width={44}
+                axisLine={false}
+                tickLine={false}
+                tickMargin={6}
+                domain={singleYDomain}
+                ticks={singleYTicks}
+                allowDataOverflow={false}
+                tickFormatter={(value) => {
+                  const num =
+                    typeof value === "number"
+                      ? value
+                      : parseFloat(String(value)) || 0;
+                  return formatChartAxisPercent(num);
+                }}
+              />
+              <Tooltip
+                filterNull={false}
+                allowEscapeViewBox={{ x: false, y: true }}
+                wrapperStyle={{ zIndex: 10000 }}
+                cursor={{ stroke: "rgba(255,236,205,.22)", strokeWidth: 1 }}
+                content={(tp) => (
+                  <CustomTooltipSingle {...tp} accentColor={accentColor} marketLook />
+                )}
+              />
+              <Area
+                type="monotone"
+                dataKey="price"
+                name={lineName}
+                stroke={accentColor}
+                strokeWidth={2}
+                fill={`url(#${fillId}-0)`}
+                fillOpacity={1}
+                activeDot={{ r: 4, fill: accentColor, stroke: "#0B0806", strokeWidth: 1.5 }}
+                connectNulls
+                isAnimationActive={false}
+                dot={(dotProps: {
+                  cx?: number;
+                  cy?: number;
+                  payload?: SingleChartDataPoint;
+                }) => {
+                  const payload = dotProps.payload;
+                  if (!payload || typeof payload.time === "undefined") return null;
+                  const labels = getStatsLabelsForPoint(
+                    payload.time,
+                    singleSeriesStats
+                  );
+                  if (labels.length === 0) return null;
+                  const isCurrent = singleSeriesStats && payload.time === singleSeriesStats.lastTime;
+                  return (
+                    <ChartStatsDot
+                      cx={dotProps.cx}
+                      cy={dotProps.cy}
+                      labels={labels}
+                      color={accentColor}
+                      isCurrentPriceLabel={isCurrent ?? false}
+                    />
+                  );
+                }}
+              />
+            </AreaChart>
+          </ResponsiveContainer>
+        </div>
+
+        {/* Legend: the one series with its latest value (not a toggle) */}
+        {typeof lastPrice === "number" && !isNaN(lastPrice) && (
+          <div className="mk-legend">
+            <span
+              className="rx-check is-on mk-legend__static"
+              style={{ "--c": accentColor } as CSSProperties}
+            >
+              <span className="rx-check__box">
+                <IconCheck size={11} />
+              </span>
+              <span className="mk-legend__name">{lineName}</span>
+              <span className="rx-num mk-legend__val">
+                {formatChartPercentValue(lastPrice, 2)}%
+              </span>
+            </span>
+          </div>
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="flex flex-col h-full min-h-[280px] w-full">

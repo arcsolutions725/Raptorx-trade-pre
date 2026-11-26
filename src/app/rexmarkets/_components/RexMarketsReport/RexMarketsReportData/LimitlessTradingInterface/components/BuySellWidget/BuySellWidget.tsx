@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useMemo } from "react";
-import Image from "next/image";
+import { useState, useCallback, useEffect, useMemo, useId } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatPrice } from "@/utils/polymarketTrading";
 import { formatShares, formatCurrency } from "@/utils/format";
@@ -17,8 +16,13 @@ import {
 } from "@/components/ui/notification";
 import LoginModal from "@/components/ui/modal/LoginModal";
 import { Select, type SelectOption } from "@/components/ui/Select";
-
-const LIMITLESS_ACCENT = "#ffc000";
+import {
+  AmountField,
+  PriceWell,
+  SideSeg,
+  TicketHead,
+  YesNoPair,
+} from "../../../shared/marketUi";
 
 export type LimitlessVenue = { exchange: string; adapter?: string };
 
@@ -376,6 +380,10 @@ export default function BuySellWidget({
     await handleTradeClick();
   }, [authenticated, needsLimitlessSignIn, login, handleTradeClick]);
 
+  const fieldUid = useId().replace(/:/g, "");
+  const amountId = `ll-amount-${fieldUid}`;
+  const limitId = `ll-limit-${fieldUid}`;
+
   const primaryButtonLabel = isSubmitting
     ? "Submitting…"
     : isUsdcApproving
@@ -386,202 +394,151 @@ export default function BuySellWidget({
         ? `Minimum: $${LIMITLESS_MIN_ORDER_USD} USDC`
         : !authenticated
           ? activeTab === "buy"
-            ? "Place Order"
+            ? "Place order"
             : "Sell"
           : needsLimitlessSignIn
-            ? "Initialize Trading"
+            ? "Initialize trading"
             : activeTab === "buy"
               ? `Buy ${selectedOutcome || ""}`
               : `Sell ${selectedOutcome || ""}`;
 
   return (
-    <div className="flex flex-col border border-white/10 rounded-lg overflow-hidden h-full min-h-100">
-      <div className="flex items-center gap-3 px-4 py-3 pr-12 lg:pr-4 border-b border-white/10">
-        {symbolImageUrl ? (
-          <div className="relative w-10 h-10 rounded-full overflow-hidden shrink-0">
-            <Image src={symbolImageUrl} alt={marketTitle || "Market"} width={40} height={40} className="object-cover" unoptimized />
-          </div>
-        ) : (
-          <div className="w-10 h-10 rounded-full bg-white/10 flex items-center justify-center shrink-0">
-            <span className="text-white/60 text-xs">?</span>
-          </div>
-        )}
-        <div className="flex-1 min-w-0 max-w-[65%] lg:max-w-none">
-          <div className="text-sm font-medium text-white truncate">{marketTitle || "Market"}</div>
-          <div className="text-xs text-white/60">Limitless</div>
-        </div>
-      </div>
+    <div className="mk-ticket">
+      {/* Mini market head */}
+      <TicketHead imageUrl={symbolImageUrl} title={marketTitle || "Market"} sub="Limitless" />
 
-      {/* Buy/Sell Tabs and Market Dropdown (same layout as Polymarket/Kalshi) */}
-      <div className="flex items-center justify-between px-4 py-3 border-b border-white/10">
-        <div className="flex items-center gap-1">
-          <button
-            onClick={() => { setActiveTab("buy"); setSelectedOutcome(null); }}
-            className={`px-4 py-2 text-sm font-semibold transition-colors rounded-t ${activeTab === "buy" ? "text-white border-b-2" : "text-white/60 hover:text-white/80"}`}
-            style={activeTab === "buy" ? { borderBottomColor: LIMITLESS_ACCENT, color: "#fff" } : undefined}
-          >
-            Buy
-          </button>
-          <button
-            onClick={() => { setActiveTab("sell"); setSelectedOutcome(null); }}
-            className={`px-4 py-2 text-sm font-semibold transition-colors rounded-t ${activeTab === "sell" ? "text-white border-b-2 bg-[#0a0a0a]" : "text-white/60 hover:text-white/80"}`}
-            style={activeTab === "sell" ? { borderBottomColor: LIMITLESS_ACCENT, color: "#fff" } : undefined}
-          >
-            Sell
-          </button>
-        </div>
+      {/* Buy / Sell and the market picker (events with several markets) */}
+      <div className="mk-ticket__row">
+        <SideSeg
+          value={activeTab}
+          onChange={(side) => {
+            setActiveTab(side);
+            setSelectedOutcome(null);
+          }}
+        />
         {marketsForTrading.length > 1 && (
-          <div className="min-w-[140px] max-w-[200px] flex-1">
-            <Select
-              value={selectedMarketValue}
-              onChange={handleMarketChange}
-              options={marketOptions}
-              placeholder="Market"
-              className="w-full"
-              searchable
-              searchPlaceholder="Search options..."
-            />
-          </div>
+          <Select
+            value={selectedMarketValue}
+            onChange={handleMarketChange}
+            options={marketOptions}
+            placeholder="Market"
+            className="mk-select"
+            searchable
+            searchPlaceholder="Search options..."
+          />
         )}
       </div>
 
-      <div className="p-4 flex gap-3 bg-[#0a0a0a]">
-        <button
-          onClick={() => handleOutcomeSelect("Yes")}
-          className={`flex-1 py-2 px-2 rounded-lg font-semibold text-white transition-all ${selectedOutcome === "Yes" ? "bg-green-600 hover:bg-green-700 shadow-lg shadow-green-500/20" : "bg-gray-600 hover:bg-gray-500"}`}
-        >
-          <div className="flex flex-row items-center justify-center gap-2">
-            {selectedOutcome === "Yes" && (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-            <span className="text-sm">Yes</span>
-            <span className="text-sm font-bold">{formatPrice(displayYesPrice)}</span>
-          </div>
-        </button>
-        <button
-          onClick={() => handleOutcomeSelect("No")}
-          className={`flex-1 py-2 px-2 rounded-lg font-semibold text-white transition-all ${selectedOutcome === "No" ? "bg-red-600 hover:bg-red-700 shadow-lg shadow-red-500/20" : "bg-gray-600 hover:bg-gray-500"}`}
-        >
-          <div className="flex flex-row items-center justify-center gap-2">
-            {selectedOutcome === "No" && (
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
-              </svg>
-            )}
-            <span className="text-sm">No</span>
-            <span className="text-sm font-bold">{formatPrice(displayNoPrice)}</span>
-          </div>
-        </button>
-      </div>
+      {/* Yes / No */}
+      <YesNoPair
+        selected={selectedOutcome}
+        yesPrice={formatPrice(displayYesPrice)}
+        noPrice={formatPrice(displayNoPrice)}
+        onSelect={handleOutcomeSelect}
+      />
 
-      <div className="px-4 py-3 border-t border-white/10">
-        <label className="block text-xs text-white/60 mb-2">Order Type</label>
-        <div className="flex gap-2">
+      {/* Order type */}
+      <div className="mk-otype">
+        <span className="rx-label">Order type</span>
+        <div className="rx-seg" role="group" aria-label="Order type">
           <button
+            type="button"
             onClick={() => setOrderType("market")}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${orderType === "market" ? "text-black" : "bg-white/5 text-white/60 hover:bg-white/10"}`}
-            style={orderType === "market" ? { backgroundColor: LIMITLESS_ACCENT } : undefined}
+            className={`rx-seg__item${orderType === "market" ? " is-active" : ""}`}
+            aria-pressed={orderType === "market"}
           >
             Market
           </button>
           <button
+            type="button"
             onClick={() => setOrderType("limit")}
-            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-colors ${orderType === "limit" ? "text-black" : "bg-white/5 text-white/60 hover:bg-white/10"}`}
-            style={orderType === "limit" ? { backgroundColor: LIMITLESS_ACCENT } : undefined}
+            className={`rx-seg__item${orderType === "limit" ? " is-active" : ""}`}
+            aria-pressed={orderType === "limit"}
           >
             Limit
           </button>
         </div>
       </div>
 
-      <div className="px-4 py-4 border-t border-white/10 flex-1 flex flex-col">
-        <div className="mb-3 bg-white/5 rounded-lg p-3">
-          <p className="text-xs text-white/60 mb-1">Current Market Price</p>
-          <p className="text-lg font-bold text-white">{selectedOutcome ? priceDisplay : "—"}</p>
-        </div>
-        <div className="mb-3">
-          <div className="flex items-center justify-between mb-2">
-            <label className="block text-sm text-white/80">
-              {activeTab === "buy" ? "Amount ($)" : "Size (shares)"}
+      <PriceWell
+        label="Current market price"
+        value={selectedOutcome ? priceDisplay : "—"}
+      />
+
+      <AmountField
+        id={amountId}
+        label={activeTab === "buy" ? "Amount ($)" : "Size (shares)"}
+        aside={
+          activeTab === "buy" ? (
+            <>Available: <b>{formatCurrency(usdcBalance)}</b></>
+          ) : (
+            <>
+              Available: Yes <b>{formatShares(availableYesShares)}</b>, No{" "}
+              <b>{formatShares(availableNoShares)}</b>
+            </>
+          )
+        }
+        prefix={activeTab === "buy" ? "$" : undefined}
+        value={size}
+        onChange={(value) => setSize(value.replace(/[^0-9.]/g, ""))}
+        pcts={([25, 50, 75, 100] as const).map((pct) => ({
+          label: pct === 100 ? "Max" : `${pct}%`,
+          onClick: () => handlePercentClick(pct),
+          disabled:
+            isSubmitting ||
+            (activeTab === "buy" ? usdcBalance <= 0 : availableShares <= 0),
+        }))}
+      />
+      {activeTab === "buy" && (
+        <p className="mk-note">
+          Min. amount is <b>${LIMITLESS_MIN_ORDER_USD}</b>
+        </p>
+      )}
+
+      <p className="mk-balance">
+        USDC balance <b>${usdcBalanceFormatted}</b> (
+        <b>
+          {nativeBalanceFormatted} {nativeLabel}
+        </b>
+        )
+      </p>
+
+      {orderType === "limit" && (
+        <div className="rx-field mk-amount">
+          <div className="mk-amount__top">
+            <label className="rx-label" htmlFor={limitId}>
+              Limit price (¢)
             </label>
-            <div className="flex flex-col items-end">
-              <span className="text-sm text-white/80">
-                {activeTab === "buy" ? (
-                  <>Available: {formatCurrency(usdcBalance)}</>
-                ) : (
-                  <>Available: Yes {formatShares(availableYesShares)}, No {formatShares(availableNoShares)}</>
-                )}
-              </span>
-              <div className="flex gap-1 mt-1.5">
-                {([25, 50, 75, 100] as const).map((pct) => (
-                  <button
-                    key={pct}
-                    type="button"
-                    onClick={() => handlePercentClick(pct)}
-                    disabled={
-                      isSubmitting ||
-                      (activeTab === "buy" ? usdcBalance <= 0 : availableShares <= 0)
-                    }
-                    className="py-1 px-2 rounded border border-green-500/50 bg-white/5 text-white/90 text-[10px] font-medium hover:bg-white/10 hover:border-green-500 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-white/5 transition-colors"
-                  >
-                    {pct === 100 ? "Max" : `${pct}%`}
-                  </button>
-                ))}
-              </div>
-            </div>
           </div>
-          <div className="relative">
-            {activeTab === "buy" && <span className="absolute left-3 top-1/2 -translate-y-1/2 text-white text-sm pointer-events-none">$</span>}
+          <div className="rx-input">
             <input
-              type="text"
-              value={size}
-              onChange={(e) => setSize(e.target.value.replace(/[^0-9.]/g, ""))}
-              placeholder="0"
-              className={`w-full py-2 bg-transparent border border-white/10 rounded-lg focus:outline-none focus:border-[#ffc000] text-white text-sm placeholder-white/30 ${activeTab === "buy" ? "pl-6" : "px-3"}`}
-            />
-          </div>
-          {activeTab === "buy" && (
-            <p className="mt-1.5 text-xs text-white/50">Min. amount is ${LIMITLESS_MIN_ORDER_USD}</p>
-          )}
-        </div>
-        <div className="mb-3 shrink-0">
-          <div className="text-xs text-white/60 space-y-1">
-            <div>
-              USDC Balance:{" "}
-              <span className="text-white font-medium">${usdcBalanceFormatted}</span>
-              {" ("}
-              <span className="text-white font-medium">{nativeBalanceFormatted} {nativeLabel}</span>
-              {")"}
-            </div>
-          </div>
-        </div>
-        {orderType === "limit" && (
-          <div className="mb-3">
-            <label className="block text-sm text-white/80 mb-2">Limit Price (¢)</label>
-            <input
+              id={limitId}
               type="text"
               inputMode="numeric"
+              autoComplete="off"
               value={limitPrice}
               onChange={(e) => setLimitPrice(e.target.value.replace(/\D/g, "").slice(0, 2))}
               placeholder="1-99"
-              className="w-full px-3 py-2 bg-transparent border border-white/10 rounded-lg focus:outline-none focus:border-[#ffc000] text-white text-sm placeholder-white/30"
             />
+            <span className="rx-num mk-amount__suf" aria-hidden="true">¢</span>
           </div>
-        )}
-        {needsLimitlessSignIn && authError && (
-          <p className="text-sm text-red-400 mb-2">{authError.message}</p>
-        )}
-        <button
-          onClick={handlePrimaryAction}
-          disabled={isTradeDisabled}
-          className="w-full py-3 rounded-lg font-semibold text-black transition-opacity disabled:opacity-50 disabled:cursor-not-allowed mt-auto"
-          style={{ backgroundColor: LIMITLESS_ACCENT }}
-        >
-          {primaryButtonLabel}
-        </button>
-      </div>
+        </div>
+      )}
+
+      {needsLimitlessSignIn && authError && (
+        <p className="mk-note mk-note--error" role="alert">
+          {authError.message}
+        </p>
+      )}
+
+      <button
+        type="button"
+        onClick={handlePrimaryAction}
+        disabled={isTradeDisabled}
+        className="rx-btn rx-btn--primary rx-btn--l rx-btn--block mk-ticket__cta"
+      >
+        {primaryButtonLabel}
+      </button>
 
       <LoginModal
         isOpen={showLoginModal}

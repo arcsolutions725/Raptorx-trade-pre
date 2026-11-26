@@ -25,18 +25,18 @@ function CommentItem({ comment }: { comment: LimitlessComment }) {
   const body = comment.content ?? (comment as any).body ?? "";
 
   return (
-    <div className="flex gap-3 pb-4 border-b border-white/10 last:border-b-0">
-      <div className="flex-shrink-0">
-        <HolderAvatar name={displayName} size={32} />
-      </div>
-      <div className="flex-1 min-w-0">
-        <div className="flex items-center gap-2 mb-1">
-          <span className="text-sm font-medium text-white truncate">{displayName}</span>
-          <span className="text-xs text-white/60 flex-shrink-0">{timeAgo}</span>
+    <article className="mk-post">
+      <div className="mk-cmt-row">
+        <HolderAvatar name={displayName} size={32} tone="gold" />
+        <div className="mk-cmt-main">
+          <div className="mk-meta">
+            <span className="mk-who">{displayName}</span>
+            <span className="mk-time">{timeAgo}</span>
+          </div>
+          <p className="mk-text">{body}</p>
         </div>
-        <p className="text-sm text-white/90 whitespace-pre-wrap break-words">{body}</p>
       </div>
-    </div>
+    </article>
   );
 }
 
@@ -46,23 +46,23 @@ export default function Comments({ marketSlug }: CommentsProps) {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center py-8">
-        <div className="text-sm text-white/60">Loading comments...</div>
+      <div className="mk-msg" role="status">
+        Loading comments...
       </div>
     );
   }
 
   if (!comments.length) {
     return (
-      <div className="flex flex-col items-center justify-center py-8">
-        <div className="text-sm text-white/60 mb-2">No comments yet</div>
-        <div className="text-xs text-white/40">Be the first to comment!</div>
+      <div className="mk-msg">
+        <b>No comments yet</b>
+        Be the first to comment!
       </div>
     );
   }
 
   return (
-    <div className="space-y-0 px-1">
+    <div className="mk-posts">
       {comments.map((comment, idx) => (
         <CommentItem key={(comment as any).id ?? `c-${idx}`} comment={comment} />
       ))}

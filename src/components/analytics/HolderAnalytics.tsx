@@ -5,7 +5,7 @@ import copy from "copy-to-clipboard";
 import { useState } from "react";
 import "@/styles/pages/analytics.css";
 
-/* Styles: styles/pages/analytics.css (.rx-an …): stat tiles, bar rows, takeaway, holders table. */
+/* Styles: styles/pages/analytics.css (.rx-an …): stat tiles, bar rows, takeaway box, holders table. */
 
 interface HolderAnalyticsProps {
   data: HolderAnalytics;

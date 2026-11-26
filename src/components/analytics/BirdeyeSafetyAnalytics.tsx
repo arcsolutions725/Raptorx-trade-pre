@@ -269,7 +269,7 @@ function TaxAnalysisChart({ tokenSecurity }: { tokenSecurity: any }) {
         Tax analysis
       </h3>
 
-      <div className="an-stats an-stats--3">
+      <div className="an-stats an-stats--3up">
         {/* Buy Tax */}
         <div className={`rx-well an-stat an-stat--${buyTone}`}>
           <span className="an-stat__label">Buy tax</span>

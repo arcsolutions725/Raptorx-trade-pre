@@ -9,6 +9,7 @@
    Unlayered: beats the layered DS and the bare h3/h4 sizes in globals.css. */
 
 .rx-an{font-family:var(--rx-ui);color:var(--rx-text);min-width:0}
+.rx-an a:focus-visible{outline:2px solid var(--rx-gold-hi);outline-offset:2px}
 
 /* ---------- widget root (metrics / holders / safety) ---------- */
 .rx-an--w{container:rx-an / inline-size;display:flex;flex-direction:column;gap:22px;font-size:14px;line-height:1.5;overflow-wrap:anywhere}
@@ -45,6 +46,13 @@
 .rx-an .an-stat--gold{border-color:var(--rx-gold-line)}
 .rx-an .an-stat--ember{border-color:var(--rx-ember-line)}
 .rx-an .an-stat--down{border-color:var(--rx-down-line)}
+/* short tiles (tax): always three across */
+.rx-an .an-stats--3up{grid-template-columns:repeat(3,minmax(0,1fr))}
+.rx-an .an-stats--3up > .an-stat:last-child:nth-child(odd){grid-column:auto}
+@container rx-an (max-width:420px){
+  .rx-an .an-stats--3up{gap:8px}
+  .rx-an .an-stats--3up .an-stat{padding:12px}
+}
 @container rx-an (min-width:440px){
   .rx-an .an-stats--3{grid-template-columns:none;grid-auto-flow:column;grid-auto-columns:minmax(0,1fr)}
   .rx-an .an-stats--3 > .an-stat:last-child:nth-child(odd){grid-column:auto}

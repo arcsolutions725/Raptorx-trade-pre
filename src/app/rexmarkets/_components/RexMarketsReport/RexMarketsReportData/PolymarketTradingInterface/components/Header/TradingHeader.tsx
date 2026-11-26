@@ -89,7 +89,7 @@ export default function TradingHeader({
   const handleShareClick = () => {
     const baseUrl = window.location.origin;
     const path = pathname || (typeof window !== "undefined" ? window.location.pathname : "");
-    if (path.startsWith("/rexmarkets/polymarket/") || path.startsWith("/rexmarkets/kalshi/") || path.startsWith("/rexmarkets/limitless/") || path.startsWith("/rexmarkets/myriad/")) {
+    if (path.startsWith("/rexmarkets/polymarket/") || path.startsWith("/rexmarkets/kalshi/") || path.startsWith("/rexmarkets/limitless/") || path.startsWith("/rexmarkets/myriad/") || path.startsWith("/rexmarkets/predict-fun/")) {
       const eventDetailUrl = `${baseUrl}${path}`;
       const copied = copy(eventDetailUrl);
       if (copied) {

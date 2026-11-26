@@ -17,12 +17,11 @@
 */
 
 /* ---------- ticket ---------- */
-.rx-mk .mk-yn .rx-yes,.rx-mk .mk-yn .rx-no{padding:0 12px}
 .rx-mk .mkb-yn__name,.rx-mk .mkb-ob-name{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.rx-mk .mk-yn .rx-num,.rx-mk .mk-ob__buy .rx-num{flex:none}
+.rx-mk .mkb-yn__name ~ .rx-num,.rx-mk .mkb-ob-name ~ .rx-num{flex:none}
 
 .rx-mk .mkb-stack{display:flex;flex-direction:column;gap:6px;min-width:0}
-.rx-mk .mkb-stack .rx-help,.rx-mk .mk-ticket > .rx-help{margin:0;line-height:1.45}
+.rx-mk .mkb-stack .rx-help{margin:0;line-height:1.45}
 
 .rx-mk .mkb-kv{display:flex;flex-direction:column;gap:4px;margin:-4px 0 0;font-size:12px;color:var(--rx-text-3)}
 .rx-mk .mkb-kv > div{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
@@ -35,13 +34,11 @@
 .rx-mk .mkb-foot{margin:-4px 0 0;font-size:12px;line-height:1.45;text-align:center;color:var(--rx-text-3)}
 
 /* ---------- order book ---------- */
-.rx-mk .mk-ob__buy .rx-yes,.rx-mk .mk-ob__buy .rx-no{padding:0 10px}
 .rx-mk .mkb-ob-prices{display:flex;gap:8px;min-width:0}
 .rx-mk .mkb-ob-prices > span{flex:1 1 0;min-width:0;display:inline-flex;align-items:center;justify-content:center;gap:6px;height:34px;padding:0 10px;
   border-radius:10px;border:1px solid var(--rx-line);background:rgba(0,0,0,.35);font-size:13px;font-weight:600}
 .rx-mk .mkb-ob-prices .is-yes{color:var(--rx-up);border-color:var(--rx-up-line);background:var(--rx-up-tint)}
 .rx-mk .mkb-ob-prices .is-no{color:var(--rx-down);border-color:var(--rx-down-line);background:var(--rx-down-tint)}
-.rx-mk .mkb-ob-prices .rx-num{flex:none}
 .rx-mk .mkb-ob-note{margin:0 0 6px;padding:6px 16px 8px;line-height:1.5}
 .rx-mk .mkb-ob-note b{font-weight:600;color:var(--rx-text-2)}
 
