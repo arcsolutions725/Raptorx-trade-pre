@@ -266,15 +266,15 @@ body.is-resizing-y,body.is-resizing-y *{cursor:row-resize !important}
   .rx-screener[data-token-layout] .main-content-shrink{width:100% !important}
   .rx-screener[data-token-layout] [data-rx-sidebar]{position:absolute;top:var(--rx-tk-top,190px);bottom:var(--rx-tk-bottom,46px);right:0;height:auto;max-height:none;z-index:20;border-top:0}
   .rx-screener[data-token-layout] [data-rx-sidebar] > .rx-side__scroll{height:100%;max-height:none}
-  .rx-screener[data-token-layout] .rx-tk__chart{transition:margin-right .5s var(--rx-ease)}
-  .rx-screener[data-token-layout][data-sidebar-open] .rx-tk__chart{margin-right:var(--rx-sb-w)}
-  .rx-screener[data-token-layout] .rx-tk.is-expanded > .rx-tk__chart{margin-right:0}
+  .rx-screener[data-token-layout] .rx-tk__main{transition:margin-right .5s var(--rx-ease)}
+  .rx-screener[data-token-layout][data-sidebar-open] .rx-tk__main{margin-right:var(--rx-sb-w)}
+  .rx-screener[data-token-layout] .rx-tk.is-expanded > .rx-tk__main{margin-right:0}
 }
 /* the header keeps Enter the Exchange on the token page (it only gave way to the 700px Rex Pilot column) */
 @media (min-width:1024px) and (max-width:1599px){
   .rx-screener[data-token-layout] .main-content-shrink .rx-header .rx-btn--exchange{display:inline-flex !important}
 }
-body.is-resizing .rx-screener .rx-tk__chart{transition:none}
+body.is-resizing .rx-screener .rx-tk__main{transition:none}
 
 /* while a line is dragged (body.is-resizing, rexmarkets/.../shared/dragResize.ts): no width animation, no text
    selection, the resize cursor everywhere, and the chart iframe does not swallow the pointer */

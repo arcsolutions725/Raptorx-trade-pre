@@ -30,6 +30,7 @@ import {
   REX_SCREENER_EXCHANGE_HREF,
   setShellRewards,
   type RxShellActionDetail,
+  SCREENER_CHAIN_EYEBROW,
 } from "@/components/ui/layout/shellActions";
 import { markClawV5ScrollToInput } from "@/lib/clawV5/scrollIntent";
 // Daily missions + Leaderboard buttons: phone header icons (here) and the desktop dock (Footer)
@@ -59,16 +60,6 @@ interface RexHeaderProps {
   description?: string;
   mobileMenuButton?: React.ReactNode;
 }
-
-const SCREENER_CHAIN_EYEBROW: Record<string, string> = {
-  base: "Base",
-  robinhood: "Robinhood",
-  ethereum: "Ethereum",
-  solana: "Solana",
-  bsc: "BNB Chain",
-  monad: "Monad",
-  all: "All chains",
-};
 
 /** Account button initials ("Admin0000" → "AD"); falls back to the user icon. */
 function initialsOf(name?: string | null): string {

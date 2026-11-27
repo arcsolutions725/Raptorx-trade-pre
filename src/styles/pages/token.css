@@ -300,6 +300,182 @@
 .rx-tk__body iframe {
   display: block;
 }
+
+/* ---------- chart + trades column (design token.html .tk-main, terminal layout) ---------- */
+.rx-tk__main {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rx-tk__main.has-trades > .rx-tk__chart {
+  flex: 0 0 clamp(220px, var(--rx-chart-h, 64%), calc(100% - 120px));
+}
+.rx-tk__body.is-candles {
+  background: transparent;
+}
+/* the 1px line between chart and trades is the drag handle (design pages.css body.terminal .gutter--y) */
+.rx-tk__gutter {
+  position: relative;
+  flex: 0 0 1px;
+  z-index: 8;
+  background: var(--rx-line);
+  cursor: row-resize;
+  touch-action: none;
+  outline: none;
+  transition: background 0.15s, box-shadow 0.15s;
+}
+.rx-tk__gutter::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: -5px;
+  height: 11px;
+}
+.rx-tk__gutter:hover,
+.rx-tk__gutter:focus-visible,
+.rx-tk__gutter.is-active {
+  background: var(--rx-gold);
+  box-shadow: 0 0 10px rgba(255, 184, 0, 0.45);
+}
+.rx-tk__trades {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+.rx-tk__head .rx-seg {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+}
+.rx-tk__head a.rx-eyebrow {
+  text-decoration: none;
+  transition: color 0.12s;
+}
+.rx-tk__head a.rx-eyebrow:hover {
+  color: var(--rx-text-2);
+}
+.rx-tk__tbody {
+  position: relative;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  background: #0a0908;
+}
+/* design css/token.css .trades */
+.rx-tk__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--rx-mono);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+.rx-tk__table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: 9px 12px;
+  text-align: right;
+  white-space: nowrap;
+  background: #0a0908;
+  color: var(--rx-text-3);
+  font-weight: 500;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--rx-line);
+}
+.rx-tk__table td {
+  padding: 9px 12px;
+  text-align: right;
+  white-space: nowrap;
+  color: var(--rx-text-2);
+  border-bottom: 1px solid rgba(36, 36, 36, 0.5);
+}
+.rx-tk__table :is(th, td):is(:first-child, :nth-child(2)) {
+  text-align: left;
+}
+.rx-tk__table :is(th, td):first-child {
+  padding-left: 16px;
+}
+.rx-tk__table :is(th, td):last-child {
+  padding-right: 16px;
+}
+.rx-tk__table .is-up {
+  color: var(--rx-up);
+}
+.rx-tk__table .is-down {
+  color: var(--rx-down);
+}
+.rx-tk__table a {
+  color: var(--rx-text);
+  text-decoration: none;
+}
+.rx-tk__table a:hover {
+  text-decoration: underline;
+}
+.rx-tk__table tr.is-current td {
+  background: rgba(255, 184, 0, 0.04);
+}
+.rx-tk__tag {
+  display: inline-block;
+  margin-left: 8px;
+  padding: 1px 6px;
+  border-radius: 5px;
+  border: 1px solid rgba(255, 184, 0, 0.35);
+  color: var(--rx-gold);
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  vertical-align: 1px;
+}
+.rx-tk__note {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 96px;
+  padding: 24px 16px;
+  font-size: 13px;
+  color: var(--rx-text-2);
+}
+/* full screen: the chart alone */
+.rx-tk.is-expanded .rx-tk__gutter,
+.rx-tk.is-expanded .rx-tk__trades {
+  display: none;
+}
+.rx-tk.is-expanded .rx-tk__main > .rx-tk__chart {
+  flex: 1 1 0;
+}
+
+/* ---------- candles (tokenchart/CandleChart.tsx: TradingView Lightweight Charts in the design's
+   chart style, design js/chart.js RXChart.candles). The chart reads its font from this box. ---------- */
+.rx-cc {
+  position: absolute;
+  inset: 0;
+  font-family: var(--rx-mono);
+}
+.rx-cc__legend {
+  position: absolute;
+  left: 12px;
+  top: 8px;
+  z-index: 3;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  max-width: calc(100% - 120px);
+  font-family: var(--rx-mono);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--rx-text-3);
+  pointer-events: none;
+}
+.rx-cc__legend b {
+  font-weight: 500;
+}
 .rx-tk__loading {
   position: absolute;
   inset: 0;
@@ -431,7 +607,52 @@
   .rx-tk.is-expanded {
     overflow: hidden;
   }
-  .rx-tk.is-expanded > .rx-tk__chart {
+  .rx-tk.is-expanded .rx-tk__chart {
+    flex: 1 1 0;
+    height: auto;
+  }
+  /* chart and trades stack and the view scrolls (design css/token.css phones) */
+  .rx-tk__main {
+    flex: none;
+  }
+  .rx-tk__main:not(.is-embed) > .rx-tk__chart {
+    flex: none;
+    height: auto;
+  }
+  .rx-tk__main:not(.is-embed) .rx-tk__body {
+    flex: none;
+    height: clamp(300px, 42vh, 520px);
+  }
+  .rx-tk__gutter {
+    display: none;
+  }
+  .rx-tk__trades {
+    flex: none;
+    border-top: 1px solid var(--rx-line);
+  }
+  .rx-tk__tbody {
+    flex: none;
+    overflow: visible;
+    overflow-x: auto;
+  }
+  .rx-tk__table th {
+    position: static;
+  }
+  .rx-tk__table--trades :is(th, td):is(:nth-child(4), :nth-child(6)) {
+    display: none;
+  }
+  /* the view scrolls on phones: the latest 30 trades, not a page of 100 */
+  .rx-tk__table--trades tbody tr:nth-child(n + 31) {
+    display: none;
+  }
+  .rx-tk__head .rx-seg--mono .rx-seg__item {
+    padding: 0 8px;
+  }
+  .rx-tk.is-expanded .rx-tk__main {
+    flex: 1 1 0;
+    min-height: 0;
+  }
+  .rx-tk.is-expanded .rx-tk__main:not(.is-embed) .rx-tk__body {
     flex: 1 1 0;
     height: auto;
   }

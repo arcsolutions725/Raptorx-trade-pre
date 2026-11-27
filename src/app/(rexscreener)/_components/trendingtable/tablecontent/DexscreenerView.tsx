@@ -1,10 +1,28 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState, useEffect, useRef, useMemo, useLayoutEffect } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  useMemo,
+  useLayoutEffect,
+  type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type PointerEvent as ReactPointerEvent,
+} from "react";
 import Image from "next/image";
+import dynamic from "next/dynamic";
 import clsx from "clsx";
 import { dexDisplayName } from "@/lib/screenerFrames";
+import { fetchPoolCandles, gtNetwork } from "@/lib/api/geckoterminal";
+import {
+  loadSize,
+  resizeKey,
+  saveSize,
+  startResizeDrag,
+} from "@/app/rexmarkets/_components/RexMarketsReport/shared/dragResize";
+import TokenTradesPanel from "../../tokenchart/TokenTradesPanel";
 import { useQuery } from "@tanstack/react-query";
 import copy from "copy-to-clipboard";
 import { usePrivy } from "@privy-io/react-auth";
@@ -40,6 +58,17 @@ import {
 } from "./tokenMeta";
 import "@/styles/pages/token.css";
 
+/** TradingView Lightweight Charts loads with the token page, not with the token list. */
+const CandleChart = dynamic(() => import("../../tokenchart/CandleChart"), {
+  ssr: false,
+  loading: () => (
+    <div className="rx-tk__loading" role="status">
+      <span className="rx-spin text-rx-gold" aria-hidden />
+      <span>Loading chart…</span>
+    </div>
+  ),
+});
+
 type DexscreenerViewProps = {
   token: TrendingToken;
   tokenAddress: string;
@@ -54,6 +83,10 @@ type DexscreenerViewProps = {
 const EMBED_CHART_INTERVAL = "15";
 /** The same interval as the chart head shows it (design token.html: "on Aerodrome · 15m"). */
 const EMBED_CHART_INTERVAL_LABEL = "15m";
+/** Our own candles use the same 15m interval. */
+const CANDLE_MINUTES = 15;
+/** Saved chart height above the trades (design token.js gTrades). */
+const CHART_H_KEY = "tk-chart-h";
 
 /** Small inline icons (RaptorX design sprite: i-chevr, i-copy, i-check, i-scan, i-expand, i-min). */
 function Ico({ d, size = 13, w = 2 }: { d: string; size?: number; w?: number }) {
@@ -172,6 +205,85 @@ export default function DexscreenerView({
     !rowPairAddress && dexPairFetching && !dexPairError && !dexPair;
   const src = `https://dexscreener.com/${embedChain}/${embedTarget}?${params.toString()}`;
 
+  /**
+   * The chart (design token.html): our own candles for the same pool, from GeckoTerminal's free API.
+   * A chain or pool it doesn't cover, or no data at all, falls back to the DexScreener embed.
+   */
+  const gtNet = gtNetwork(embedChain);
+  const chartPool = rowPairAddress || dexPair?.pairAddress || undefined;
+  const candlesQuery = useQuery({
+    queryKey: ["gt-candles", gtNet, chartPool, tokenAddress, CANDLE_MINUTES],
+    queryFn: ({ signal }) =>
+      fetchPoolCandles(
+        gtNet as string,
+        chartPool as string,
+        tokenAddress,
+        { minutes: CANDLE_MINUTES, limit: 300 },
+        signal,
+      ),
+    enabled: Boolean(gtNet && chartPool && tokenAddress),
+    staleTime: 30_000,
+    refetchInterval: 60_000,
+    retry: 1,
+  });
+  const candles = candlesQuery.data;
+  const useEmbed =
+    !awaitingDexPair &&
+    (!gtNet ||
+      !chartPool ||
+      (candlesQuery.isError && !candles?.length) ||
+      (candlesQuery.isSuccess && (candles?.length ?? 0) < 2));
+  const chartLoading = !useEmbed && (awaitingDexPair || !candles?.length);
+  const showTrades = !useEmbed && Boolean(gtNet && chartPool);
+
+  /**
+   * Chart / trades split (design token.js gTrades): drag the line between them, arrow keys
+   * (Shift = bigger steps), Home or double-click resets. Saved per viewer.
+   */
+  const chartSecRef = useRef<HTMLElement>(null);
+  const [chartH, setChartH] = useState<number | null>(null);
+  useEffect(() => {
+    setChartH(loadSize(CHART_H_KEY));
+  }, []);
+  const chartHBounds = () => ({
+    min: 220,
+    max: Math.max(260, (chartRef.current?.clientHeight ?? 0) - 120),
+  });
+  const applyChartH = (v: number | null) => {
+    if (v == null) chartRef.current?.style.removeProperty("--rx-chart-h");
+    setChartH(v);
+    saveSize(CHART_H_KEY, v);
+  };
+  const onGutterDown = (e: ReactPointerEvent<HTMLDivElement>) => {
+    const main = chartRef.current;
+    const sec = chartSecRef.current;
+    if (!main || !sec) return;
+    const start = sec.getBoundingClientRect().height;
+    const { min, max } = chartHBounds();
+    let next = start;
+    startResizeDrag(
+      e,
+      "y",
+      (d) => {
+        next = Math.round(Math.max(min, Math.min(max, start + d)));
+        main.style.setProperty("--rx-chart-h", `${next}px`);
+      },
+      (moved) => {
+        if (moved) applyChartH(next);
+      },
+    );
+  };
+  const onGutterKey = (e: ReactKeyboardEvent<HTMLDivElement>) => {
+    const k = resizeKey(e, "ArrowDown", "ArrowUp");
+    if (k == null) return;
+    e.preventDefault();
+    if (k === "reset") return applyChartH(null);
+    const sec = chartSecRef.current;
+    if (!sec) return;
+    const { min, max } = chartHBounds();
+    applyChartH(Math.round(Math.max(min, Math.min(max, sec.getBoundingClientRect().height + k))));
+  };
+
   const explorerUrl =
     chain === "base"
       ? `https://basescan.org/token/${token?.tokenAddress}`
@@ -223,7 +335,7 @@ export default function DexscreenerView({
    * --rx-tk-top / --rx-tk-bottom (styles/pages/screener-side.css).
    */
   const viewRef = useRef<HTMLDivElement>(null);
-  const chartRef = useRef<HTMLElement>(null);
+  const chartRef = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
     const view = viewRef.current;
     const chart = chartRef.current;
@@ -555,7 +667,17 @@ export default function DexscreenerView({
           </div>
         </div>
 
-        <section ref={chartRef} className="rx-tk__chart" aria-label="Price chart">
+        {/* Chart and trades (design token.html .tk-main): the chart on top, the line under it drags to
+            resize, trades / liquidity below. The DexScreener fallback (chart with its own trades)
+            takes the whole column. */}
+        <div
+          ref={chartRef}
+          className={clsx("rx-tk__main", useEmbed && "is-embed", showTrades && "has-trades")}
+          style={
+            chartH != null ? ({ "--rx-chart-h": `${chartH}px` } as CSSProperties) : undefined
+          }
+        >
+        <section ref={chartSecRef} className="rx-tk__chart" aria-label="Price chart">
           {/* design token.html: "SOL / USDC  on Aerodrome · 15m" — the pool the chart shows */}
           <div className="rx-tk__head">
             <b>
@@ -566,7 +688,19 @@ export default function DexscreenerView({
               {dexName ? `on ${dexName} · ` : ""}
               {EMBED_CHART_INTERVAL_LABEL}
             </span>
-            <span className="rx-eyebrow">Chart by DexScreener</span>
+            {useEmbed || !gtNet || !chartPool ? (
+              <span className="rx-eyebrow">Chart by DexScreener</span>
+            ) : (
+              // design token.html; TradingView's Lightweight Charts licence asks for this credit and link
+              <a
+                className="rx-eyebrow"
+                href="https://www.tradingview.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                Chart by TradingView
+              </a>
+            )}
             {/* `group` + `relative` anchor the tooltip; no native `title` here or
                 the browser would draw its own tooltip on top of ours. */}
             <div className="group relative shrink-0">
@@ -609,14 +743,14 @@ export default function DexscreenerView({
             </div>
           </div>
 
-          {/* DexScreener expects the liquidity pair address in the path, not the token contract. */}
-          <div className="rx-tk__body">
-            {awaitingDexPair ? (
+          <div className={clsx("rx-tk__body", !useEmbed && "is-candles")}>
+            {chartLoading ? (
               <div className="rx-tk__loading" role="status">
                 <span className="rx-spin text-rx-gold" aria-hidden />
                 <span>Loading chart…</span>
               </div>
-            ) : (
+            ) : useEmbed ? (
+              // DexScreener expects the liquidity pair address in the path, not the token contract.
               <iframe
                 key={src}
                 src={src}
@@ -625,9 +759,35 @@ export default function DexscreenerView({
                 loading="eager"
                 allow="clipboard-write"
               />
+            ) : (
+              <CandleChart
+                candles={candles ?? []}
+                label={`${displaySymbol} price, ${CANDLE_MINUTES}-minute candles`}
+              />
             )}
           </div>
         </section>
+        {showTrades && gtNet && chartPool ? (
+          <>
+            <div
+              className="rx-tk__gutter"
+              role="separator"
+              aria-orientation="horizontal"
+              aria-label="Resize chart and trades"
+              tabIndex={0}
+              onPointerDown={onGutterDown}
+              onDoubleClick={() => applyChartH(null)}
+              onKeyDown={onGutterKey}
+            />
+            <TokenTradesPanel
+              network={gtNet}
+              pool={chartPool}
+              token={tokenAddress}
+              symbol={displaySymbol}
+            />
+          </>
+        ) : null}
+        </div>
       </div>
 
       {/* Explorer Modal */}

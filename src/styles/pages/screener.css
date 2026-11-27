@@ -55,6 +55,18 @@
 .rx-screener:has(.rx-rp-pagehead) .rx-page-head:not(.rx-rp-pagehead) {
   display: none;
 }
+/* The list's own head (ScreenerPageHead) sits in the list's scroll area with the toolbar, so both
+   scroll away with the rows like the design's page; the Header's copy steps aside. */
+.rx-screener:has(.rx-list-pagehead) .rx-page-head:not(.rx-list-pagehead):not(.rx-rp-pagehead) {
+  display: none;
+}
+@media (min-width: 768px) {
+  /* the table frame already keeps the gutter */
+  .rx-screener .rexscreener-trending-main-scroll > .rx-page-head {
+    padding-left: 0;
+    padding-right: 0;
+  }
+}
 .rx-screener .rx-rp-crumbs {
   display: flex;
   align-items: center;

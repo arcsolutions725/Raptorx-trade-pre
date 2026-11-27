@@ -36,6 +36,17 @@ export const REX_SCREENER_EXCHANGE_HREF = `${REX_SCREENER_ALL_HREF}?${REX_SCREEN
  * "Pump Reports" pages, design/js/universal.js PAGES). The list opens the view when it loads with
  * `?reports=golden|pump`, or in place through the event when it is already on screen.
  */
+/** Chain names for the RexScreener eyebrow ("RexScreener · Base"). */
+export const SCREENER_CHAIN_EYEBROW: Record<string, string> = {
+  base: "Base",
+  robinhood: "Robinhood",
+  ethereum: "Ethereum",
+  solana: "Solana",
+  bsc: "BNB Chain",
+  monad: "Monad",
+  all: "All chains",
+};
+
 export type ScreenerReportsType = "golden" | "pump";
 export const REX_SCREENER_REPORTS_PARAM = "reports";
 export const REX_SCREENER_REPORTS_EVENT = "rx:screener-reports";

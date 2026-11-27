@@ -57,6 +57,7 @@ import { hrefForScreenerChain } from "@/lib/rexscreenerRoutes";
 import {
   REX_SCREENER_REPORTS_EVENT,
   REX_SCREENER_REPORTS_PARAM,
+  SCREENER_CHAIN_EYEBROW,
   requestShellAction,
   type ScreenerReportsType,
 } from "@/components/ui/layout/shellActions";
@@ -779,6 +780,24 @@ function ReportsPageHead({
   );
 }
 
+/**
+ * The list's page head (design/screener.html .page-head): inside the list's scroll area so it scrolls
+ * away with the toolbar. Replaces the Header's head (screener.css hides that one while this is mounted).
+ */
+function ScreenerPageHead({ chain }: { chain: string }) {
+  return (
+    <div className="rx-page-head rx-list-pagehead">
+      <div className="rx-page-head__title">
+        <span className="rx-eyebrow">
+          RexScreener · {SCREENER_CHAIN_EYEBROW[chain] ?? "All chains"}
+        </span>
+        <h1>Market overview</h1>
+        <p>Live tokens, read in real time by Claw AI 5.0.</p>
+      </div>
+    </div>
+  );
+}
+
 /** Timeframe (design/screener.html #frames): the change and volume columns follow it. */
 function TimeframeSeg({
   value,
@@ -902,6 +921,16 @@ export function TrendingTableContent({
 
   const topScrollRef = useRef<HTMLDivElement | null>(null);
   const mainScrollRef = useRef<HTMLDivElement | null>(null);
+  /** The toolbar above the table (inside the scroll area): a new page scrolls back to just under it. */
+  const toolbarRef = useRef<HTMLDivElement | null>(null);
+  const frameRef = useRef<HTMLDivElement | null>(null);
+  const scrollToTableTop = () => {
+    const main = mainScrollRef.current;
+    const bar = toolbarRef.current;
+    if (!main) return;
+    const top = bar ? bar.offsetTop + bar.offsetHeight : 0;
+    if (main.scrollTop > top) main.scrollTo({ top, behavior: "smooth" });
+  };
   /** Horizontal scroll only (nested under vertical main) — fixes iOS biaxial scroll sticking. */
   const horizScrollRef = useRef<HTMLDivElement | null>(null);
   const headerContentRef = useRef<HTMLDivElement | null>(null);
@@ -1791,6 +1820,36 @@ export function TrendingTableContent({
   // prevent scroll feedback loops
   const syncingFrom = useRef<"top" | "horiz" | null>(null);
 
+  /**
+   * The head and toolbar scroll with the rows, so the table's top moves: keep it on the frame as
+   * --rx-list-top for the loaders and messages that cover the table.
+   */
+  useEffect(() => {
+    const frame = frameRef.current;
+    const main = mainScrollRef.current;
+    const bar = toolbarRef.current;
+    if (!frame || !main || !bar) return;
+    let raf = 0;
+    const sync = () => {
+      raf = 0;
+      const top = main.offsetTop + bar.offsetTop + bar.offsetHeight - main.scrollTop;
+      frame.style.setProperty("--rx-list-top", `${Math.max(main.offsetTop, Math.round(top))}px`);
+    };
+    const onScroll = () => {
+      if (!raf) raf = requestAnimationFrame(sync);
+    };
+    sync();
+    main.addEventListener("scroll", onScroll, { passive: true });
+    const ro = new ResizeObserver(sync);
+    ro.observe(bar);
+    ro.observe(main);
+    return () => {
+      main.removeEventListener("scroll", onScroll);
+      ro.disconnect();
+      if (raf) cancelAnimationFrame(raf);
+    };
+  }, [externalViewingChart, externalTokenForChart?.tokenAddress, goldenReportsOnly, pumpReportsOnly]);
+
   // ---- Measuring ----
   const measure = useCallback(() => {
     const content = contentRef.current;
@@ -2022,107 +2081,24 @@ export function TrendingTableContent({
         desktopPlacement="right"
       />
 
-      {reportsMode ? (
-        <ReportsPageHead
-          type={goldenReportsOnly ? "golden" : "pump"}
-          listHref={hrefForScreenerChain(screenerChain)}
-          onBackToList={leaveReports}
-        />
-      ) : null}
-
-      {/* Toolbar: search + Golden/Pump on the left, count + chain switcher on the right */}
-      <div className="mx-[var(--rx-gutter)] flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-b border-rx-line-strong pb-3 pt-4 md:pt-[22px]">
-        <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 md:w-auto">
-          {/* Golden / Pump Reports: the same box filters the open list in place instead of
-              running a screener search (which would leave the view). */}
-          <TokenSearchBar
-            key={`${reportsMode ? "reports" : "screener"}-${searchBarKey}`}
-            mode={reportsMode ? "filter" : "search"}
-            onSearch={handleSearch}
-            onClear={reportsMode ? () => setReportsFilter("") : handleClearSearch}
-            onValueChange={reportsMode ? setReportsFilter : undefined}
-            defaultValue={reportsMode ? reportsFilter : ""}
-            placeholder={
-              reportsMode
-                ? "Search by name, ticker or CA"
-                : "Filter by name or ticker"
-            }
-            label={
-              reportsMode
-                ? `Search ${goldenReportsOnly ? "Golden" : "Pump"} Reports by name, ticker or contract address`
-                : "Search tokens by name, ticker or contract address"
-            }
-            inputRef={searchInputRef}
-            className="md:w-[270px] md:flex-none min-[1536px]:w-[300px]"
-          />
-          <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto">
-            <ReportShortcut
-              variant="golden"
-              active={goldenReportsOnly}
-              pillRef={goldenReportsPillDesktopRef}
-              buttonRef={goldenReportImageBtnDesktopRef}
-              onPointerDown={handleGoldenButtonPointerDown}
-              onClick={handleGoldenButtonClick}
-              onPointerMove={(e) =>
-                setGoldenInfoOpenFromPointer(
-                  e.clientX,
-                  e.currentTarget,
-                  setGoldenReportsInfoOpen,
-                )
-              }
-              onPointerLeave={() => setGoldenReportsInfoOpen(false)}
-              describedBy={
-                goldenReportsInfoOpen ? goldenReportsTooltipId : undefined
-              }
-            />
-            <ReportShortcut
-              variant="pump"
-              active={pumpReportsOnly}
-              pillRef={pumpReportsPillDesktopRef}
-              buttonRef={pumpReportImageBtnDesktopRef}
-              onPointerDown={handlePumpButtonPointerDown}
-              onClick={handlePumpButtonClick}
-              onPointerMove={(e) =>
-                setGoldenInfoOpenFromPointer(
-                  e.clientX,
-                  e.currentTarget,
-                  setPumpReportsInfoOpen,
-                )
-              }
-              onPointerLeave={() => setPumpReportsInfoOpen(false)}
-              describedBy={
-                pumpReportsInfoOpen ? pumpReportsTooltipId : undefined
-              }
-            />
-          </div>
-        </div>
-
-        <div className="flex w-full min-w-0 items-center gap-3 md:ml-auto md:w-auto">
-          {tableCountLabel ? (
-            <div
-              className="rx-num hidden shrink-0 text-[13px] text-rx-text-3 md:block"
-              aria-live="polite"
-            >
-              {tableCountLabel}
-            </div>
-          ) : null}
-          {/* Timeframe (design/screener.html): no chain buttons here; the chain lists are in the
-              header search ("RexScreener · Solana", …) and at /base, /solana, … */}
-          {reportsMode ? null : <TimeframeSeg value={frame} onChange={setFrame} />}
-        </div>
-      </div>
 
       <div
+        ref={frameRef}
         className="rexscreener-trending-table-frame relative flex min-h-0 flex-1 flex-col overflow-hidden touch-manipulation md:mx-[var(--rx-gutter)]"
         style={pinStyle}
       >
+        {/* Loaders and messages cover the table only: from the toolbar's bottom (--rx-list-top) down */}
         {isPageLoading &&
           !goldenReportsOnly &&
           !pumpReportsOnly &&
-          !deepLinkBlocksTrendingLoaders && <PageLoaderOverlay />}
+          !deepLinkBlocksTrendingLoaders && (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[var(--rx-list-top,0px)] z-20">
+              <PageLoaderOverlay />
+            </div>
+          )}
 
         {pendingChartToken && (
-          <div className="absolute inset-0 z-[19] flex items-center justify-center bg-[rgba(7,7,7,0.6)] backdrop-blur-[2px]">
+          <div className="absolute inset-x-0 bottom-0 top-[var(--rx-list-top,0px)] z-[19] flex items-center justify-center bg-[rgba(7,7,7,0.6)] backdrop-blur-[2px]">
             <div className="flex items-center gap-3 text-sm text-rx-text-2" role="status">
               <span className="rx-spin text-rx-gold" aria-hidden />
               <span>Loading chart…</span>
@@ -2131,7 +2107,7 @@ export function TrendingTableContent({
         )}
 
         {deepLinkTableOverlay !== null && !suppressDeepLinkTableOverlay && (
-          <div className="absolute inset-0 z-[18] flex items-center justify-center bg-[rgba(7,7,7,0.6)] backdrop-blur-[2px]">
+          <div className="absolute inset-x-0 bottom-0 top-[var(--rx-list-top,0px)] z-[18] flex items-center justify-center bg-[rgba(7,7,7,0.6)] backdrop-blur-[2px]">
             {deepLinkTableOverlay === "loading" && (
               <div className="flex items-center gap-3 text-sm text-rx-text-2" role="status">
                 <span className="rx-spin text-rx-gold" aria-hidden />
@@ -2156,7 +2132,7 @@ export function TrendingTableContent({
         )}
 
         {showCenteredOverlay && (
-          <div className="pointer-events-none absolute inset-0 z-20 flex items-center justify-center">
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 top-[var(--rx-list-top,0px)] z-20 flex items-center justify-center">
             <div className="pointer-events-auto text-sm text-rx-text-2">
               {goldenReportsOnly && goldenTableStillLoading && (
                 <div className="flex items-center gap-3" role="status">
@@ -2250,6 +2226,103 @@ export function TrendingTableContent({
             overscrollBehaviorY: "contain",
           }}
         >
+          {/* Page head and toolbar scroll away with the rows (design/screener.html: the whole page
+              scrolls); the column header below stays pinned. */}
+          {reportsMode ? (
+            <ReportsPageHead
+              type={goldenReportsOnly ? "golden" : "pump"}
+              listHref={hrefForScreenerChain(screenerChain)}
+              onBackToList={leaveReports}
+            />
+          ) : (
+            <ScreenerPageHead chain={screenerChain} />
+          )}
+
+          {/* Toolbar: search + Golden/Pump on the left, count + chain switcher on the right */}
+          <div
+            ref={toolbarRef}
+            data-rx-list-toolbar
+            className="mx-[var(--rx-gutter)] flex shrink-0 flex-wrap items-center justify-between gap-x-4 gap-y-2.5 border-b border-rx-line-strong pb-3 pt-4 md:mx-0 md:pt-[22px]"
+          >
+            <div className="flex w-full min-w-0 flex-wrap items-center gap-2.5 md:w-auto">
+              {/* Golden / Pump Reports: the same box filters the open list in place instead of
+                  running a screener search (which would leave the view). */}
+              <TokenSearchBar
+                key={`${reportsMode ? "reports" : "screener"}-${searchBarKey}`}
+                mode={reportsMode ? "filter" : "search"}
+                onSearch={handleSearch}
+                onClear={reportsMode ? () => setReportsFilter("") : handleClearSearch}
+                onValueChange={reportsMode ? setReportsFilter : undefined}
+                defaultValue={reportsMode ? reportsFilter : ""}
+                placeholder={
+                  reportsMode
+                    ? "Search by name, ticker or CA"
+                    : "Filter by name or ticker"
+                }
+                label={
+                  reportsMode
+                    ? `Search ${goldenReportsOnly ? "Golden" : "Pump"} Reports by name, ticker or contract address`
+                    : "Search tokens by name, ticker or contract address"
+                }
+                inputRef={searchInputRef}
+                className="md:w-[270px] md:flex-none min-[1536px]:w-[300px]"
+              />
+              <div className="grid w-full grid-cols-2 gap-2 md:flex md:w-auto">
+                <ReportShortcut
+                  variant="golden"
+                  active={goldenReportsOnly}
+                  pillRef={goldenReportsPillDesktopRef}
+                  buttonRef={goldenReportImageBtnDesktopRef}
+                  onPointerDown={handleGoldenButtonPointerDown}
+                  onClick={handleGoldenButtonClick}
+                  onPointerMove={(e) =>
+                    setGoldenInfoOpenFromPointer(
+                      e.clientX,
+                      e.currentTarget,
+                      setGoldenReportsInfoOpen,
+                    )
+                  }
+                  onPointerLeave={() => setGoldenReportsInfoOpen(false)}
+                  describedBy={
+                    goldenReportsInfoOpen ? goldenReportsTooltipId : undefined
+                  }
+                />
+                <ReportShortcut
+                  variant="pump"
+                  active={pumpReportsOnly}
+                  pillRef={pumpReportsPillDesktopRef}
+                  buttonRef={pumpReportImageBtnDesktopRef}
+                  onPointerDown={handlePumpButtonPointerDown}
+                  onClick={handlePumpButtonClick}
+                  onPointerMove={(e) =>
+                    setGoldenInfoOpenFromPointer(
+                      e.clientX,
+                      e.currentTarget,
+                      setPumpReportsInfoOpen,
+                    )
+                  }
+                  onPointerLeave={() => setPumpReportsInfoOpen(false)}
+                  describedBy={
+                    pumpReportsInfoOpen ? pumpReportsTooltipId : undefined
+                  }
+                />
+              </div>
+            </div>
+
+            <div className="flex w-full min-w-0 items-center gap-3 md:ml-auto md:w-auto">
+              {tableCountLabel ? (
+                <div
+                  className="rx-num hidden shrink-0 text-[13px] text-rx-text-3 md:block"
+                  aria-live="polite"
+                >
+                  {tableCountLabel}
+                </div>
+              ) : null}
+              {/* Timeframe (design/screener.html): no chain buttons here; the chain lists are in the
+                  header search ("RexScreener · Solana", …) and at /base, /solana, … */}
+              {reportsMode ? null : <TimeframeSeg value={frame} onChange={setFrame} />}
+            </div>
+          </div>
           {reportsMode ? (
             <ReportsViewHead
               type={goldenReportsOnly ? "golden" : "pump"}
@@ -2486,38 +2559,44 @@ export function TrendingTableContent({
                       />
                     );
                   })}
-                  {/* Room for the floating Ask Claw button below the last row */}
-                  <div aria-hidden="true" className="hidden h-16 md:block" />
                 </div>
               )}
             </div>
           </div>
+
+          {/* Pager (shared .rx-pgr) at the end of the list, scrolling with it like the design's page;
+              hidden when everything fits on one page. */}
+          {!goldenReportsOnly && !pumpReportsOnly && displayRows.length > 0 ? (
+            <div className="px-[var(--rx-gutter)] py-2.5 md:px-0">
+              <ScreenerPager
+                page={pageIndex}
+                pageSize={pageSize}
+                total={
+                  typeof totalPages === "number"
+                    ? totalPages > 1
+                      ? totalPages * pageSize
+                      : displayRows.length
+                    : undefined
+                }
+                totalPages={totalPages}
+                hasPrev={hasPrev}
+                hasNext={hasNext}
+                onPage={(n) => {
+                  setPageIndex(n);
+                  scrollToTableTop();
+                }}
+                onSize={(n) => {
+                  setPageSize(n);
+                  scrollToTableTop();
+                }}
+              />
+            </div>
+          ) : null}
+          {/* Room for the floating Ask Claw button below the end of the list */}
+          <div aria-hidden="true" className="hidden h-16 md:block" />
         </div>
       </div>
 
-      {/* Pager (shared .rx-pgr): hidden when everything fits on one page */}
-      {!goldenReportsOnly && !pumpReportsOnly ? (
-        displayRows.length > 0 ? (
-          <div className="shrink-0 px-[var(--rx-gutter)] py-2.5">
-            <ScreenerPager
-              page={pageIndex}
-              pageSize={pageSize}
-              total={
-                typeof totalPages === "number"
-                  ? totalPages > 1
-                    ? totalPages * pageSize
-                    : displayRows.length
-                  : undefined
-              }
-              totalPages={totalPages}
-              hasPrev={hasPrev}
-              hasNext={hasNext}
-              onPage={(n) => setPageIndex(n)}
-              onSize={(n) => setPageSize(n)}
-            />
-          </div>
-        ) : null
-      ) : null}
       {/* Golden / Pump: the count lives in the view head, next to the sort. */}
     </div>
   );
