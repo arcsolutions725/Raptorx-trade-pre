@@ -95,6 +95,8 @@ export function mergeScreenerTokenMarket<
     usdPrice?: number;
     pairAddress?: string;
     quoteSymbol?: string;
+    dexWindows?: unknown;
+    dexId?: string;
   },
 >(rows: T[], overlay: T[] | undefined, overlayReady = false): T[] {
   if (!overlayReady) return rows.map(hideBirdeyeMarketFields);
@@ -116,6 +118,9 @@ export function mergeScreenerTokenMarket<
       usdPrice: o.usdPrice,
       pairAddress: o.pairAddress ?? row.pairAddress,
       quoteSymbol: o.quoteSymbol ?? row.quoteSymbol,
+      // the pair's 5m / 1h / 6h / 24h figures (RexScreener timeframes) and its dex
+      dexWindows: o.dexWindows ?? row.dexWindows,
+      dexId: o.dexId ?? row.dexId,
     };
   });
 }

@@ -38,13 +38,36 @@ const TTL_MS = 5_000;
  */
 const FETCH_TIMEOUT_MS = 2_500;
 
+type Window = "5m" | "1h" | "6h" | "24h";
+
 export type DexMarketRow = {
   marketCap?: number;
   usdPrice?: number;
   pairAddress?: string;
   quoteSymbol?: string;
   logo?: string;
+  /** The pair's price change % and USD volume per window (RexScreener timeframes). */
+  windows?: {
+    priceChange?: Partial<Record<Window, number>>;
+    volume?: Partial<Record<Window, number>>;
+  };
+  /** DexScreener dex id of the pair, e.g. "aerodrome" (the token page's chart head). */
+  dexId?: string;
 };
+
+/** DexScreener's m5 / h1 / h6 / h24 blocks → 5m / 1h / 6h / 24h (signed numbers kept). */
+function windowsOf(block: unknown, signed: boolean): Partial<Record<Window, number>> | undefined {
+  if (!block || typeof block !== "object") return undefined;
+  const b = block as Record<string, unknown>;
+  const out: Partial<Record<Window, number>> = {};
+  const map: [string, Window][] = [["m5", "5m"], ["h1", "1h"], ["h6", "6h"], ["h24", "24h"]];
+  for (const [k, w] of map) {
+    const raw = b[k];
+    const n = typeof raw === "string" ? Number(raw) : typeof raw === "number" ? raw : NaN;
+    if (Number.isFinite(n) && (signed || n >= 0)) out[w] = n;
+  }
+  return Object.keys(out).length ? out : undefined;
+}
 
 type Entry = { at: number; row: DexMarketRow | null };
 
@@ -179,6 +202,11 @@ async function fetchBatchInto(
           ? p.quoteToken.symbol
           : undefined,
       logo: imageUrl,
+      windows: {
+        priceChange: windowsOf(p?.priceChange, true),
+        volume: windowsOf(p?.volume, false),
+      },
+      dexId: typeof p?.dexId === "string" ? p.dexId : undefined,
     };
     cache.set(cacheKey(slug, a), { at: now, row });
   }
@@ -283,6 +311,8 @@ export async function applyDexMarketOverlay(
       pairAddress: row.pairAddress ?? it?.pairAddress,
       quoteSymbol: row.quoteSymbol ?? it?.quoteSymbol,
       logo: it?.logo || row.logo,
+      dexWindows: row.windows ?? it?.dexWindows,
+      dexId: row.dexId ?? it?.dexId,
     };
   });
 }

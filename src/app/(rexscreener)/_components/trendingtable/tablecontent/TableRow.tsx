@@ -4,6 +4,11 @@
 import Image from "next/image";
 import { useState, useEffect, useRef } from "react";
 import clsx from "clsx";
+import {
+  frameChange,
+  frameVolume,
+  type ScreenerFrame,
+} from "@/lib/screenerFrames";
 import type { TrendingToken } from "@/hooks/useTrendingTokens";
 import { formatUsd } from "@/utils/format";
 import type { Report } from "@/hooks/useGenerateRexReport";
@@ -100,6 +105,8 @@ type Props = {
   ageLoading?: boolean;
   /** Dex mcap/price overlay still in flight — don't flash Birdeye numbers */
   marketLoading?: boolean;
+  /** The list's timeframe (design #frames): the row's change and volume cells follow it. */
+  frame?: ScreenerFrame;
   /** `card`: Golden / Pump Reports card (design/reports.html) instead of a table row. Same data and handlers. */
   layout?: "row" | "card";
   /** Which report program the card belongs to (badge + layout). */
@@ -166,6 +173,7 @@ export function TableRow({
   usePumpGenerateArt: _usePumpGenerateArt = false,
   ageLoading = false,
   marketLoading = false,
+  frame = "24h",
   layout = "row",
   cardKind = "golden",
   showTrade = false,
@@ -264,6 +272,9 @@ export function TableRow({
 
   const priceChange24h = pct24h(token?.pricePercentChange);
   const volumeChange24h = pct24h(token?.volumePercentChange);
+  /** Table row: change and volume for the list's timeframe (lib/screenerFrames.ts). */
+  const frameChg = token ? frameChange(token, frame) : undefined;
+  const frameVol = token ? frameVolume(token, frame) : undefined;
 
   const lowerChainId = token?.chainId?.toLowerCase();
   const isBnbChain = lowerChainId === "bsc" || token?.chainId === "56";
@@ -944,9 +955,9 @@ export function TableRow({
           )}
         </div>
 
-        {/* 24h change */}
+        {/* Price change over the list's timeframe */}
         <div className={clsx(SCREENER_ORDER.chg, CELL, "rx-num flex min-w-0 justify-end")}>
-          <Token24hChangeBadge changePct24h={priceChange24h} />
+          <Token24hChangeBadge changePct24h={frameChg} />
         </div>
 
         {/* 24h trend */}
@@ -973,21 +984,9 @@ export function TableRow({
           )}
         </div>
 
-        {/* Volume, with the 24h volume change as a multiplier */}
-        <div className={clsx(SCREENER_ORDER.volume, CELL, "rx-num flex flex-col items-end gap-1 text-right")}>
-          <div>{formatUsd(vol)}</div>
-          {volumeTone && volumeChange24h != null ? (
-            <div
-              className={clsx(
-                "text-[11px] leading-none",
-                volumeTone === "up" ? "text-rx-up" : "text-rx-down",
-              )}
-              title={`24h volume change ${volumeChange24h > 0 ? "+" : ""}${volumeChange24h.toFixed(2)}%`}
-            >
-              {volumeTone === "up" ? "+" : "-"}
-              {formatMultiplierMagnitudeFromPercent(volumeChange24h)}X
-            </div>
-          ) : null}
+        {/* Volume over the list's timeframe (design: the figure only) */}
+        <div className={clsx(SCREENER_ORDER.volume, CELL, "rx-num text-right")}>
+          {formatUsd(frameVol)}
         </div>
 
         {/* Liquidity */}

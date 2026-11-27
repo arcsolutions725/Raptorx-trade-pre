@@ -379,6 +379,18 @@
   }
 }
 
+/* ---------- desktop: the design's terminal spacing (pages.css body.terminal: crumbs and token bar
+   20px from the edge, the chart head 16px) ---------- */
+@media (min-width: 1024px) {
+  .rx-tk {
+    --rx-gutter: 20px;
+  }
+  .rx-tk__head {
+    padding-left: 16px;
+    padding-right: 16px;
+  }
+}
+
 /* ---------- phones ---------- */
 /* The view scrolls: token bar first, then the chart at the view's height minus the actions row,
    so once scrolled down Full Report / What's New stay in sight above the chart (and give a

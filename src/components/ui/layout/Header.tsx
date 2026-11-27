@@ -15,6 +15,7 @@ import { DailyTasksPopup } from "@/components/leaderboard/DailyTaskPopup";
 import { LeaderboardModal } from "@/components/leaderboard/LeaderboradModal";
 import type { DailyTasksStatus } from "@/app/api/daily-tasks/route";
 import PredictionsTicker from "@/components/ui/layout/PredictionsTicker";
+import UniversalSearch from "@/components/ui/layout/UniversalSearch";
 import { User, ArrowRight } from "lucide-react";
 import { useTopbar } from "@/contexts/TopbarContext";
 import { useSolanaWalletAddress } from "@/hooks/useSolanaWalletAddress";
@@ -482,24 +483,6 @@ export default function RexHeader({
       window.removeEventListener(RX_SHELL_ACTION_EVENT, onShellAction);
   }, [authenticated, handleExchangeClick]);
 
-  const clawAiHeaderButton = (
-    <button
-      type="button"
-      className="rx-btn rx-btn--claw rx-btn--s shrink-0"
-      onClick={handleHistoryClick}
-      aria-label="Claw AI 5.0: report history"
-    >
-      <Image
-        src="/images/claw-logo-96.webp"
-        alt=""
-        width={20}
-        height={20}
-        className="claw-ico"
-      />
-      Claw AI 5.0
-    </button>
-  );
-
   const accountInitials = initialsOf(currentUser?.username);
 
   return (
@@ -598,6 +581,12 @@ export default function RexHeader({
               </>
             ) : null}
 
+            {/* Universal search: the field on wide headers, an icon button + sheet on narrow ones (⌘K) */}
+            <UniversalSearch
+              onExchange={handleExchangeClick}
+              onOpenOrders={() => openOrders("positions")}
+            />
+
             <button
               type="button"
               className="rx-btn rx-btn--exchange"
@@ -649,7 +638,8 @@ export default function RexHeader({
         </header>
 
         {/* Rex Predictions (list + market pages) and token pages have no page head in the prototype:
-            market and token pages bring their own (breadcrumbs, title, Claw AI 5.0 toggle) */}
+            market and token pages bring their own (breadcrumbs, title). The screener head has no
+            buttons (design/screener.html .page-head). */}
         {!isClawV5Page && !isRexMarketsPage && !isScreenerTokenPage && (
           <div className="rx-page-head">
             <div className="rx-page-head__title">
@@ -658,9 +648,6 @@ export default function RexHeader({
               ) : null}
               <h1>{displayTitle}</h1>
               <p>{displayDescription}</p>
-            </div>
-            <div className="rx-page-head__actions">
-              {clawAiHeaderButton}
             </div>
           </div>
         )}

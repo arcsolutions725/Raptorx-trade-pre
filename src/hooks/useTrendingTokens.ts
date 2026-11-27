@@ -43,10 +43,21 @@ export type TrendingToken = {
   sellTransactions?: Record<string, number>;
   buyers?: Record<string, number>;
   sellers?: Record<string, number>;
+  /**
+   * The DexScreener pair's windows (the pair the row's mcap / price come from):
+   * price change % and USD volume for 5m / 1h / 6h / 24h — the list's timeframes.
+   */
+  dexWindows?: {
+    priceChange?: Partial<Record<"5m" | "1h" | "6h" | "24h", number>>;
+    volume?: Partial<Record<"5m" | "1h" | "6h" | "24h", number>>;
+  };
+  /** DexScreener dex id of that pair (e.g. "aerodrome"). */
+  dexId?: string;
   _rank?: number;
 };
 
-export type SortField = "marketCap" | "volume" | "price" | "age" | "liquidity";
+/** "change": the price change column (sorted by the list for its timeframe, lib/screenerFrames.ts). */
+export type SortField = "marketCap" | "volume" | "price" | "age" | "liquidity" | "change";
 export type SortDirection = "asc" | "desc" | null;
 
 function normalizeArray(payload: unknown): TrendingToken[] {
@@ -101,6 +112,17 @@ export function sortTokens(
     } else if (field === "liquidity") {
       A = a.liquidityUsd ?? 0;
       B = b.liquidityUsd ?? 0;
+    } else if (field === "change") {
+      // 24h price change; other timeframes are sorted by the list (lib/screenerFrames.ts)
+      const ca = a.pricePercentChange?.["24h"];
+      const cb = b.pricePercentChange?.["24h"];
+      const okA = typeof ca === "number" && Number.isFinite(ca);
+      const okB = typeof cb === "number" && Number.isFinite(cb);
+      if (!okA && !okB) return 0;
+      if (!okA) return 1;
+      if (!okB) return -1;
+      A = ca;
+      B = cb;
     }
     return dir === "asc" ? A - B : B - A;
   });
@@ -127,12 +149,20 @@ export function useTrendingTokens(
     search_query?: string;
     search_type?: "ticker" | "address";
   }>,
-  options?: { enabled?: boolean },
+  options?: {
+    enabled?: boolean;
+    /** Sort the table starts with (the screener list: Volume, highest first, like the design). */
+    initialSort?: { field: SortField; dir: "asc" | "desc" };
+  },
 ) {
   const [pageSize, setPageSize] = useState(25);
   const [pageIndex, setPageIndex] = useState(1);
-  const [sortField, setSortField] = useState<SortField | null>(null);
-  const [sortDirection, setSortDirection] = useState<SortDirection>(null);
+  const [sortField, setSortField] = useState<SortField | null>(
+    options?.initialSort?.field ?? null,
+  );
+  const [sortDirection, setSortDirection] = useState<SortDirection>(
+    options?.initialSort?.dir ?? null,
+  );
 
   const isVerified = useMemo(() => {
     if (typeof customBody?.verified_only === "boolean") {

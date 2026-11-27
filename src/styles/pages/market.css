@@ -417,6 +417,9 @@
   .rx-mk-page .mk-sb-edge{display:block;position:absolute;top:0;bottom:0;left:-5px;width:11px;z-index:25;cursor:col-resize;touch-action:none;outline:none}
   .rx-mk-page .mk-sb-edge::after{content:"";position:absolute;top:0;bottom:0;left:5px;width:1px;background:transparent;transition:background .15s,box-shadow .15s}
   .rx-mk-page .mk-sb-edge:hover::after,.rx-mk-page .mk-sb-edge:focus-visible::after,.rx-mk-page .mk-sb-edge.is-active::after{background:var(--rx-gold);box-shadow:0 0 10px rgba(255,184,0,.45)}
+  /* the grip in the middle says "drag me" (design components.css .gutter--x::after) */
+  .rx-mk-page .mk-sb-edge::before{content:"";position:absolute;z-index:1;top:50%;left:50%;width:4px;height:36px;margin:-18px 0 0 -2px;border-radius:3px;background:var(--rx-line-strong);transition:background .15s}
+  .rx-mk-page .mk-sb-edge:hover::before,.rx-mk-page .mk-sb-edge:focus-visible::before,.rx-mk-page .mk-sb-edge.is-active::before{background:var(--rx-gold-hi)}
   /* parked pane tabs on the right edge: keep the market clear of them (design/css/pages.css has-rail) */
   .rx-mk-page .mk-page-main--rail{padding-right:40px}
 }
@@ -427,7 +430,7 @@ body.is-resizing .rx-mk-page .main-content-shrink,body.is-resizing .rx-mk-page #
 body.is-resizing .rx-mk-page{user-select:none;-webkit-user-select:none}
 body.is-resizing-x .rx-mk-page,body.is-resizing-x .rx-mk-page *{cursor:col-resize !important}
 @media (prefers-reduced-motion:reduce){
-  .rx-mk .mk-gutter,.rx-mk-page .mk-sb-edge::after{transition:none}
+  .rx-mk .mk-gutter,.rx-mk-page .mk-sb-edge::after,.rx-mk-page .mk-sb-edge::before{transition:none}
 }
 
 /* ===================== page-level loading / error (.rx-mk-state) ===================== */

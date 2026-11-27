@@ -4,15 +4,17 @@ import {
   SCREENER_ORDER,
   SCREENER_ROW_MIN_W,
 } from "./gridColumns";
+import type { SortField, SortDirection } from "@/hooks/useTrendingTokens";
+import type { ScreenerFrame } from "@/lib/screenerFrames";
 
-// ⬅️ Add "liquidity"
-export type SortField = "marketCap" | "volume" | "price" | "age" | "liquidity";
-export type SortDirection = "asc" | "desc" | null;
+export type { SortField, SortDirection };
 
 interface TableHeaderProps {
   sortField: SortField | null;
   sortDirection: SortDirection;
   onSort: (field: SortField) => void;
+  /** The list's timeframe (design #frames): labels the change column. Default 24h. */
+  frame?: ScreenerFrame;
 }
 
 /** Column label: mono, uppercase, quiet (RaptorX table header). */
@@ -58,6 +60,7 @@ export function TableHeader({
   sortField,
   sortDirection,
   onSort,
+  frame = "24h",
 }: TableHeaderProps) {
   /** The sorted column's header cell carries the direction (the design puts aria-sort on the th;
    *  this grid has no table roles, so the sort buttons' labels announce it instead). */
@@ -125,10 +128,10 @@ export function TableHeader({
       </div>
 
       <div
+        data-sorted={sortedDir("change")}
         className={clsx(TH, SCREENER_ORDER.chg, "justify-end")}
-        title="24h price change (USD)"
       >
-        24h
+        {sortButton("change", frame)}
       </div>
 
       <div className={clsx(TH, SCREENER_ORDER.trend, "justify-end")}>
@@ -156,11 +159,9 @@ export function TableHeader({
         {sortButton("liquidity", "Liquidity")}
       </div>
 
-      <div
-        data-sorted={sortedDir("age")}
-        className={clsx(TH, SCREENER_ORDER.age, "justify-end pr-3.5 md:pr-1")}
-      >
-        {sortButton("age", "Age")}
+      {/* Age is not sortable (design/screener.html) */}
+      <div className={clsx(TH, SCREENER_ORDER.age, "justify-end pr-3.5 md:pr-1")}>
+        Age
       </div>
     </div>
   );

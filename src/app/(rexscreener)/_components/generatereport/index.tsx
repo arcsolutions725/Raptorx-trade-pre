@@ -94,7 +94,7 @@ interface Props {
    */
   onParkBoth?: () => void;
   /** Show one pane from outside (a parked tab): that pane expanded, the other minimized. `seq` makes every request new. */
-  paneRequest?: { pane: SheetPane; seq: number } | null;
+  paneRequest?: { pane: SheetPane | "both"; seq: number } | null;
   /** Phones: the sidebar is a bottom sheet that shows only this pane (prototype .tk-side[data-sheet]). */
   sheetPane?: SheetPane | null;
 }
@@ -325,12 +325,18 @@ export function GenerateRexscreenerReport({
     }
   }, [swapMinimized, contentMinimized, forceShowExchange]);
 
-  // A pane asked for from outside (a parked tab on the right edge): that pane expanded, the other minimized.
+  // Panes asked for from outside: a parked tab on the right edge (that pane expanded, the other
+  // minimized) or a token opening on desktop (both expanded, design/token.html).
   useEffect(() => {
     if (!paneRequest) return;
-    const ex = paneRequest.pane === "exchange";
-    setSwapMinimized(!ex);
-    setContentMinimized(ex);
+    if (paneRequest.pane === "both") {
+      setSwapMinimized(false);
+      setContentMinimized(false);
+    } else {
+      const ex = paneRequest.pane === "exchange";
+      setSwapMinimized(!ex);
+      setContentMinimized(ex);
+    }
     setShowHistory(false);
   }, [paneRequest]);
 
@@ -708,10 +714,12 @@ export function GenerateRexscreenerReport({
       ? ({ "--ex-h": `${clampExH(exH)}px` } as CSSProperties)
       : undefined;
 
+  // .ss-close: the desktop token page has no close (design/token.html: minimize only; minimizing
+  // both parks them as tabs). Phones and the tablet overlay keep it (screener-side.css).
   const closeButton = onClose ? (
     <button
       type="button"
-      className="rx-icon-btn panel-ctl"
+      className="rx-icon-btn panel-ctl ss-close"
       onClick={onClose}
       aria-label="Close sidebar"
       title="Close"
@@ -775,7 +783,11 @@ export function GenerateRexscreenerReport({
     // .rx-pilot (styles/pages/pilot.css) + .rx-ss (styles/pages/screener-side.css):
     // the token page's side column — Exchange on top, Intelligence report below (design/token.html).
     // data-sheet (phones): a bottom sheet that shows only that pane.
-    <div className="rx-pilot rx-ss" data-sheet={sheetPane ?? undefined}>
+    <div
+      className="rx-pilot rx-ss"
+      data-sheet={sheetPane ?? undefined}
+      data-token-view={onParkBoth ? "" : undefined}
+    >
       {!hideHeader && (
         <RexHeader
           onHistoryClick={() => setShowHistory((v) => !v)}
@@ -839,7 +851,7 @@ export function GenerateRexscreenerReport({
       {showHistory && closeButton ? (
         <button
           type="button"
-          className="rx-icon-btn panel-ctl ss-float-close"
+          className="rx-icon-btn panel-ctl ss-float-close ss-close"
           onClick={onClose}
           aria-label="Close sidebar"
           title="Close"

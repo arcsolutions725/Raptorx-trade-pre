@@ -1,0 +1,149 @@
+/* =========================================================
+   RaptorX shell · universal search ("Search tokens, markets or paste address", ⌘K)
+   design/js/universal.js + design/css/app.css ("Universal search": .app-header__search, .us-*)
+   Wide headers: a field in the header with a dropdown under it.
+   Narrow headers (≤1100px, or a header squeezed by an open Rex Pilot sidebar, like the design's
+   body.sb-on rule): an icon button that opens a full-screen search sheet.
+   The dropdown and the sheet are portalled to <body> (the header's backdrop-filter would make it the
+   containing block of position:fixed children), so they are scoped by their own root classes.
+   ========================================================= */
+
+/* the header's own width decides field vs icon button (it shrinks when a sidebar docks beside it) */
+.rx-header { container: rx-header / inline-size; }
+
+/* ---------- header: field ---------- */
+.rx-header .rx-us-field {
+  width: 340px; height: 40px; flex-shrink: 0; cursor: text;
+  transition: border-color .2s, box-shadow .2s, width .3s var(--rx-ease);
+}
+.rx-header .rx-us-field > svg { flex-shrink: 0; color: var(--rx-text-3); }
+.rx-header .rx-us-field .rx-kbd { flex-shrink: 0; line-height: 1.25; white-space: nowrap; }
+.rx-header .rx-us-field.is-open { border-color: var(--rx-gold-line); box-shadow: 0 0 0 4px rgba(255,184,0,.07); }
+.rx-us-field input[type="search"]::-webkit-search-cancel-button,
+.rx-us-sheet input[type="search"]::-webkit-search-cancel-button { filter: invert(.6); cursor: pointer; }
+
+/* ---------- header: icon button (narrow headers) ---------- */
+.rx-header .rx-us-btn { display: none; flex-shrink: 0; }
+
+@media (min-width: 1280px) { .rx-header .rx-us-field.is-open { width: 400px; } }
+@media (min-width: 768px) and (max-width: 1279px) { .rx-header .rx-us-field { max-width: 220px; } }
+@media (max-width: 1100px) {
+  .rx-header .rx-us-field { display: none; }
+  .rx-header .rx-us-btn { display: inline-flex; }
+}
+/* same rules on the header's width (Rex Pilot sidebar open on a wide screen) */
+@container rx-header (max-width: 1279px) { .rx-header .rx-us-field { max-width: 220px; } }
+@container rx-header (max-width: 1100px) {
+  .rx-header .rx-us-field { display: none; }
+  .rx-header .rx-us-btn { display: inline-flex; }
+}
+@media (max-width: 767px) {
+  .rx-header .rx-us-btn { width: 44px; height: 44px; border-radius: 12px; }
+}
+
+/* ---------- dropdown panel ---------- */
+@keyframes rx-us-in { from { opacity: 0; transform: translateY(-6px) scale(.985); } to { opacity: 1; transform: none; } }
+@keyframes rx-us-shimmer { from { background-position: 100% 0; } to { background-position: -100% 0; } }
+
+.rx-us-panel {
+  position: fixed; z-index: 90; box-sizing: border-box;
+  width: min(460px, calc(100vw - 24px)); max-height: min(560px, calc(100vh - 110px));
+  overflow-y: auto; overscroll-behavior: contain; scrollbar-width: none;
+  padding: 8px; border-radius: 18px;
+  background: linear-gradient(180deg, rgba(var(--rx-pop-rgb-a),.97), rgba(var(--rx-pop-rgb-b),.98));
+  border: 1px solid rgba(var(--rx-hair),.12);
+  backdrop-filter: blur(18px); -webkit-backdrop-filter: blur(18px);
+  box-shadow: 0 24px 60px rgba(0,0,0,.6), 0 1px 0 rgba(var(--rx-hair),.06) inset;
+  font-family: var(--rx-ui); font-size: 14px; line-height: 1.3; color: var(--rx-text); text-align: left;
+  animation: rx-us-in .18s cubic-bezier(.2,.7,.2,1);
+}
+.rx-us-panel::-webkit-scrollbar { display: none; }
+.rx-us-panel .rx-us-group { display: flex; flex-direction: column; padding: 4px 0; }
+.rx-us-panel .rx-us-group + .rx-us-group { border-top: 1px solid rgba(var(--rx-hair),.07); margin-top: 4px; padding-top: 8px; }
+.rx-us-panel .rx-us-label {
+  padding: 4px 10px 6px; font-family: var(--rx-mono); font-size: 12px; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--rx-text-3);
+}
+.rx-us-panel .rx-us-row {
+  display: flex; align-items: center; gap: 12px; min-width: 0; padding: 9px 10px; border-radius: 12px;
+  color: var(--rx-text); text-decoration: none; cursor: pointer; transition: background .12s;
+}
+.rx-us-panel .rx-us-row.is-active { background: rgba(255,184,0,.09); }
+.rx-us-panel .rx-us-row > svg { color: var(--rx-text-3); flex-shrink: 0; }
+.rx-us-panel .rx-us-ava { width: 34px; height: 34px; font-size: 11px; flex-shrink: 0; overflow: hidden; }
+.rx-us-panel .rx-us-ico {
+  width: 34px; height: 34px; border-radius: 10px; flex-shrink: 0; display: flex; align-items: center; justify-content: center;
+  background: rgba(var(--rx-hair),.06); color: var(--rx-gold-hi);
+}
+.rx-us-panel .rx-us-ico--claw { background: rgba(255,184,0,.12); }
+.rx-us-panel .rx-us-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.rx-us-panel .rx-us-main b { font-size: 14px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rx-us-panel .rx-us-main > span { font-size: 12px; color: var(--rx-text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rx-us-panel .rx-us-row mark { background: none; color: var(--rx-gold-hi); }
+.rx-us-panel .rx-us-meta { display: flex; flex-direction: column; align-items: flex-end; gap: 2px; font-size: 13px; flex-shrink: 0; white-space: nowrap; }
+.rx-us-panel .rx-us-meta small { font-size: 11px; color: var(--rx-text-3); }
+.rx-us-panel .rx-us-meta small.up { color: var(--rx-up); }
+.rx-us-panel .rx-us-meta small.down { color: var(--rx-down); }
+.rx-us-panel .rx-us-row--claw { margin-top: 6px; border: 1px dashed rgba(255,184,0,.22); }
+.rx-us-panel .rx-us-row--claw b { color: #FFE2A0; }
+
+/* empty state and notes (an API that failed: the rest of the panel still works) */
+.rx-us-panel .rx-us-empty {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; padding: 22px 16px 14px;
+  text-align: center; color: var(--rx-text-3); font-size: 13px;
+}
+.rx-us-panel .rx-us-empty svg { color: var(--rx-gold-hi); }
+.rx-us-panel .rx-us-empty b { color: var(--rx-text); font-size: 14px; overflow-wrap: anywhere; }
+.rx-us-panel .rx-us-note {
+  display: flex; align-items: center; gap: 8px; margin: 2px 0 6px; padding: 8px 10px; border-radius: 10px;
+  font-size: 12px; color: var(--rx-text-2); background: rgba(var(--rx-hair),.035); border: 1px solid rgba(var(--rx-hair),.06);
+}
+.rx-us-panel .rx-us-note::before { content: ""; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; background: var(--rx-down); }
+
+/* loading rows */
+.rx-us-panel .rx-us-skel { display: flex; align-items: center; gap: 12px; padding: 9px 10px; }
+.rx-us-panel .rx-us-skel i {
+  display: block; border-radius: 6px;
+  background: linear-gradient(90deg, rgba(var(--rx-hair),.05) 25%, rgba(var(--rx-hair),.1) 50%, rgba(var(--rx-hair),.05) 75%);
+  background-size: 200% 100%; animation: rx-us-shimmer 1.4s linear infinite;
+}
+.rx-us-panel .rx-us-skel .rx-us-skel__ava { width: 34px; height: 34px; flex-shrink: 0; border-radius: 50%; }
+.rx-us-panel .rx-us-skel--market .rx-us-skel__ava { border-radius: 10px; }
+.rx-us-panel .rx-us-skel__main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.rx-us-panel .rx-us-skel__main i:first-child { width: 42%; height: 12px; }
+.rx-us-panel .rx-us-skel__main i:last-child { width: 64%; height: 10px; }
+.rx-us-panel .rx-us-skel .rx-us-skel__meta { width: 56px; height: 12px; flex-shrink: 0; }
+
+/* keyboard hints */
+.rx-us-panel .rx-us-foot {
+  display: flex; flex-wrap: wrap; gap: 6px 16px; padding: 10px 10px 4px; margin-top: 6px;
+  border-top: 1px solid rgba(var(--rx-hair),.07); font-size: 11px; color: var(--rx-text-3);
+}
+.rx-us-panel .rx-us-foot kbd {
+  display: inline-flex; align-items: center; justify-content: center; min-width: 18px; height: 18px; padding: 0 4px; margin-right: 3px;
+  border-radius: 5px; background: rgba(var(--rx-hair),.07); border: 1px solid rgba(var(--rx-hair),.1);
+  font: 600 10px var(--rx-mono); color: var(--rx-text-2);
+}
+
+/* ---------- phone / narrow: full-screen sheet ---------- */
+.rx-us-sheet {
+  position: fixed; inset: 0; z-index: 95; display: flex; flex-direction: column;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) 12px 0;
+  background: rgba(10,8,6,.97); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  font-family: var(--rx-ui); color: var(--rx-text);
+}
+.rx-us-sheet .rx-us-sheet__bar { display: flex; gap: 8px; align-items: center; }
+.rx-us-sheet .rx-us-sheet__field { flex: 1 1 auto; min-width: 0; height: 46px; }
+.rx-us-sheet .rx-us-sheet__field > svg { flex-shrink: 0; color: var(--rx-text-3); }
+.rx-us-sheet .rx-us-sheet__field input { font-size: 16px; } /* 16px: iOS does not zoom the page on focus */
+.rx-us-sheet .rx-us-panel--sheet {
+  position: static; width: auto; max-height: none; min-height: 0; flex: 1 1 auto; margin-top: 10px;
+  padding: 0 0 calc(20px + env(safe-area-inset-bottom, 0px)); border: 0; border-radius: 0;
+  background: none; box-shadow: none; backdrop-filter: none; -webkit-backdrop-filter: none; animation: none;
+}
+.rx-us-sheet .rx-us-panel--sheet .rx-us-foot { display: none; }
+
+@media (prefers-reduced-motion: reduce) {
+  .rx-header .rx-us-field { transition: none; }
+  .rx-us-panel, .rx-us-panel .rx-us-skel i { animation: none; }
+}

@@ -1,14 +1,19 @@
 "use client";
 
 /**
- * Desktop (>=1024px): drag the left edge of the RexScreener sidebar (Exchange + Intelligence report) to
- * resize it — prototype design/token.html #gSide + design/js/resize.js. Arrow keys too (Shift = bigger
- * steps), Home / double-click resets, the width is saved per viewer ("rx-size-tk-side-w").
+ * Desktop (>=1024px): drag the left edge of the RexScreener sidebar to resize it — prototype
+ * design/token.html #gSide + design/js/resize.js. Arrow keys too (Shift = bigger steps), Home /
+ * double-click resets, the width is saved per viewer.
+ *
+ * Two sets of limits:
+ * - "token" (a token is open: Exchange + Intelligence report beside the chart), design/js/token.js:
+ *   440px by default, 340px at least, the chart keeps at least 480px; saved as "rx-size-tk-side-w".
+ * - "list" (Rex Pilot / reports over the token list): the prediction pages' sidebar
+ *   (rexmarkets/.../shared/PilotSidebarLayout.tsx, design/js/market.js): 700px by default, 380px at
+ *   least, the page keeps at least 560px; saved as "rx-size-sb-w", shared with those pages.
  *
  * The width goes on the shell root as --rx-sb-w, which both the sidebar and the shrinking page column read
- * (src/app/globals.css). Same limits as the prediction-market pages
- * (rexmarkets/_components/RexMarketsReport/shared/PilotSidebarLayout.tsx): the page keeps at least 560px.
- * Styles: styles/pages/screener-side.css (.rx-screener .rx-sb-edge).
+ * (src/app/globals.css). Styles: styles/pages/screener-side.css (.rx-screener .rx-sb-edge).
  */
 
 import { useCallback, useLayoutEffect, useRef } from "react";
@@ -20,15 +25,28 @@ import {
   startResizeDrag,
 } from "@/app/rexmarkets/_components/RexMarketsReport/shared/dragResize";
 
-const SB_KEY = "tk-side-w";
-const SB_MIN = 380;
-const SB_DEF = 700;
-/** The page keeps at least 560px; the sidebar never drops under 420px for that. */
-const sbMax = () => Math.max(420, window.innerWidth - 560);
-const clampSb = (v: number) => Math.round(Math.max(SB_MIN, Math.min(sbMax(), v)));
+export type SidebarKind = "token" | "list";
+
+type Limits = {
+  key: string;
+  def: number;
+  min: number;
+  /** room the page column keeps */
+  keep: number;
+  /** the sidebar's upper limit never drops under this */
+  floor: number;
+};
+
+const LIMITS: Record<SidebarKind, Limits> = {
+  token: { key: "tk-side-w", def: 440, min: 340, keep: 480, floor: 380 },
+  list: { key: "sb-w", def: 700, min: 380, keep: 560, floor: 420 },
+};
+
+const sbMax = (l: Limits) => Math.max(l.floor, window.innerWidth - l.keep);
+const clampSb = (l: Limits, v: number) => Math.round(Math.max(l.min, Math.min(sbMax(l), v)));
 /** Same limits in CSS, so a saved width still fits after the window changes size. */
-const sbWidthCss = (w: number) =>
-  `max(${SB_MIN}px, min(max(420px, calc(100vw - 560px)), ${Math.round(w)}px))`;
+const sbWidthCss = (l: Limits, w: number) =>
+  `max(${l.min}px, min(max(${l.floor}px, calc(100vw - ${l.keep}px)), ${Math.round(w)}px))`;
 
 /** Change a size without the 0.5s width animation of the page column (keyboard / reset). */
 function withoutTransitions(fn: () => void) {
@@ -51,38 +69,42 @@ export function useSidebarWidth(
   sidebarRef: RefObject<HTMLElement | null>,
   /** false while the scope element is not rendered (the saved width applies once it is) */
   active = true,
+  /** "token" while a token is open, "list" over the token list */
+  kind: SidebarKind = "list",
 ) {
   const edgeRef = useRef<HTMLDivElement>(null);
+  const limits = LIMITS[kind];
 
   const syncEdgeValue = useCallback(() => {
     const sb = sidebarRef.current;
     const edge = edgeRef.current;
     if (!sb || !edge) return;
     edge.setAttribute("aria-valuenow", String(Math.round(sb.getBoundingClientRect().width)));
-    edge.setAttribute("aria-valuemax", String(sbMax()));
-  }, [sidebarRef]);
+    edge.setAttribute("aria-valuemin", String(limits.min));
+    edge.setAttribute("aria-valuemax", String(sbMax(limits)));
+  }, [sidebarRef, limits]);
 
-  /** Width in px, or null for the default (globals.css --rx-sb-w). */
+  /** Width in px, or null for this kind's default. */
   const applyWidth = useCallback(
     (w: number | null) => {
       const scope = scopeRef.current;
       if (!scope) return;
-      if (w == null) scope.style.removeProperty("--rx-sb-w");
-      else scope.style.setProperty("--rx-sb-w", sbWidthCss(w));
+      scope.style.setProperty("--rx-sb-w", sbWidthCss(limits, w ?? limits.def));
       syncEdgeValue();
     },
-    [scopeRef, syncEdgeValue],
+    [scopeRef, syncEdgeValue, limits],
   );
 
-  // The saved width applies before the first paint (no jump from the default)
+  // The saved width applies before the first paint (no jump from the default), and again when the
+  // view switches between the token page and the list (each keeps its own width).
   useLayoutEffect(() => {
-    if (active) applyWidth(loadSize(SB_KEY));
-  }, [active, applyWidth]);
+    if (active) applyWidth(loadSize(limits.key));
+  }, [active, applyWidth, limits]);
 
   const resetWidth = useCallback(() => {
     withoutTransitions(() => applyWidth(null));
-    saveSize(SB_KEY, null);
-  }, [applyWidth]);
+    saveSize(limits.key, null);
+  }, [applyWidth, limits]);
 
   const onPointerDown = useCallback(
     (e: PointerEvent<HTMLDivElement>) => {
@@ -95,15 +117,15 @@ export function useSidebarWidth(
         "x",
         (d) => {
           // the edge is on the sidebar's left: dragging left makes it wider
-          last = clampSb(base - d);
+          last = clampSb(limits, base - d);
           applyWidth(last);
         },
         (moved) => {
-          if (moved) saveSize(SB_KEY, last);
+          if (moved) saveSize(limits.key, last);
         },
       );
     },
-    [applyWidth, sidebarRef],
+    [applyWidth, sidebarRef, limits],
   );
 
   const onKeyDown = useCallback(
@@ -115,19 +137,20 @@ export function useSidebarWidth(
         resetWidth();
         return;
       }
-      const w = clampSb((sidebarRef.current?.getBoundingClientRect().width ?? SB_DEF) + r);
+      const w = clampSb(limits, (sidebarRef.current?.getBoundingClientRect().width ?? limits.def) + r);
       withoutTransitions(() => applyWidth(w));
-      saveSize(SB_KEY, w);
+      saveSize(limits.key, w);
     },
-    [applyWidth, resetWidth, sidebarRef],
+    [applyWidth, resetWidth, sidebarRef, limits],
   );
 
-  return { edgeRef, onPointerDown, onKeyDown, resetWidth, syncEdgeValue };
+  return { edgeRef, onPointerDown, onKeyDown, resetWidth, syncEdgeValue, min: limits.min };
 }
 
 export type SidebarWidth = ReturnType<typeof useSidebarWidth>;
 
-/** The 1px line on the sidebar's left edge (11px hit area); gold while hovered, focused or dragged. */
+/** The line on the sidebar's left edge (11px hit area) with a grip in the middle (design .gutter--x);
+ *  gold while hovered, focused or dragged. */
 export function SidebarEdge({
   width,
   controls,
@@ -145,7 +168,7 @@ export function SidebarEdge({
       aria-orientation="vertical"
       aria-label="Resize the exchange and intelligence report panel"
       aria-controls={controls}
-      aria-valuemin={SB_MIN}
+      aria-valuemin={width.min}
       title="Drag to resize · double-click to reset"
       onPointerDown={width.onPointerDown}
       onKeyDown={width.onKeyDown}

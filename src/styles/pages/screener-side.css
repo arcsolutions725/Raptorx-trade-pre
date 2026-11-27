@@ -252,7 +252,30 @@ body.is-resizing-y,body.is-resizing-y *{cursor:row-resize !important}
   .rx-screener .rx-sb-edge{display:block;position:absolute;top:0;bottom:0;left:-5px;width:11px;z-index:25;cursor:col-resize;touch-action:none;outline:none}
   .rx-screener .rx-sb-edge::after{content:"";position:absolute;top:0;bottom:0;left:5px;width:1px;background:transparent;transition:background .15s,box-shadow .15s}
   .rx-screener .rx-sb-edge:hover::after,.rx-screener .rx-sb-edge:focus-visible::after,.rx-screener .rx-sb-edge.is-active::after{background:var(--rx-gold);box-shadow:0 0 10px rgba(255,184,0,.45)}
+  /* the grip in the middle says "drag me" (design components.css .gutter--x::after) */
+  .rx-screener .rx-sb-edge::before{content:"";position:absolute;z-index:1;top:50%;left:50%;width:4px;height:36px;margin:-18px 0 0 -2px;border-radius:3px;background:var(--rx-line-strong);transition:background .15s}
+  .rx-screener .rx-sb-edge:hover::before,.rx-screener .rx-sb-edge:focus-visible::before,.rx-screener .rx-sb-edge.is-active::before{background:var(--rx-gold-hi)}
+  /* desktop token page: no close (design token.html: .sheet-close is phones only); minimize both to park */
+  .rx-screener .rx-ss[data-token-view] .ss-panes .ss-close,.rx-screener .rx-ss[data-token-view] .ss-float-close{display:none}
 }
+/* ---------- desktop token page (design/token.html .tk-grid) ----------
+   The header and the token bar run full width; the sidebar is the side column next to the chart,
+   from the chart's top to its bottom (--rx-tk-top / --rx-tk-bottom, measured by DexscreenerView),
+   and the chart leaves it room. Tablets and phones keep the overlay / bottom sheets. */
+@media (min-width:1024px){
+  .rx-screener[data-token-layout] .main-content-shrink{width:100% !important}
+  .rx-screener[data-token-layout] [data-rx-sidebar]{position:absolute;top:var(--rx-tk-top,190px);bottom:var(--rx-tk-bottom,46px);right:0;height:auto;max-height:none;z-index:20;border-top:0}
+  .rx-screener[data-token-layout] [data-rx-sidebar] > .rx-side__scroll{height:100%;max-height:none}
+  .rx-screener[data-token-layout] .rx-tk__chart{transition:margin-right .5s var(--rx-ease)}
+  .rx-screener[data-token-layout][data-sidebar-open] .rx-tk__chart{margin-right:var(--rx-sb-w)}
+  .rx-screener[data-token-layout] .rx-tk.is-expanded > .rx-tk__chart{margin-right:0}
+}
+/* the header keeps Enter the Exchange on the token page (it only gave way to the 700px Rex Pilot column) */
+@media (min-width:1024px) and (max-width:1599px){
+  .rx-screener[data-token-layout] .main-content-shrink .rx-header .rx-btn--exchange{display:inline-flex !important}
+}
+body.is-resizing .rx-screener .rx-tk__chart{transition:none}
+
 /* while a line is dragged (body.is-resizing, rexmarkets/.../shared/dragResize.ts): no width animation, no text
    selection, the resize cursor everywhere, and the chart iframe does not swallow the pointer */
 body.is-resizing .rx-screener .main-content-shrink,body.is-resizing .rx-screener [data-rx-sidebar]{transition:none !important}
@@ -303,5 +326,5 @@ body.is-resizing-x .rx-screener,body.is-resizing-x .rx-screener *{cursor:col-res
 @media (prefers-reduced-motion:reduce){
   .rx-screener .rx-side,.rx-screener .rx-side[data-open]{transition:none}
   .rx-screener .rx-sheet-scrim{animation:none}
-  .rx-screener .rx-sb-edge::after{transition:none}
+  .rx-screener .rx-sb-edge::after,.rx-screener .rx-sb-edge::before{transition:none}
 }

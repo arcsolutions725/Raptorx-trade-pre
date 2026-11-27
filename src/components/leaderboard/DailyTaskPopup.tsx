@@ -5,9 +5,8 @@
  * Shell: AcctModal (reward family, warm aura). Styles: styles/pages/rewards.css.
  * Data is unchanged: /api/daily-tasks on open. Close via X, Esc or the scrim.
  * Each open mission has a Go button to where it is done: reports → the RexScreener list
- * ("Find a token"); follow-up questions → the page's Rex Pilot sidebar ("Ask Claw", the report
- * chat that /api/conversations/…/message counts; Claw AI 5.0 chats don't). "Get link" opens the
- * Account popup on its Referrals tab, the footer goes to Claw AI 5.0.
+ * ("Find a token"); follow-up questions → Claw AI 5.0 ("Ask Claw", design shell.js MIS href claw.html).
+ * "Get link" opens the Account popup on its Referrals tab, the footer goes to Claw AI 5.0.
  * "Resets in" counts down to the server's next reset (lastResetDate + 24h); the tier climb bar
  * comes from the user's points (components/rewards/tiers).
  */
@@ -72,14 +71,6 @@ function useResetCountdown(lastResetDate: string | null): string {
   return `${Math.floor(s / 3600)}h ${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}m`;
 }
 
-/** RexScreener keeps its Rex Pilot sidebar mounted and marks its wrapper aria-hidden while it is
- *  closed. The "pilot" shell action toggles the sidebar, so it is only sent when it is closed. */
-function isPilotSidebarOpen(): boolean {
-  if (typeof document === "undefined") return false;
-  const host = document.querySelector(".rx-pilot")?.closest("[aria-hidden]");
-  return host?.getAttribute("aria-hidden") === "false";
-}
-
 interface DailyTasksPopupProps {
   userId: string;
   isOpen: boolean;
@@ -123,10 +114,11 @@ export function DailyTasksPopup({
     const onList = segments.length === 1 && isScreenerChainSlug(segments[0]);
     if (!onList) router.push(REX_SCREENER_ALL_HREF);
   };
-  /** "Ask Claw": the page's Rex Pilot sidebar (Claw AI 5.0), where report follow-ups are asked. */
+  /** "Ask Claw": Claw AI 5.0, ready to type (design: claw.html). */
   const goAskClaw = () => {
     onClose();
-    if (!isPilotSidebarOpen()) requestShellAction("pilot");
+    markClawV5ScrollToInput();
+    router.push("/claw-v5");
   };
   /** "Get link": the Account popup on its Referrals tab, where the referral link is. */
   const goReferrals = () => {

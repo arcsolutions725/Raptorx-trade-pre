@@ -148,9 +148,10 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
   const [sheetPane, setSheetPane] = useState<SheetPane>("report");
   /** Desktop token view: both panes minimized, parked as tabs on the right edge (sidebar closed). */
   const [parked, setParked] = useState(false);
-  /** A parked tab asks the sidebar for its pane; `seq` makes every request new. */
+  /** Ask the sidebar for its panes (a parked tab: one pane; a token opening: both, like
+   *  design/token.html); `seq` makes every request new. */
   const [paneRequest, setPaneRequest] = useState<{
-    pane: SheetPane;
+    pane: SheetPane | "both";
     seq: number;
   } | null>(null);
   const paneRequestSeqRef = useRef(0);
@@ -388,6 +389,29 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
     isViewingChart ||
     (showChartFromUrl && (!!chartToken || resolvingSlug));
 
+  /**
+   * Desktop token page (design/token.html): the side column is always there, Exchange and the
+   * Intelligence report both open. A token picked from the list opens it in handleTokenSelect; a token
+   * reached by its URL (a link, a refresh, back / forward) opens it here, once per token, so minimizing
+   * both panes (parked as tabs) is not undone.
+   */
+  const autoOpenedTokenRef = useRef<string | null>(null);
+  const chartTokenKey = chartToken?.tokenAddress?.trim().toLowerCase() ?? null;
+  useEffect(() => {
+    if (!viewingChart) {
+      autoOpenedTokenRef.current = null;
+      return;
+    }
+    if (!chartTokenKey || autoOpenedTokenRef.current === chartTokenKey) return;
+    autoOpenedTokenRef.current = chartTokenKey;
+    if (!matchesMedia(DESKTOP_MQ) || showReportSidebar || parked) return;
+    setShowReportSidebar(true);
+    setForceShowExchange(true);
+    setSheetPane("exchange");
+    paneRequestSeqRef.current += 1;
+    setPaneRequest({ pane: "both", seq: paneRequestSeqRef.current });
+  }, [viewingChart, chartTokenKey, showReportSidebar, parked]);
+
   const reportGenLookupAddress =
     selectedTokenAddress ?? resolvedToken?.tokenAddress ?? null;
   /** A report starts streaming on a phone / tablet: open the sidebar on the report (the sheet's report pane). */
@@ -478,9 +502,13 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
         const isMobile =
           typeof window !== "undefined" && window.innerWidth < 1024;
         if (!isMobile) {
+          // Desktop token page (design/token.html): Exchange on top and the Intelligence report
+          // below, both open. (The Exchange flag also picks this token's report from history.)
           setShowReportSidebar(true);
           setForceShowExchange(true);
           setSheetPane("exchange");
+          paneRequestSeqRef.current += 1;
+          setPaneRequest({ pane: "both", seq: paneRequestSeqRef.current });
         } else {
           setShowReportSidebar(false);
           setForceShowExchange(false);
@@ -560,11 +588,13 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
     if (!viewingChart) setParked(false);
   }, [viewingChart]);
 
-  /** Desktop: drag the sidebar's left edge to resize it (saved per viewer). */
+  /** Desktop: drag the sidebar's left edge to resize it (saved per viewer). A token page uses the
+   *  design's token-page column (440px by default); the list keeps the Rex Pilot width (700px). */
   const sidebarWidth = useSidebarWidth(
     rootRef,
     sidebarRef,
     !isUnknownScreenerPath(pathname),
+    viewingChart ? "token" : "list",
   );
 
   /**
@@ -787,6 +817,10 @@ export function RexScreenerShellProvider({ children }: { children: ReactNode }) 
         className="rx-screener relative w-full h-screen flex flex-col overflow-hidden"
         aria-busy={loadingUser}
         data-loading-user={loadingUser || undefined}
+        // Token page (design/token.html): on desktop the header and token bar run full width and the
+        // sidebar sits next to the chart (screener-side.css; DexscreenerView measures the chart).
+        data-token-layout={viewingChart || undefined}
+        data-sidebar-open={showReportSidebar || undefined}
       >
         <div className="flex-1 flex relative overflow-hidden">
           <div

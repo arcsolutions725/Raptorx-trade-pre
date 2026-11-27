@@ -1,7 +1,7 @@
 import { ChevronUp, ChevronDown, ChevronsUpDown } from "lucide-react";
 
 // ⬅️ Add "liquidity"
-export type SortField = "marketCap" | "volume" | "price" | "age" | "liquidity";
+export type SortField = "marketCap" | "volume" | "price" | "age" | "liquidity" | "change";
 export type SortDirection = "asc" | "desc" | null;
 
 interface TableHeaderProps {

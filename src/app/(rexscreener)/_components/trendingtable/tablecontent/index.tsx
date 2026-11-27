@@ -36,7 +36,12 @@ import { TableRow } from "./TableRow";
 import DexscreenerView from "./DexscreenerView";
 import PageLoaderOverlay from "@/components/PageLoaderOverlay";
 import { TokenSearchBar } from "@/app/(rexscreener)/_components/TokenSearchBar";
-import { ChainButtons } from "./ChainButtons";
+import {
+  DEFAULT_SCREENER_FRAME,
+  SCREENER_FRAMES,
+  sortRowsByFrame,
+  type ScreenerFrame,
+} from "@/lib/screenerFrames";
 import clsx from "clsx";
 import { useGenerateRexReport } from "@/hooks/useGenerateRexReport";
 import { goldenRegistryKeyFromTrendingToken } from "@/lib/goldenReportRegistryMatch";
@@ -49,7 +54,12 @@ import {
   mergeScreenerTokenMarket,
 } from "@/utils/screenerRowMerge";
 import { hrefForScreenerChain } from "@/lib/rexscreenerRoutes";
-import { requestShellAction } from "@/components/ui/layout/shellActions";
+import {
+  REX_SCREENER_REPORTS_EVENT,
+  REX_SCREENER_REPORTS_PARAM,
+  requestShellAction,
+  type ScreenerReportsType,
+} from "@/components/ui/layout/shellActions";
 import { pct24h } from "./tokenMeta";
 
 /* ============================ Pager ============================ */
@@ -765,23 +775,31 @@ function ReportsPageHead({
         <span className="rx-eyebrow">RexScreener · All chains</span>
         <h1>{type === "golden" ? "Golden Reports" : "Pump Reports"}</h1>
       </div>
-      <div className="rx-page-head__actions">
+    </div>
+  );
+}
+
+/** Timeframe (design/screener.html #frames): the change and volume columns follow it. */
+function TimeframeSeg({
+  value,
+  onChange,
+}: {
+  value: ScreenerFrame;
+  onChange: (frame: ScreenerFrame) => void;
+}) {
+  return (
+    <div className="rx-seg rx-seg--mono shrink-0" role="group" aria-label="Timeframe">
+      {SCREENER_FRAMES.map((f) => (
         <button
+          key={f}
           type="button"
-          className="rx-btn rx-btn--claw rx-btn--s shrink-0"
-          onClick={() => requestShellAction("pilot")}
-          aria-label="Claw AI 5.0: report history"
+          className={clsx("rx-seg__item", value === f && "is-active")}
+          aria-pressed={value === f}
+          onClick={() => onChange(f)}
         >
-          <Image
-            src="/images/claw-logo-96.webp"
-            alt=""
-            width={20}
-            height={20}
-            className="claw-ico"
-          />
-          Claw AI 5.0
+          {f}
         </button>
-      </div>
+      ))}
     </div>
   );
 }
@@ -968,6 +986,8 @@ export function TrendingTableContent({
 
   const queryClient = useQueryClient();
   const prevScreenerChainRef = useRef(screenerChain);
+  /** Timeframe of the change and volume columns (design/screener.html #frames). */
+  const [frame, setFrame] = useState<ScreenerFrame>(DEFAULT_SCREENER_FRAME);
   const {
     data,
     isLoading,
@@ -999,7 +1019,10 @@ export function TrendingTableContent({
       : {
           chain: screenerChain,
         },
-    { enabled: !goldenReportsOnly && !pumpReportsOnly },
+    {
+      enabled: !goldenReportsOnly && !pumpReportsOnly,
+      initialSort: { field: "volume", dir: "desc" },
+    },
   );
 
   const {
@@ -1411,11 +1434,25 @@ export function TrendingTableContent({
     [rowsWithMarket, trendingAgesPayload?.ages],
   );
 
+  /** 5m / 1h / 6h figures arrive with the market overlay, so those sorts happen here. */
+  const frameSortedRows = useMemo(() => {
+    const byFrame =
+      sortField === "change" || (sortField === "volume" && frame !== "24h");
+    if (!byFrame || !sortDirection) return rowsWithAges;
+    return sortRowsByFrame(
+      rowsWithAges,
+      sortField,
+      sortDirection,
+      frame,
+      (pageIndex - 1) * pageSize + 1,
+    );
+  }, [rowsWithAges, sortField, sortDirection, frame, pageIndex, pageSize]);
+
   const displayRows = goldenReportsOnly
     ? goldenRowsWithRank
     : pumpReportsOnly
       ? pumpRowsWithRank
-      : rowsWithAges;
+      : frameSortedRows;
 
   const { series: sparklineSeries, isFetching: sparklinesFetching } =
     useTrendingSparklines(
@@ -1636,6 +1673,39 @@ export function TrendingTableContent({
       return turningOn;
     });
   }, [queryClient]);
+
+  /**
+   * The header search's Golden / Pump Reports pages: `?reports=golden|pump` on load (then dropped from
+   * the address bar), or the in-place request while this list is on screen (shellActions.ts).
+   */
+  const openReportsRef = useRef<(type: ScreenerReportsType) => boolean>(() => false);
+  openReportsRef.current = (type) => {
+    if (externalViewingChart) return false; // a token page: the search navigates to the list instead
+    if (type === "golden" && !goldenReportsOnly) toggleGoldenReports();
+    if (type === "pump" && !pumpReportsOnly) togglePumpReports();
+    return true;
+  };
+  useEffect(() => {
+    const url = new URL(window.location.href);
+    const fromUrl = url.searchParams.get(REX_SCREENER_REPORTS_PARAM);
+    if (fromUrl === "golden" || fromUrl === "pump") {
+      openReportsRef.current(fromUrl);
+      url.searchParams.delete(REX_SCREENER_REPORTS_PARAM);
+      window.history.replaceState(
+        window.history.state,
+        "",
+        url.pathname + url.search + url.hash,
+      );
+    }
+    const onRequest = (e: Event) => {
+      const type = (e as CustomEvent<unknown>).detail;
+      if ((type === "golden" || type === "pump") && openReportsRef.current(type)) {
+        e.preventDefault();
+      }
+    };
+    window.addEventListener(REX_SCREENER_REPORTS_EVENT, onRequest);
+    return () => window.removeEventListener(REX_SCREENER_REPORTS_EVENT, onRequest);
+  }, []);
 
   const handleGoldenButtonPointerDown = useCallback(
     (e: React.PointerEvent<HTMLButtonElement>) => {
@@ -1975,7 +2045,7 @@ export function TrendingTableContent({
             placeholder={
               reportsMode
                 ? "Search by name, ticker or CA"
-                : "Filter by name, ticker or CA"
+                : "Filter by name or ticker"
             }
             label={
               reportsMode
@@ -2036,10 +2106,9 @@ export function TrendingTableContent({
               {tableCountLabel}
             </div>
           ) : null}
-          <ChainButtons
-            selectedChain={screenerChain}
-            onChainChange={handleScreenerChainNavigate}
-          />
+          {/* Timeframe (design/screener.html): no chain buttons here; the chain lists are in the
+              header search ("RexScreener · Solana", …) and at /base, /solana, … */}
+          {reportsMode ? null : <TimeframeSeg value={frame} onChange={setFrame} />}
         </div>
       </div>
 
@@ -2220,6 +2289,7 @@ export function TrendingTableContent({
                 }
                 sortDirection={reportsMode ? reportsSort.dir : sortDirection}
                 onSort={reportsMode ? onReportsSort : onSort}
+                frame={reportsMode ? "24h" : frame}
               />
             </div>
           </div>
@@ -2379,6 +2449,7 @@ export function TrendingTableContent({
                       <TableRow
                         key={t.tokenAddress ?? `${t.symbol ?? "row"}-${i}`}
                         token={t}
+                        frame={reportsMode ? "24h" : frame}
                         rank={t._rank ?? (pageIndex - 1) * pageSize + i + 1}
                         generateFromToken={generateFromToken}
                         adminGenerateAndStoreFromToken={

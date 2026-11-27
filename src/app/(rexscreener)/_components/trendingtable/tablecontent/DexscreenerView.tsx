@@ -1,9 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef, useMemo, useLayoutEffect } from "react";
 import Image from "next/image";
 import clsx from "clsx";
+import { dexDisplayName } from "@/lib/screenerFrames";
 import { useQuery } from "@tanstack/react-query";
 import copy from "copy-to-clipboard";
 import { usePrivy } from "@privy-io/react-auth";
@@ -51,6 +52,8 @@ type DexscreenerViewProps = {
 
 /** DexScreener embed default interval (15m), matching previous default selection. */
 const EMBED_CHART_INTERVAL = "15";
+/** The same interval as the chart head shows it (design token.html: "on Aerodrome · 15m"). */
+const EMBED_CHART_INTERVAL_LABEL = "15m";
 
 /** Small inline icons (RaptorX design sprite: i-chevr, i-copy, i-check, i-scan, i-expand, i-min). */
 function Ico({ d, size = 13, w = 2 }: { d: string; size?: number; w?: number }) {
@@ -214,6 +217,42 @@ export default function DexscreenerView({
   /** `title` is "Name / QUOTE" (buildChartTitle); the quote is what the pair trades against. */
   const quoteSymbol =
     title && title.includes(" / ") ? title.split(" / ").pop() : undefined;
+  /**
+   * Desktop token page (design/token.html .tk-grid): the shell's side column sits next to the chart,
+   * between the token bar and the footer. Where the chart starts and ends goes on the shell root as
+   * --rx-tk-top / --rx-tk-bottom (styles/pages/screener-side.css).
+   */
+  const viewRef = useRef<HTMLDivElement>(null);
+  const chartRef = useRef<HTMLElement>(null);
+  useLayoutEffect(() => {
+    const view = viewRef.current;
+    const chart = chartRef.current;
+    const root = view?.closest<HTMLElement>(".rx-screener");
+    if (!view || !chart || !root) return;
+    const sync = () => {
+      if (view.classList.contains("is-expanded")) return; // full-screen chart: keep the last values
+      const r = chart.getBoundingClientRect();
+      const rr = root.getBoundingClientRect();
+      root.style.setProperty("--rx-tk-top", `${Math.round(r.top - rr.top)}px`);
+      root.style.setProperty("--rx-tk-bottom", `${Math.max(0, Math.round(rr.bottom - r.bottom))}px`);
+    };
+    sync();
+    const ro = new ResizeObserver(sync);
+    ro.observe(root);
+    ro.observe(view);
+    for (const el of Array.from(view.children)) ro.observe(el);
+    window.addEventListener("resize", sync);
+    return () => {
+      ro.disconnect();
+      window.removeEventListener("resize", sync);
+      root.style.removeProperty("--rx-tk-top");
+      root.style.removeProperty("--rx-tk-bottom");
+    };
+  }, []);
+
+  /** The chart's pool: its quote token and dex (market overlay, else DexScreener's own pair lookup). */
+  const pairQuote = token?.quoteSymbol || dexPair?.quoteToken?.symbol || undefined;
+  const dexName = dexDisplayName(token?.dexId ?? dexPair?.dexId);
   const priceChange24h = pct24h(token?.pricePercentChange);
   const stats: { label: string; value: string; tone?: "up" | "down" }[] = [
     { label: "Price", value: formatUsd(token?.usdPrice) },
@@ -392,7 +431,7 @@ export default function DexscreenerView({
     <>
       {/* RaptorX token view (design/token.html): breadcrumbs, token bar, then the chart edge to
           edge. Full screen pins the chart panel to the viewport and drops the bar. */}
-      <div className={clsx("rx-tk", isChartExpanded && "is-expanded")}>
+      <div ref={viewRef} className={clsx("rx-tk", isChartExpanded && "is-expanded")}>
         <nav className="rx-tk__crumbs" aria-label="Breadcrumb">
           <button type="button" onClick={onBack} title="Back to the token list">
             RexScreener
@@ -511,33 +550,22 @@ export default function DexscreenerView({
             >
               <Ico d={ICO_SCAN} size={14} />
             </a>
-            {/* Opens/closes Rex Pilot (the page title with its Claw AI 5.0 button is hidden on token pages).
-                Phones use the report / trade bar under the chart instead (RexScreenerShell). */}
-            <button
-              type="button"
-              className="rx-btn rx-btn--claw rx-btn--s rx-tk__claw"
-              onClick={() => requestShellAction("pilot")}
-              aria-label="Claw AI 5.0: open Rex Pilot"
-            >
-              <Image
-                src="/images/claw-logo-96.webp"
-                alt=""
-                width={20}
-                height={20}
-                className="claw-ico"
-              />
-              Claw AI 5.0
-            </button>
+            {/* No Claw AI 5.0 button here (design token.html .tk-bar__tools): the side column next to
+                the chart is always there on desktop; phones use the report / trade bar. */}
           </div>
         </div>
 
-        <section className="rx-tk__chart" aria-label="Price chart">
+        <section ref={chartRef} className="rx-tk__chart" aria-label="Price chart">
+          {/* design token.html: "SOL / USDC  on Aerodrome · 15m" — the pool the chart shows */}
           <div className="rx-tk__head">
             <b>
               {displaySymbol}
-              {quoteSymbol ? ` / ${quoteSymbol}` : ""}
+              {pairQuote ? ` / ${pairQuote}` : ""}
             </b>
-            <span className="rx-small rx-tk__sub">Price chart and trades</span>
+            <span className="rx-small rx-tk__sub">
+              {dexName ? `on ${dexName} · ` : ""}
+              {EMBED_CHART_INTERVAL_LABEL}
+            </span>
             <span className="rx-eyebrow">Chart by DexScreener</span>
             {/* `group` + `relative` anchor the tooltip; no native `title` here or
                 the browser would draw its own tooltip on top of ours. */}

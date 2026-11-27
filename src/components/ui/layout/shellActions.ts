@@ -31,6 +31,28 @@ export type RxShellActionDetail = {
 export const REX_SCREENER_EXCHANGE_PARAM = "exchange";
 export const REX_SCREENER_EXCHANGE_HREF = `${REX_SCREENER_ALL_HREF}?${REX_SCREENER_EXCHANGE_PARAM}=1`;
 
+/**
+ * Golden / Pump Reports views of the RexScreener list (the header search's "Golden Reports" /
+ * "Pump Reports" pages, design/js/universal.js PAGES). The list opens the view when it loads with
+ * `?reports=golden|pump`, or in place through the event when it is already on screen.
+ */
+export type ScreenerReportsType = "golden" | "pump";
+export const REX_SCREENER_REPORTS_PARAM = "reports";
+export const REX_SCREENER_REPORTS_EVENT = "rx:screener-reports";
+export const screenerReportsHref = (type: ScreenerReportsType) =>
+  `${REX_SCREENER_ALL_HREF}?${REX_SCREENER_REPORTS_PARAM}=${type}`;
+
+/** Open a Reports view on the mounted token list. Returns false when no list took it (navigate instead). */
+export function requestScreenerReports(type: ScreenerReportsType): boolean {
+  if (typeof window === "undefined") return false;
+  const ev = new CustomEvent<ScreenerReportsType>(REX_SCREENER_REPORTS_EVENT, {
+    detail: type,
+    cancelable: true,
+  });
+  // the list calls preventDefault() when it opened the view
+  return !window.dispatchEvent(ev);
+}
+
 /** Ask the mounted Header to run a shell action. Returns false when nothing handled it. */
 export function requestShellAction(action: RxShellAction): boolean {
   if (typeof window === "undefined") return false;
